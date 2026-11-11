@@ -7,6 +7,7 @@ import re
 
 import pytest
 
+from fakes.host import FakeHost
 from fakes.random import FakeRandom
 from vmn_exp.core import run_finish
 from vmn_exp.core.real_io import RealRandom
@@ -43,7 +44,7 @@ def test_comment_id_keeps_its_prefix_and_length():
 
 
 def test_a_runs_initial_attempt_comes_from_random():
-    state = Run._initial_state(60, None, FakeRandom())
+    state = Run._initial_state(60, None, FakeHost(), FakeRandom())
 
     assert state["attempt"] == FakeRandom().token_hex(6)
 

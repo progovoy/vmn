@@ -22,7 +22,7 @@ def handle_sweep(vmn_ctx, io):
         err = auto_init(vmn_ctx)
         if err:
             return err
-    storage = _get_experiment_storage(vcs, params)
+    storage = _get_experiment_storage(vcs, params, clock=io.clock)
     try:
         if args.action == "create":
             return sweep_create(vcs, storage, args)

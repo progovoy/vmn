@@ -7,6 +7,7 @@ import pytest
 from moto import mock_aws
 
 from version_stamp.cli.args import parse_user_commands
+from vmn_exp.core.real_io import RealClock
 
 BUCKET = "flags-bkt"
 
@@ -67,7 +68,7 @@ def test_model_storage_honours_store(s3):
 
     args = SimpleNamespace(dir=None, store=f"s3://{BUCKET}/models",
                            bucket=None, prefix=None, endpoint_url=None)
-    assert _remote(_get_storage(args)).prefix == "models/runs"
+    assert _remote(_get_storage(args, RealClock())).prefix == "models/runs"
 
 
 def test_import_mlflow_storage_honours_store(s3):
@@ -75,7 +76,7 @@ def test_import_mlflow_storage_honours_store(s3):
 
     args = SimpleNamespace(experiment_dir=None, store=f"s3://{BUCKET}/imp",
                            bucket=None, prefix=None, endpoint_url=None)
-    assert _remote(_get_storage(args)).prefix == "imp/runs"
+    assert _remote(_get_storage(args, RealClock())).prefix == "imp/runs"
 
 
 def test_ui_store_flag_adds_a_store_workspace(tmp_path, s3):

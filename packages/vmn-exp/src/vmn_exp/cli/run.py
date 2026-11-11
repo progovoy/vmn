@@ -403,7 +403,7 @@ class _Supervision:
         sampler = sysmetrics.Sampler(
             lambda values: self._ingest([(None, values)]),
             self.samples_tree,
-            pid=proc.pid,
+            pid=proc.pid, clock=self.io.clock,
         )
 
         sync_interval = resolve_sync_sec(

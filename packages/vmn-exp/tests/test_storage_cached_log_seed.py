@@ -15,6 +15,7 @@ from vmn_exp.core.writer import append_to_log, create_log_entry, flush_log, own_
 from vmn_exp.storage import buffered
 from vmn_exp.storage.open import open_storage
 from vmn_exp.storage.uri import s3_uri
+from vmn_exp.core.real_io import RealClock
 
 APP = "app"
 V = "0.0.1-dev.aaa1111.bbb2222"
@@ -146,7 +147,7 @@ def test_a_local_copy_dropped_under_a_live_cache_keeps_the_remote_entries(tmp_pa
 def _finished_buffered_pod(lines):
     """A direct-to-S3 pod whose run logged *lines* and finished: shipped,
     compacted, its buffer dropped."""
-    pod = open_storage(s3_uri("vmn-bucket", "exps"), area="runs", buffer_logs=True)
+    pod = open_storage(s3_uri("vmn-bucket", "exps"), area="runs", buffer_logs=True, clock=RealClock())
     assert pod.create_exclusive(APP, V, meta(V), {})
     for i, text in enumerate(lines):
         _append(pod, text, i)

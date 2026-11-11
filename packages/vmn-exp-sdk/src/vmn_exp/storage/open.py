@@ -15,14 +15,15 @@ from vmn_exp.storage.store_marker import check_store
 
 
 def open_storage(store=None, root=None, area=SNAPSHOTS, buffer_logs=False, writer=True,
-                 lent_options=None):
+                 lent_options=None, clock=None):
     """*area*'s storage for *store* (a URI, or None) over the local store
     *root* (laid out ``<root>/<area>/...``).
 
     ``buffer_logs``: without a local root, still buffer logs locally (a
     private dir under :func:`~vmn_exp.storage.host_dirs.log_buffers_dir`)
     and ship them as segments — for writers; a pure-remote
-    reader has no use for it.
+    reader has no use for it. It needs *clock*, which times the buffer's
+    flush interval.
 
     A *writer* checks each root's ``store.yml`` now (store_marker), creating
     it when absent; readers check lazily (``store_marker.require_store``).
@@ -30,6 +31,8 @@ def open_storage(store=None, root=None, area=SNAPSHOTS, buffer_logs=False, write
     *lent_options* (``{scheme: URI options}``): what a storage with no remote
     lends absolute downloads in its place (:class:`CachedSnapshotStorage`).
     """
+    if buffer_logs and clock is None:
+        raise TypeError("open_storage(buffer_logs=True) needs a clock")
     raw = open_store(store, area=area) if store else None
     if writer and raw is not None:
         check_store(raw, writer)
@@ -51,5 +54,6 @@ def open_storage(store=None, root=None, area=SNAPSHOTS, buffer_logs=False, write
         from vmn_exp.storage.buffered import BufferedRemoteStorage
         from vmn_exp.storage.host_dirs import log_buffers_dir
 
-        return BufferedRemoteStorage(remote, log_buffers_dir(remote.cache_identity()), area=area)
+        return BufferedRemoteStorage(remote, log_buffers_dir(remote.cache_identity()), area=area,
+                                     clock=clock)
     return remote

@@ -11,6 +11,7 @@ from vmn_exp.core.metric_block import encode_block
 from vmn_exp.core.metric_columns import Columns
 from vmn_exp.storage.buffer_host import LocalBufferHost
 from vmn_exp.storage.buffered import BufferedRemoteStorage
+from vmn_exp.core.real_io import RealClock
 
 APP, V, W = "app", "v", "w"
 
@@ -81,7 +82,7 @@ def _block(value):
 def kept_buffer(monkeypatch, bucket, base):
     """A buffer under *base* closed while *bucket* was out of reach: one log
     line and one metric block shipped, one of each kept. Its root."""
-    pod = BufferedRemoteStorage(bucket, os.path.join(base, "store"), area="runs")
+    pod = BufferedRemoteStorage(bucket, os.path.join(base, "store"), area="runs", clock=RealClock())
     pod.append_log_entry(APP, V, W, entry(0))  # the first ships at once
     pod.append_log_entry(APP, V, W, entry(1))
     pod.append_metric_block(APP, V, W, _block(1.0))

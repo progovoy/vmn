@@ -12,6 +12,7 @@ from vmn_exp.core.logfiles import compacted_log_name
 from vmn_exp.core.writer import append_entries_to_log
 from vmn_exp.sdk import log_buffer
 from vmn_exp.sdk.log_buffer import LogBuffer
+from vmn_exp.core.real_io import RealClock
 
 V = "v"
 PARAMS = {"bucket": "vmn-bucket", "prefix": "exps"}
@@ -28,7 +29,7 @@ def _bucket(monkeypatch):
 
 
 def _pod():
-    storage = _get_experiment_storage(None, dict(PARAMS))
+    storage = _get_experiment_storage(None, dict(PARAMS), clock=RealClock())
     storage.create_exclusive("app", V, meta(V), {"working_tree": "diff"})
     return storage
 
@@ -91,7 +92,7 @@ def test_the_record_body_is_not_kept_in_the_buffer():
 
 def test_appending_to_another_pods_run_needs_no_patch_download():
     _pod()
-    other = _get_experiment_storage(None, dict(PARAMS))
+    other = _get_experiment_storage(None, dict(PARAMS), clock=RealClock())
     calls = record_calls(other._remote._s3)
     assert other.append_log_entry("app", V, "w2", entry(7))
     fetched = {p["Key"].rsplit("/", 1)[1] for op, p in calls if op == "GetObject"}
@@ -111,7 +112,7 @@ def test_artifacts_go_straight_to_the_bucket(tmp_path):
 def test_reads_do_not_create_a_buffer_dir():
     import os
 
-    storage = _get_experiment_storage(None, dict(PARAMS))
+    storage = _get_experiment_storage(None, dict(PARAMS), clock=RealClock())
     storage.list_snapshots("app")
     assert not os.path.exists(storage._local.root)
 

@@ -16,6 +16,7 @@ from vmn_exp.cli.run import _Supervision
 from vmn_exp.cli.supervisor_state import finish_uploads, not_uploaded_warning
 from vmn_exp.core.real_io import real_io
 from vmn_exp.storage.buffered import BufferedRemoteStorage
+from vmn_exp.core.real_io import RealClock
 
 
 @pytest.fixture
@@ -168,7 +169,7 @@ def test_after_a_signal_the_failure_alert_fits_what_is_left_of_the_budget(
 
 
 def test_a_log_buffer_gets_no_push_hint(tmp_path):
-    buffer = BufferedRemoteStorage(FakeRemote(str(tmp_path / "remote")), str(tmp_path / "buffers"))
+    buffer = BufferedRemoteStorage(FakeRemote(str(tmp_path / "remote")), str(tmp_path / "buffers"), clock=RealClock())
 
     assert not_uploaded_warning(V, OSError("bucket down"), buffer) == (
         f"Experiment {V}: the final run state was not uploaded: bucket down")

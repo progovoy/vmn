@@ -109,7 +109,7 @@ def _exp_run_without_repo(args):
     # import-mlflow is always git-free — intercept before from_snapshot check
     if is_experiment and action == "import-mlflow":
         from vmn_exp.importers.cli import import_mlflow_run_without_repo
-        return import_mlflow_run_without_repo(args)
+        return import_mlflow_run_without_repo(args, real_io())
 
     from_snapshot = getattr(args, "from_snapshot", None) or os.environ.get(
         "VMN_SNAPSHOT_METADATA"
@@ -161,7 +161,7 @@ def _exp_run_without_repo(args):
         os.environ["VMN_WRITER_ID"] = args.writer_id
     params = experiment_storage_params(None, args)
     try:
-        storage = _get_experiment_storage(None, params)
+        storage = _get_experiment_storage(None, params, clock=real_io().clock)
     except ValueError as exc:
         VMN_LOGGER.error(str(exc))
         return 1
@@ -189,7 +189,8 @@ def _dev_version_loader(vcs, params, version):
     from vmn_exp.cli.experiment import experiment_storage_params
     from vmn_exp.snapshot import _restore_with_safety_net
 
-    record = load_code_record(vcs, experiment_storage_params(vcs, None), version)
+    record = load_code_record(vcs, experiment_storage_params(vcs, None), version,
+                              clock=real_io().clock)
     if record is None:
         return 1
     return _restore_with_safety_net(vcs, params, *record)
@@ -207,7 +208,7 @@ def _register(spec) -> None:
 def _snapshot_store_opener(vcs, params):
     from vmn_exp.snapshot.stores import open_configured_snapshot_stores
 
-    return open_configured_snapshot_stores(vcs, params)
+    return open_configured_snapshot_stores(vcs, params, real_io().clock)
 
 
 def register_dev_version() -> None:

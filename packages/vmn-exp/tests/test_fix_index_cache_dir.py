@@ -5,6 +5,7 @@ import stat
 import pytest
 
 from vmn_exp.storage.host_dirs import index_cache_path, index_cache_root
+from vmn_exp.core.real_io import RealClock
 
 
 def s3_index_cache_path(endpoint_url, bucket, prefix, app_name):
@@ -127,7 +128,7 @@ def test_buffered_delegates_to_remote_index_cache_path(monkeypatch, tmp_path):
         from vmn_exp.storage.s3 import S3SnapshotStorage
 
         remote = S3SnapshotStorage("test-bucket", prefix="exps")
-        buf = BufferedRemoteStorage(remote, str(tmp_path / "buffers"))
+        buf = BufferedRemoteStorage(remote, str(tmp_path / "buffers"), clock=RealClock())
 
         s3_path = remote.index_cache_path("myapp")
         buf_path = buf.index_cache_path("myapp")

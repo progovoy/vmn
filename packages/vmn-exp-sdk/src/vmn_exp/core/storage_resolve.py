@@ -32,6 +32,7 @@ def resolve_experiment_storage(
     prefix: "str | None" = None,
     endpoint_url: "str | None" = None,
     repo_root: "str | None" = None,
+    clock,
 ):
     """Return a configured snapshot storage for experiments.
 
@@ -47,6 +48,8 @@ def resolve_experiment_storage(
         Caller-supplied repo root (skips the auto-detect step).  Pass
         ``False`` to suppress auto-detect entirely (useful in tests or when
         the caller is certain there is no git checkout).
+    clock:
+        What a direct-to-bucket store's log buffer times its flushes on.
     """
     from vmn_exp.core.writer import merge_env_into_params
 
@@ -61,7 +64,7 @@ def resolve_experiment_storage(
         "endpoint_url": endpoint_url,
     }
     merge_env_into_params(params)
-    return _open(root, params)
+    return _open(root, params, clock=clock)
 
 
 def store_uri(params, default_prefix=DEFAULT_ROOT):
@@ -103,12 +106,12 @@ def drop_remote_if_offline(params, root):
     return {k: v for k, v in params.items() if k not in _REMOTE_PARAMS}
 
 
-def _open(root, params, writer=True):
+def _open(root, params, writer=True, *, clock):
     from vmn_exp.storage.open import open_storage
 
     params = drop_remote_if_offline(params, root)
     return open_storage(store_uri(params), root, area=RUNS, buffer_logs=True,
-                        writer=writer, lent_options=_lent_options(params))
+                        writer=writer, lent_options=_lent_options(params), clock=clock)
 
 
 def _lent_options(params):
@@ -140,6 +143,6 @@ def experiment_dir(vcs, params):
             or _repo_store(vcs.vmn_root_path if vcs else None))
 
 
-def _get_experiment_storage(vcs, params, writer=True):
-    return _open(experiment_dir(vcs, params), params, writer)
+def _get_experiment_storage(vcs, params, writer=True, *, clock):
+    return _open(experiment_dir(vcs, params), params, writer, clock=clock)
 

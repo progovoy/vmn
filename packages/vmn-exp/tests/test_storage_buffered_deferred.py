@@ -10,6 +10,7 @@ from vmn_exp.core.metric_block import encode_block
 from vmn_exp.core.metric_columns import Columns
 from vmn_exp.storage import buffered
 from vmn_exp.storage.buffered import BufferedRemoteStorage
+from vmn_exp.core.real_io import RealClock
 
 APP, V, OTHER, W = "app", "v", "other", "w"
 
@@ -32,7 +33,7 @@ def bucket(tmp_path):
 
 @pytest.fixture
 def pod(bucket, tmp_path):
-    return BufferedRemoteStorage(bucket, str(tmp_path / "buffers"), area="runs")
+    return BufferedRemoteStorage(bucket, str(tmp_path / "buffers"), area="runs", clock=RealClock())
 
 
 class _Requests:

@@ -19,6 +19,7 @@ from vmn_exp.storage import buffered
 from vmn_exp.storage.buffered import BufferedRemoteStorage
 from vmn_exp.storage.cached import CachedSnapshotStorage
 from vmn_exp.storage.local import LocalSnapshotStorage
+from vmn_exp.core.real_io import RealClock
 
 APP, V = "app", "0.0.1-dev.aaa1111.bbb2222"
 
@@ -153,8 +154,8 @@ def test_each_log_buffer_has_a_stream_of_its_own(tmp_path, monkeypatch):
     with mocked_bucket(monkeypatch):
         monkeypatch.setenv("VMN_WRITER_ID", "gpu07")
         s3_storage().save(APP, V, meta(V), {})
-        one = BufferedRemoteStorage(s3_storage(), str(tmp_path))
-        two = BufferedRemoteStorage(s3_storage(), str(tmp_path))
+        one = BufferedRemoteStorage(s3_storage(), str(tmp_path), clock=RealClock())
+        two = BufferedRemoteStorage(s3_storage(), str(tmp_path), clock=RealClock())
 
         assert own_stream(one, APP, V) != own_stream(two, APP, V)
         assert own_stream(one, APP, V) == own_stream(one, APP, V)

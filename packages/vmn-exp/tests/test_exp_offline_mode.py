@@ -15,6 +15,7 @@ from vmn_exp.core.writer import allocate_run_verstr
 from vmn_exp.storage.local import LocalSnapshotStorage
 from vmn_exp.storage.uri import s3_uri
 from vmn_exp.storage.areas import local_store_root
+from vmn_exp.core.real_io import RealClock
 
 URI = s3_uri(BUCKET, PREFIX)
 CODE = "0.0.1-dev.abc1234.0000001"
@@ -37,7 +38,7 @@ def offline(monkeypatch):
 
 def test_offline_drops_store_uri_from_cli_storage(tmp_path, offline):
     storage = _get_experiment_storage(
-        None, {"store": URI, "experiment_dir": str(tmp_path)}
+        None, {"store": URI, "experiment_dir": str(tmp_path)}, clock=RealClock()
     )
     assert not storage.is_remote()
 
@@ -45,28 +46,28 @@ def test_offline_drops_store_uri_from_cli_storage(tmp_path, offline):
 def test_offline_drops_bucket_shorthand_from_cli_storage(tmp_path, offline):
     params = {"bucket": BUCKET, "prefix": PREFIX, "endpoint_url": "http://x:1",
               "experiment_dir": str(tmp_path)}
-    assert not _get_experiment_storage(None, params).is_remote()
+    assert not _get_experiment_storage(None, params, clock=RealClock()).is_remote()
 
 
 def test_offline_drops_remote_from_resolve_experiment_storage(tmp_path, offline):
-    assert not resolve_experiment_storage(dir=str(tmp_path), store=URI).is_remote()
+    assert not resolve_experiment_storage(dir=str(tmp_path), store=URI, clock=RealClock()).is_remote()
 
 
 def test_offline_without_local_root_raises(offline):
     with pytest.raises(ValueError, match="VMN_EXPERIMENT_DIR"):
-        resolve_experiment_storage(store=URI, repo_root=False)
+        resolve_experiment_storage(store=URI, repo_root=False, clock=RealClock())
 
 
 @pytest.mark.parametrize("value", ["0", "false", "no", "off", ""])
 def test_offline_false_values_keep_remote(tmp_path, monkeypatch, value):
     monkeypatch.setenv("VMN_EXP_OFFLINE", value)
-    assert resolve_experiment_storage(dir=str(tmp_path), store=URI).is_remote()
+    assert resolve_experiment_storage(dir=str(tmp_path), store=URI, clock=RealClock()).is_remote()
 
 
 @pytest.mark.parametrize("value", ["1", "true", "YES", "on"])
 def test_offline_true_values_drop_remote(tmp_path, monkeypatch, value):
     monkeypatch.setenv("VMN_EXP_OFFLINE", value)
-    assert not resolve_experiment_storage(dir=str(tmp_path), store=URI).is_remote()
+    assert not resolve_experiment_storage(dir=str(tmp_path), store=URI, clock=RealClock()).is_remote()
 
 
 def _dirty(app_layout):

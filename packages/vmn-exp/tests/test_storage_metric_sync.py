@@ -11,6 +11,7 @@ from vmn_exp.core.metric_files import indexed_name, stream_name
 from vmn_exp.storage.buffered import BufferedRemoteStorage
 from vmn_exp.storage.journal import journaled
 from vmn_exp.storage.local import LocalSnapshotStorage
+from vmn_exp.core.real_io import RealClock
 
 APP, V, W = "app", "1.0.0-dev.abc.0001", "w"
 
@@ -81,7 +82,7 @@ def test_local_first_put_indexed_reaches_the_remote(host, tmp_path):
 def test_buffered_storage_ships_blocks_to_the_bucket(tmp_path):
     remote = s3_storage()
     remote.save(APP, V, meta(V), {})
-    pod = BufferedRemoteStorage(remote, str(tmp_path), area="runs")
+    pod = BufferedRemoteStorage(remote, str(tmp_path), area="runs", clock=RealClock())
     pod.append_metric_block(APP, V, W, _block(1.0))
     pod.append_metric_block(APP, V, W, _block(2.0))
     pod.close()

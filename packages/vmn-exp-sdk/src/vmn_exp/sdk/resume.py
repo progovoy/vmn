@@ -10,7 +10,6 @@ run (``run.release()``) is reopened the same way. A finished run is reopened
 only on request (``reopen=True`` / ``VMN_RESUME_REOPEN=1``): reopening clears
 its exit code, so a resubmitted job must not do it by accident.
 """
-import datetime
 import os
 
 from vmn_exp.core.fork import resolve_run
@@ -120,10 +119,9 @@ def resumed_state(prior, fresh):
     return state
 
 
-def elapsed_before(state):
-    """Seconds between the run's first start and now (0 when unknown)."""
+def elapsed_before(state, now):
+    """Seconds between the run's first start and *now* (0 when unknown)."""
     started = parse_iso(state.get("started_at"))
     if started is None:
         return 0.0
-    now = datetime.datetime.now(datetime.timezone.utc)
     return max(0.0, (now - started).total_seconds())

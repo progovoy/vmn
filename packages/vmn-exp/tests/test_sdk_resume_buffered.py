@@ -16,6 +16,7 @@ from vmn_exp.storage import buffered
 from vmn_exp.storage.buffered import BufferedRemoteStorage
 from vmn_exp.storage.files import METADATA_FILE
 from vmn_exp.storage.local import LocalSnapshotStorage
+from vmn_exp.core.real_io import RealClock
 
 APP = "app"
 CODE = "2.0.251-dev.852cb2d.0000000"
@@ -47,7 +48,7 @@ def _git_free(tmp_path, monkeypatch):
 
 
 def _pod(remote):
-    return BufferedRemoteStorage(remote, remote.root + "-buffers", area="runs")
+    return BufferedRemoteStorage(remote, remote.root + "-buffers", area="runs", clock=RealClock())
 
 
 def _released_run(remote):

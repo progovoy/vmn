@@ -32,11 +32,7 @@ from vmn_exp.core.app_conf import read_experiment_conf
 from vmn_exp.core.app_settings_store import app_metrics_schema
 from vmn_exp.core.fold import fold_definitions, fold_log, fold_row
 from vmn_exp.core.log import (
-    filter_archived,
-    filter_by_status,
-    history_points,
-    list_artifacts,
-    metric_series,
+    filter_archived, filter_by_status, history_points, list_artifacts, metric_series,
 )
 from vmn_exp.core.lineage import DEFAULT_LIMIT
 from vmn_exp.core.load_progress import IndexingWarning  # noqa: F401 (re-exported)
@@ -49,7 +45,7 @@ from vmn_exp.core.index_rows import row_copies
 from vmn_exp.core.query import filter_rows
 from vmn_exp.core.query_extra import rows_extra, store_extra
 from vmn_exp.core.record_format import record_format_version
-from vmn_exp.core.storage_resolve import resolve_experiment_storage, try_repo_root
+from vmn_exp.core.storage_resolve import try_repo_root
 from vmn_exp.core.step_metric import join_all, step_metrics
 from vmn_exp.core.refs import point_placement, resolve_experiment, tree_links
 from vmn_exp.core.similar_search import find as _find_similar
@@ -60,6 +56,7 @@ from vmn_exp.sdk import _resolve_app_name, frames
 from vmn_exp.sdk.create import SNAPSHOT_METADATA_ENV, snapshot_app_names
 from vmn_exp.sdk.reader_select import check_loading, select
 from vmn_exp.sdk.run_states import read_run_state, read_run_states
+from vmn_exp.sdk.store_resolve import resolve_storage
 
 
 # ---------------------------------------------------------------------------
@@ -77,13 +74,13 @@ def _app_candidates(storage):
 def _resolve(app_name, storage):
     """Fill in the app name and storage where :func:`start_run` records.
 
-    Storage defaults to :func:`resolve_experiment_storage`
+    Storage defaults to :func:`~vmn_exp.sdk.store_resolve.resolve_storage`
     (``VMN_EXPERIMENT_DIR`` > the checkout, fronting ``VMN_EXPERIMENT_STORE``).
     Returns ``(app_name, storage, root_path)``; *root_path* is None when the
     caller supplied both or no checkout is found: there is no conf.yml to read.
     """
     root_path = None if (app_name and storage) else try_repo_root()
-    storage = storage or resolve_experiment_storage(repo_root=root_path or False)
+    storage = storage or resolve_storage(repo_root=root_path or False)
     app_name = _resolve_app_name(app_name, lambda: _app_candidates(storage))
     return app_name, storage, root_path
 

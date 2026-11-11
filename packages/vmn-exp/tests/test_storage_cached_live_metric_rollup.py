@@ -17,6 +17,7 @@ from vmn_exp.core.metric_compact import compact_writer, writer_columns
 from vmn_exp.core.metric_files import is_indexed_file
 from vmn_exp.storage import cached_metrics, metric_rollup, ship_state
 from vmn_exp.storage.ship_state import finalizing
+from vmn_exp.core.real_io import RealClock
 
 APP, V, W = "app", "1.0.0-dev.abc.0001", "w"
 T0 = 1_767_225_600_000_001
@@ -143,7 +144,7 @@ def test_an_exit_flush_never_rolls_up(tmp_path):
     from vmn_exp.storage import buffered
     from vmn_exp.storage.buffered import BufferedRemoteStorage
 
-    pod = BufferedRemoteStorage(s3_storage(), str(tmp_path), area="runs", flush_interval_sec=0)
+    pod = BufferedRemoteStorage(s3_storage(), str(tmp_path), area="runs", flush_interval_sec=0, clock=RealClock())
     try:
         pod.save(APP, V, meta(V), {})
         for i in range(ROLLUP + LAG):

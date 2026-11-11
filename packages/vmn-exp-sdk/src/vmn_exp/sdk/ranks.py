@@ -111,10 +111,10 @@ class NoOpRun:
 
     def use_artifact(self, ref, path, name=None, app_name=None):
         """The artifact's local path, as rank 0 gets it — nothing is recorded."""
-        from vmn_exp.core.storage_resolve import resolve_experiment_storage
         from vmn_exp.sdk.run_artifacts import fetch_artifact
+        from vmn_exp.sdk.store_resolve import resolve_storage
 
-        storage = resolve_experiment_storage()
+        storage = resolve_storage()
         return fetch_artifact(storage, app_name or self.app_name, ref, path)[2]
 
     def use_model(self, ref, *, storage=None):

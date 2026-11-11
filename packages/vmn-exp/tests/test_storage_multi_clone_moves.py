@@ -35,6 +35,7 @@ from vmn_exp.core.writer import own_stream
 from vmn_exp.storage import stream_owner
 from vmn_exp.storage.buffered import BufferedRemoteStorage
 from vmn_exp.storage.local import LocalSnapshotStorage
+from vmn_exp.core.real_io import RealClock
 
 
 @pytest.fixture(autouse=True)
@@ -231,7 +232,7 @@ def test_roots_copies_prunes_and_a_buffer_in_any_mix_converge(tmp_path, seed):
     rng = random.Random(seed)
     assert cached_host(tmp_path, "a").create_exclusive(APP, V, meta(V), {})
     roots, live, keys, values = ["a", "b", "c"], {}, [], []
-    buf = BufferedRemoteStorage(s3_storage(), str(tmp_path / "buffers"))
+    buf = BufferedRemoteStorage(s3_storage(), str(tmp_path / "buffers"), clock=RealClock())
     for step in range(30):
         _mixed_turn(rng, tmp_path, step, roots, live, buf, keys, values)
     buf.close()

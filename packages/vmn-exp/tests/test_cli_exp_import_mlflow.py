@@ -24,6 +24,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 
 from mlflow_fixtures import MlflowFixtureBuilder
 from vmn_exp.storage.local import LocalSnapshotStorage
+from vmn_exp.core.real_io import real_io
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -81,7 +82,7 @@ def _make_args(
 def _call(args):
     """Call the import-mlflow handler and return exit code."""
     from vmn_exp.importers.cli import import_mlflow_run_without_repo
-    return import_mlflow_run_without_repo(args)
+    return import_mlflow_run_without_repo(args, real_io())
 
 
 def _build_mlruns(tmp_path, runs=None):

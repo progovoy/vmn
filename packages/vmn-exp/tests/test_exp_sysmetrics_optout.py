@@ -24,7 +24,7 @@ def built(monkeypatch):
     """Fake collector; records every build so a test can assert none happened."""
     calls = []
 
-    def _build(pid=None):
+    def _build(pid=None, clock=None):
         calls.append(pid)
         return lambda: dict(_FAKE_SAMPLE)
 

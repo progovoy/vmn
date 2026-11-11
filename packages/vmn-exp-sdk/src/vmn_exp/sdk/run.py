@@ -16,10 +16,8 @@ import functools
 import logging
 import os
 import signal
-import socket
 import sys
 import threading
-import time
 
 from vmn_exp._base import ensure_logger, now_iso
 from vmn_exp.core.best_effort import BestEffort, quiet
@@ -247,6 +245,7 @@ def start_run(
     # initializes it — and a library must not call init_stamp_logger.
     ensure_logger()
     _check_intent(intent, intent_keywords)
+    io = real_io()
 
     prior_state, start_step = None, None
     ref, reopen = resume.requested_run_id(run_id, reopen)
@@ -292,7 +291,9 @@ def start_run(
         sigterm_exit=sigterm_exit,
         export_env=export_env,
         install_hooks=_real_process_hooks(),
-        random=real_io().random,
+        clock=io.clock,
+        host=io.host,
+        random=io.random,
     )
     run.start_step = start_step
     run._steps = StepCounter(
@@ -371,9 +372,14 @@ class Run(RunMetrics, MetricDefinitions, RunArtifacts, RunMedia, RunAlerts, RunB
         export_env=True,
         install_hooks=_PROCESS_HOOKS_DEFAULT,
         writer=None,
-        *, random,
+        *,
+        clock,
+        host,
+        random,
     ):
         self._storage = storage
+        self._clock = clock
+        self._host = host
         # The writer id of this run's own streams; None: the process's.
         self._writer = writer
         # Installs the process's excepthook and atexit finalizer at open;
@@ -397,20 +403,20 @@ class Run(RunMetrics, MetricDefinitions, RunArtifacts, RunMedia, RunAlerts, RunB
         # The process that owns the run. A forked child inherits this object but
         # not the run: `current_run()` there is None, atexit leaves it alone and
         # every recording or closing call on it is dropped (_in_owner).
-        self.pid = os.getpid()
+        self.pid = host.pid()
         self._inert_warned_pid = None
 
         self._finished = False
         self._detached = False
-        self._monotonic_start = time.monotonic()
+        self._monotonic_start = clock.monotonic()
         self._sync_interval_sec = sync_interval_sec
         self._last_sync = self._monotonic_start
         self._ctx_prev = None
 
-        self._state = self._initial_state(heartbeat_interval_sec, prior_state, random)
+        self._state = self._initial_state(heartbeat_interval_sec, prior_state, host, random)
         # A resumed run's duration spans every attempt, from the first start.
         self._elapsed_before = (
-            resume.elapsed_before(self._state) if prior_state is not None else 0.0
+            resume.elapsed_before(self._state, clock.now()) if prior_state is not None else 0.0
         )
         # Every background storage call goes through it: pause_background()
         # and the fork handlers (fork_safety) hold them all.
@@ -433,7 +439,7 @@ class Run(RunMetrics, MetricDefinitions, RunArtifacts, RunMedia, RunAlerts, RunB
             RunOutput(storage, app_name, verstr, self._gate) if capture_output else None
         )
         # No pid: this process *is* the workload.
-        self._sampler = sysmetrics.Sampler(self._log_unstepped, system_metrics)
+        self._sampler = sysmetrics.Sampler(self._log_unstepped, system_metrics, clock=clock)
         # Recording the run's outcome warns once per step; heartbeat chores and
         # syncs are routine enough to stay at debug.
         self._record_guard = BestEffort(
@@ -442,7 +448,7 @@ class Run(RunMetrics, MetricDefinitions, RunArtifacts, RunMedia, RunAlerts, RunB
         )
 
     @staticmethod
-    def _initial_state(heartbeat_interval_sec, prior_state, random):
+    def _initial_state(heartbeat_interval_sec, prior_state, host, random):
         started_at = now_iso()
         state = {
             "state": "running",
@@ -451,8 +457,8 @@ class Run(RunMetrics, MetricDefinitions, RunArtifacts, RunMedia, RunAlerts, RunB
             "command": list(sys.argv),
             "runner": RUNNER_SDK,
             "cwd": _checkout_relative_cwd(),
-            "pid": os.getpid(),
-            "host": socket.gethostname(),
+            "pid": host.pid(),
+            "host": host.hostname(),
             # This process's attempt at the run: a duplicate attempt's
             # heartbeats never reopen a run another attempt finished.
             "attempt": new_attempt_id(random),
@@ -520,7 +526,7 @@ class Run(RunMetrics, MetricDefinitions, RunArtifacts, RunMedia, RunAlerts, RunB
         return writers
 
     def _duration(self):
-        return round(self._elapsed_before + time.monotonic() - self._monotonic_start, 3)
+        return round(self._elapsed_before + self._clock.monotonic() - self._monotonic_start, 3)
 
     # The close path (run_close) reaches these through the instance: tests
     # patch compact_by, error_from_exception and FINAL_REMOTE_TIMEOUT_SEC on
@@ -532,13 +538,14 @@ class Run(RunMetrics, MetricDefinitions, RunArtifacts, RunMedia, RunAlerts, RunB
     def _error_from_exception(self, error):
         return error_from_exception(error)
 
-    @staticmethod
-    def _final_deadline():
-        return _final_upload_deadline()
+    def _final_deadline(self, timeout_sec=None):
+        """The deadline *timeout_sec* (default: the final-upload timeout) from now."""
+        if timeout_sec is None:
+            timeout_sec = final_upload_timeout_sec()
+        return self._clock.monotonic() + timeout_sec
 
-    @staticmethod
-    def _time_left(deadline):
-        return _left(deadline)
+    def _time_left(self, deadline):
+        return max(0.0, deadline - self._clock.monotonic())
 
     # -- recording ---------------------------------------------------------
 
@@ -564,7 +571,7 @@ class Run(RunMetrics, MetricDefinitions, RunArtifacts, RunMedia, RunAlerts, RunB
     def _in_owner(self):
         """Whether this process opened the run; in a forked child it did not,
         and the call is dropped (warned once per run per process)."""
-        here = os.getpid()
+        here = self._host.pid()
         if here == self.pid:
             return True
         if self._inert_warned_pid != here:
@@ -611,9 +618,9 @@ class Run(RunMetrics, MetricDefinitions, RunArtifacts, RunMedia, RunAlerts, RunB
     def _maybe_sync(self):
         if not self._sync_interval_sec:
             return
-        if time.monotonic() - self._last_sync < self._sync_interval_sec:
+        if self._clock.monotonic() - self._last_sync < self._sync_interval_sec:
             return
-        self._last_sync = time.monotonic()
+        self._last_sync = self._clock.monotonic()
         self._log_sync.submit()
         if self._output is not None:
             self._output.request_upload()
@@ -644,11 +651,12 @@ def _finalize_open_runs(exit_code=None, deadline=None, media_share=1.0, exit_not
     # spend the whole budget on each run in turn. Media files are waited for
     # while recording (their entries must precede the final flush); the rest
     # of the uploads after every run's final state is written.
-    if deadline is None:
-        deadline = _final_upload_deadline()
+    runs = list(reversed(context.open_runs()))
+    if deadline is None and runs:
+        deadline = runs[0]._final_deadline()
     recorded = [
         run
-        for run in reversed(context.open_runs())
+        for run in runs
         if _quietly(_end_attempt, run, deadline, media_share, exit_code, error, final_state)
     ]
     for run in recorded:
@@ -693,22 +701,12 @@ def sigterm_timeout_sec():
     return timeout
 
 
-def _final_upload_deadline(timeout_sec=None):
-    """The deadline *timeout_sec* (default: the final-upload timeout) from now."""
-    if timeout_sec is None:
-        timeout_sec = final_upload_timeout_sec()
-    return time.monotonic() + timeout_sec
-
-
-def _left(deadline):
-    return max(0.0, deadline - time.monotonic())
-
-
 def _finalize_signaled(signum):
     """A run a signal ended exits ``128 + N``, as a shell reports it — or is
     released, when it was opened with ``on_sigterm="release"``."""
     name = signal.Signals(signum).name
-    deadline = _final_upload_deadline(sigterm_timeout_sec())
+    runs = context.open_runs()
+    deadline = runs[-1]._final_deadline(sigterm_timeout_sec()) if runs else None
     with finalizing():
         _finalize_open_runs(128 + signum, deadline=deadline, media_share=SIGTERM_MEDIA_SHARE,
                             received_signal=name, signal=name)

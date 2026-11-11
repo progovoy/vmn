@@ -12,7 +12,7 @@ from vmn_exp.core.storage_resolve import resolve_experiment_storage
 from vmn_exp.core.writer import merge_conf_into_params, merge_env_into_params
 from vmn_exp.storage.open import open_storage
 from vmn_exp.storage.s3 import S3SnapshotStorage
-from vmn_exp.core.real_io import real_io
+from vmn_exp.core.real_io import RealClock, real_io
 
 BUCKET = "ml-exps"
 APP = "trainer"
@@ -111,20 +111,20 @@ def test_no_root_and_no_store_is_an_error():
 
 
 def test_resolve_takes_a_store_uri(s3):
-    storage = resolve_experiment_storage(store=f"s3://{BUCKET}/r", repo_root=False)
+    storage = resolve_experiment_storage(store=f"s3://{BUCKET}/r", repo_root=False, clock=RealClock())
     assert _record(storage)
     assert _keys(s3, "r/")
 
 
 def test_store_env_selects_the_store(s3, monkeypatch):
     monkeypatch.setenv("VMN_EXPERIMENT_STORE", f"s3://{BUCKET}/from-env")
-    assert _record(resolve_experiment_storage(repo_root=False))
+    assert _record(resolve_experiment_storage(repo_root=False, clock=RealClock()))
     assert _keys(s3, "from-env/")
 
 
 def test_store_beats_the_bucket_shorthand(s3, monkeypatch):
     monkeypatch.setenv("VMN_EXPERIMENT_BUCKET", "some-other-bucket")
-    storage = resolve_experiment_storage(store=f"s3://{BUCKET}/win", repo_root=False)
+    storage = resolve_experiment_storage(store=f"s3://{BUCKET}/win", repo_root=False, clock=RealClock())
     assert _remote(storage).bucket == BUCKET
 
 

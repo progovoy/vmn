@@ -47,7 +47,7 @@ def _stored(comment):
 
 
 def comment_run_without_repo(args, io):
-    return comment_run(_get_storage(args), args, io.random)
+    return comment_run(_get_storage(args, io.clock), args, io.random)
 
 
 def comment_run(storage, args, random):
@@ -60,7 +60,7 @@ def comment_run(storage, args, random):
 
 
 def comments_run_without_repo(args, io):
-    return comments_run(_get_storage(args), args)
+    return comments_run(_get_storage(args, io.clock), args)
 
 
 def _thread_line(c):

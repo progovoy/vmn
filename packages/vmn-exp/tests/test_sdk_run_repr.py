@@ -3,7 +3,7 @@ notebook (plan 43 F18). Both read only what the run holds in memory."""
 from vmn_exp.sdk import run_repr
 from vmn_exp.sdk.ranks import NoOpRun
 from vmn_exp.sdk.run import Run
-from vmn_exp.core.real_io import RealRandom
+from vmn_exp.core.real_io import RealClock, RealHost, RealRandom
 
 APP = "my_app"
 VERSTR = "0.1.2-dev.3f9a.r4"
@@ -63,7 +63,7 @@ class _AccessRecorder:
 
 def test_repr_of_an_open_run_delegates_and_reads_no_storage():
     storage = _AccessRecorder()
-    run = Run(storage, APP, VERSTR, 60, name="baseline", install_hooks=None, random=RealRandom())
+    run = Run(storage, APP, VERSTR, 60, name="baseline", install_hooks=None, clock=RealClock(), host=RealHost(), random=RealRandom())
     storage.reads.clear()  # the baseline is taken after construction
 
     text = repr(run)

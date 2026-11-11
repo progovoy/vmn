@@ -18,13 +18,10 @@ import yaml
 from vmn_exp._base import ensure_logger, now_iso, working_dir
 from vmn_exp.core import create_batch
 from vmn_exp.core.app_conf import experiment_conf
-from vmn_exp.core.env import (
-    capture_env_safe,
-    should_capture,
-)
+from vmn_exp.core.env import capture_env_safe, should_capture
 from vmn_exp.core.from_snapshot import exported_features, snapshot_record
 from vmn_exp.core.refs import resolve_parent
-from vmn_exp.core.storage_resolve import _get_experiment_storage, try_repo_root
+from vmn_exp.core.storage_resolve import try_repo_root
 from vmn_exp.core.writer import create_run as record_run
 from vmn_exp.core.writer import get_repo_lock, merge_env_into_params
 from vmn_exp.sdk import _resolve_app_name, context
@@ -217,10 +214,11 @@ def _reject_reentry_without_nesting(nested):
 def snapshot_mode_storage():
     """Where a git-less run records, as the CLI does: ``VMN_EXPERIMENT_DIR``
     and/or the ``VMN_EXPERIMENT_BUCKET`` it syncs to."""
+    from vmn_exp.sdk.store_resolve import configured_storage  # lazy (plan 41 D1)
     params = {}
     merge_env_into_params(params)
     try:
-        return _get_experiment_storage(None, params)
+        return configured_storage(None, params)
     except ValueError:
         raise ValueError(
             "No experiment store for a run without a git checkout: "

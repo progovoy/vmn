@@ -8,7 +8,7 @@ import time
 from exp_helpers import _PY, _SRC_PATH
 
 from vmn_exp.core.metric_files import indexed_name, is_stream_file
-from vmn_exp.core.real_io import RealRandom
+from vmn_exp.core.real_io import RealClock, RealHost, RealRandom
 from vmn_exp.core.streams import display_writer
 from vmn_exp.core.writer import get_writer_id
 from vmn_exp.sdk.run import Run
@@ -47,7 +47,7 @@ def _log(run, n=30):
 
 def test_finish_leaves_only_the_indexed_file(tmp_path):
     st = _storage(tmp_path)
-    run = Run(st, APP, VERSTR, 60, random=RealRandom())
+    run = Run(st, APP, VERSTR, 60, clock=RealClock(), host=RealHost(), random=RealRandom())
     run._open()
     _log(run)
     run.finish()
@@ -67,7 +67,7 @@ class _StuckIndexing(CachedSnapshotStorage):
 def test_past_the_deadline_the_stream_stays(tmp_path, monkeypatch):
     monkeypatch.setenv("VMN_EXP_FINAL_UPLOAD_TIMEOUT_SEC", "0.5")
     st = _storage(tmp_path, _StuckIndexing)
-    run = Run(st, APP, VERSTR, 60, random=RealRandom())
+    run = Run(st, APP, VERSTR, 60, clock=RealClock(), host=RealHost(), random=RealRandom())
     run._open()
     _log(run)
     started = time.monotonic()
@@ -86,9 +86,9 @@ import sys
 from vmn_exp.snapshot import LocalSnapshotStorage
 from vmn_exp.storage.cached import CachedSnapshotStorage
 from vmn_exp.sdk.run import Run
-from vmn_exp.core.real_io import RealRandom
+from vmn_exp.core.real_io import RealClock, RealHost, RealRandom
 st = CachedSnapshotStorage(LocalSnapshotStorage(sys.argv[1], area="runs"))
-run = Run(st, "app", "0.0.1-dev.aaaaaaa.bbbbbbb", 3600, random=RealRandom())
+run = Run(st, "app", "0.0.1-dev.aaaaaaa.bbbbbbb", 3600, clock=RealClock(), host=RealHost(), random=RealRandom())
 run._open()
 for step in range(25):
     run.log_metric("loss", 0.5, step=step)

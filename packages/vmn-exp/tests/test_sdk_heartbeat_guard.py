@@ -19,7 +19,7 @@ from vmn_exp.sdk.heartbeat import Heartbeat
 from vmn_exp.sdk.run import Run
 from vmn_exp.sdk.state_publisher import RunStatePublisher
 from vmn_exp.snapshot import LocalSnapshotStorage
-from vmn_exp.core.real_io import RealRandom
+from vmn_exp.core.real_io import RealClock, RealHost, RealRandom
 
 APP = "app"
 X = "0.0.1-dev.abc1234.0000001"
@@ -159,11 +159,11 @@ def test_a_beat_into_a_deleted_local_record_is_dropped(root):
 
 
 def test_a_resumed_attempts_first_write_keeps_a_finish_landing_before_it(root):
-    a = Run(_local(root), APP, X, 3600, random=RealRandom())
+    a = Run(_local(root), APP, X, 3600, clock=RealClock(), host=RealHost(), random=RealRandom())
     a._open()
     prior = load_run_state(_local(root), APP, X)
     b_side = _local(root)
-    b = Run(b_side, APP, X, 3600, prior_state=prior, random=RealRandom())
+    b = Run(b_side, APP, X, 3600, prior_state=prior, clock=RealClock(), host=RealHost(), random=RealRandom())
 
     _before_next(b_side, ("save_file", "save_file_if_match"), lambda: a.finish(0))
     b._open()
@@ -177,11 +177,11 @@ def test_a_resumed_attempts_first_write_keeps_a_finish_landing_before_it(root):
 
 
 def test_resuming_a_finished_run_still_reopens_it(root):
-    a = Run(_local(root), APP, X, 3600, random=RealRandom())
+    a = Run(_local(root), APP, X, 3600, clock=RealClock(), host=RealHost(), random=RealRandom())
     a._open()
     a.finish(0)
 
-    b = Run(_local(root), APP, X, 3600, prior_state=load_run_state(_local(root), APP, X), random=RealRandom())
+    b = Run(_local(root), APP, X, 3600, prior_state=load_run_state(_local(root), APP, X), clock=RealClock(), host=RealHost(), random=RealRandom())
     b._open()
     try:
         assert load_run_state(_local(root), APP, X)["state"] == "running"

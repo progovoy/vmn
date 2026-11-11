@@ -12,6 +12,7 @@ import threading
 import time
 
 from vmn_exp.sdk import sysmetrics
+from vmn_exp.core.real_io import RealClock
 
 
 def _wait_built(sampler, timeout=5.0):
@@ -34,7 +35,7 @@ def test_optional_imports_run_on_the_calling_thread(monkeypatch):
         monkeypatch.delitem(sys.modules, name, raising=False)
     monkeypatch.setattr(sysmetrics, "_MISSING", set(), raising=False)
     monkeypatch.setattr(sysmetrics.importlib, "import_module", recording_import)
-    sampler = sysmetrics.Sampler(lambda values: None, enabled=True)
+    sampler = sysmetrics.Sampler(lambda values: None, enabled=True, clock=RealClock())
     _wait_built(sampler)
 
     caller = threading.current_thread().name

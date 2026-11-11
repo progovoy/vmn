@@ -14,7 +14,7 @@ from vmn_exp.snapshot import LocalSnapshotStorage
 from vmn_exp.storage.cached import CachedSnapshotStorage
 from vmn_exp.storage.s3 import S3SnapshotStorage
 from version_stamp.core.logging import init_stamp_logger
-from vmn_exp.core.real_io import real_io
+from vmn_exp.core.real_io import RealClock, real_io
 
 
 @pytest.fixture(autouse=True)
@@ -652,7 +652,7 @@ def test_get_experiment_storage_with_experiment_dir(tmp_path):
     from vmn_exp.cli.experiment import _get_experiment_storage
 
     params = {"experiment_dir": str(tmp_path), "backend": "local"}
-    storage = _get_experiment_storage(None, params)
+    storage = _get_experiment_storage(None, params, clock=RealClock())
     assert storage is not None
     # Verify it uses the right root by saving and checking
     storage.save("app", "v1", {"verstr": "v1", "timestamp": "t"}, {})
@@ -664,7 +664,7 @@ def test_get_experiment_storage_env_var(tmp_path, monkeypatch):
 
     monkeypatch.setenv("VMN_EXPERIMENT_DIR", str(tmp_path))
     params = {"backend": "local"}
-    storage = _get_experiment_storage(None, params)
+    storage = _get_experiment_storage(None, params, clock=RealClock())
     assert storage is not None
     storage.save("app", "v1", {"verstr": "v1", "timestamp": "t"}, {})
     assert storage.exists("app", "v1")
@@ -675,7 +675,7 @@ def test_get_experiment_storage_default_uses_vcs_root(tmp_path):
 
     vcs = SimpleNamespace(vmn_root_path=str(tmp_path))
     params = {"backend": "local"}
-    storage = _get_experiment_storage(vcs, params)
+    storage = _get_experiment_storage(vcs, params, clock=RealClock())
     assert storage is not None
     storage.save("app", "v1", {"verstr": "v1", "timestamp": "t"}, {})
     assert storage.exists("app", "v1")

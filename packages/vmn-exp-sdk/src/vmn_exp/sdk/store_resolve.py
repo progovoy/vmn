@@ -4,7 +4,8 @@ Its own function, not the core resolver re-exported: the keyword-only
 parameters below are the public contract, and the core resolver stays free to
 change behind it (plan 41 D10).
 """
-from vmn_exp.core.storage_resolve import resolve_experiment_storage
+from vmn_exp.core.real_io import real_io
+from vmn_exp.core.storage_resolve import _get_experiment_storage, resolve_experiment_storage
 
 
 def resolve_storage(*, dir: str | None = None, store: str | None = None,
@@ -14,4 +15,12 @@ def resolve_storage(*, dir: str | None = None, store: str | None = None,
     ``az://``, ``file://``, plugins); *bucket*/*prefix*/*endpoint_url* are the
     S3 shorthand. ``repo_root=False`` skips finding a checkout."""
     return resolve_experiment_storage(dir=dir, store=store, bucket=bucket, prefix=prefix,
-                                      endpoint_url=endpoint_url, repo_root=repo_root)
+                                      endpoint_url=endpoint_url, repo_root=repo_root,
+                                      clock=real_io().clock)
+
+
+def configured_storage(vcs, params, writer=True):
+    """The storage *vcs*'s checkout (or none) and *params* name, for the SDK
+    functions that resolve one themselves: like :func:`resolve_storage`, an
+    entry point that builds the real IO the resolver takes."""
+    return _get_experiment_storage(vcs, params, writer, clock=real_io().clock)

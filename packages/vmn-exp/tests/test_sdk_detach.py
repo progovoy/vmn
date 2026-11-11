@@ -17,7 +17,7 @@ from vmn_exp.sdk.background_gate import BackgroundGate
 from vmn_exp.sdk.context import open_runs
 from vmn_exp.sdk.run import Run
 from vmn_exp.snapshot import LocalSnapshotStorage
-from vmn_exp.core.real_io import RealRandom
+from vmn_exp.core.real_io import RealClock, RealHost, RealRandom
 
 APP = "app"
 VERSTR = "0.0.1-dev.aaaaaaa.ccccccc"
@@ -42,7 +42,7 @@ def threads_before():
 def run(tmp_path, threads_before):
     storage = LocalSnapshotStorage(str(tmp_path), area="runs")
     storage.save(APP, VERSTR, {"verstr": VERSTR, "timestamp": "2026-01-01T00:00:00Z"}, {})
-    run = Run(storage, APP, VERSTR, 0.05, sync_interval_sec=0.05, random=RealRandom())
+    run = Run(storage, APP, VERSTR, 0.05, sync_interval_sec=0.05, clock=RealClock(), host=RealHost(), random=RealRandom())
     run._open()
     run.log_metric("loss", 1.0, step=1)
     run._log_buffer.flush()

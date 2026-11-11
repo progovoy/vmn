@@ -12,6 +12,7 @@ from vmn_exp.core.storage_resolve import _get_experiment_storage, resolve_experi
 from vmn_exp.core.writer import STORAGE_ENV, merge_conf_into_params
 from vmn_exp.sdk.models import download_model, register_model
 from vmn_exp.storage.registry import location_local_path
+from vmn_exp.core.real_io import RealClock
 
 MINIO = "http://minio.test:9000"
 SECRET_MINIO = "http://user:s3cr3t@minio.test:9000"
@@ -65,7 +66,7 @@ def _download(storage):
 
 def test_an_env_endpoint_applies_without_a_remote_store(tmp_path, endpoints, monkeypatch):
     monkeypatch.setenv(STORAGE_ENV["endpoint_url"], MINIO)
-    storage = resolve_experiment_storage(dir=str(tmp_path / "local"))
+    storage = resolve_experiment_storage(dir=str(tmp_path / "local"), clock=RealClock())
     endpoints.clear()
     assert open(_download(storage), "rb").read() == b"minio"
     assert endpoints == [MINIO]
@@ -76,7 +77,7 @@ def test_a_conf_endpoint_applies_without_a_remote_store(tmp_path, endpoints):
                           vmn_root_path=str(tmp_path))
     params = {}
     merge_conf_into_params(vcs, params)
-    storage = _get_experiment_storage(vcs, params)
+    storage = _get_experiment_storage(vcs, params, clock=RealClock())
     endpoints.clear()
     _download(storage)
     assert endpoints == [MINIO]
@@ -84,7 +85,7 @@ def test_a_conf_endpoint_applies_without_a_remote_store(tmp_path, endpoints):
 
 def test_the_uris_endpoint_still_wins_over_the_conf(tmp_path, endpoints, monkeypatch):
     monkeypatch.setenv(STORAGE_ENV["endpoint_url"], MINIO)
-    storage = resolve_experiment_storage(dir=str(tmp_path / "local"))
+    storage = resolve_experiment_storage(dir=str(tmp_path / "local"), clock=RealClock())
     endpoints.clear()
     assert location_local_path(f"{ARTIFACT}?endpoint_url={OTHER}", store=storage)
     assert endpoints == [OTHER]
@@ -92,6 +93,6 @@ def test_the_uris_endpoint_still_wins_over_the_conf(tmp_path, endpoints, monkeyp
 
 def test_an_area_of_the_store_keeps_the_endpoint(tmp_path, endpoints, monkeypatch):
     monkeypatch.setenv(STORAGE_ENV["endpoint_url"], MINIO)
-    storage = resolve_experiment_storage(dir=str(tmp_path / "local"))
+    storage = resolve_experiment_storage(dir=str(tmp_path / "local"), clock=RealClock())
     assert storage.in_area("models").uri_options("s3") == {"endpoint_url": MINIO}
     assert storage.uri_options("gs") == {}

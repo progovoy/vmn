@@ -14,7 +14,7 @@ from vmn_exp.sdk.run import Run
 from vmn_exp.sdk.state_publisher import RunStatePublisher
 from vmn_exp.snapshot import LocalSnapshotStorage
 from vmn_exp.storage.cached import CachedSnapshotStorage
-from vmn_exp.core.real_io import RealRandom
+from vmn_exp.core.real_io import RealClock, RealHost, RealRandom
 
 APP = "app"
 X = "0.0.1-dev.aaaaaaa.bbbbbbb"
@@ -129,7 +129,7 @@ def test_finish_warns_that_the_final_state_was_not_uploaded(tmp_path, monkeypatc
     remote = LocalSnapshotStorage(str(tmp_path / "remote"), "runs")
     for side in (local, remote):
         side.save(APP, X, meta(X), {})
-    run = Run(CachedSnapshotStorage(local, _StateRefusingRemote(remote)), APP, X, 3600, random=RealRandom())
+    run = Run(CachedSnapshotStorage(local, _StateRefusingRemote(remote)), APP, X, 3600, clock=RealClock(), host=RealHost(), random=RealRandom())
     run._open()
 
     with caplog.at_level(logging.WARNING):

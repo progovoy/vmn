@@ -11,6 +11,7 @@ from vmn_exp.snapshot import LocalSnapshotStorage
 from vmn_exp.storage.cached import CachedSnapshotStorage
 from vmn_exp.core.logfiles import log_object_name
 from version_stamp.core.logging import init_stamp_logger
+from vmn_exp.core.real_io import RealClock
 
 V = "1.0.0-dev.aaa.bbb"
 
@@ -127,7 +128,7 @@ def test_s3_batch_on_a_segmented_log_adds_one_segment(bucket):
 
 
 def test_direct_s3_pod_batches_through_its_buffer(bucket):
-    pod = _get_experiment_storage(None, {"bucket": "vmn-bucket", "prefix": "exps"})
+    pod = _get_experiment_storage(None, {"bucket": "vmn-bucket", "prefix": "exps"}, clock=RealClock())
     pod.create_exclusive("app", V, meta(V), {})
 
     assert pod.append_log_entries("app", V, "w", _entries(10)) is True

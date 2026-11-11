@@ -7,7 +7,7 @@ store at all leaves vmn on its local stores. Snapshot records live in the
 store's ``snapshots`` area (where restore safety snapshots are), code objects
 in its ``code`` area, so snapshots and runs share them.
 
-Public: ``open_configured_snapshot_stores(vcs, params) -> ConfiguredStores | None``.
+Public: ``open_configured_snapshot_stores(vcs, params, clock) -> ConfiguredStores | None``.
 """
 from dataclasses import dataclass
 
@@ -54,13 +54,13 @@ def _storage_params(vcs, params):
     return drop_remote_if_offline(storage_params, vcs.vmn_root_path)
 
 
-def open_configured_snapshot_stores(vcs, params):
+def open_configured_snapshot_stores(vcs, params, clock):
     storage_params = _storage_params(vcs, params)
     where = store_uri(storage_params)
     if where is None:
         return None
     writer = not params.get("read_only")
-    runs = _get_experiment_storage(vcs, storage_params, writer=writer)
+    runs = _get_experiment_storage(vcs, storage_params, writer=writer, clock=clock)
     records = open_storage(where, local_store_root(vcs.vmn_root_path), area=SNAPSHOTS,
                            writer=writer)
     if not writer:

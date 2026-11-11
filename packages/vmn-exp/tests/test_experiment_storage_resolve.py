@@ -18,7 +18,7 @@ from types import SimpleNamespace
 import boto3
 import pytest
 from moto import mock_aws
-from vmn_exp.core.real_io import real_io
+from vmn_exp.core.real_io import RealClock, real_io
 
 BUCKET = "vmn-test-bucket"
 PREFIX = "vmn-experiments"
@@ -127,7 +127,7 @@ def test_vmn_experiment_dir_wins(tmp_path, monkeypatch):
     monkeypatch.delenv("VMN_EXPERIMENT_BUCKET", raising=False)
 
     from vmn_exp.core.storage_resolve import resolve_experiment_storage
-    storage = resolve_experiment_storage()
+    storage = resolve_experiment_storage(clock=RealClock())
 
     root = _storage_root(storage)
     assert root is not None and root.startswith(exp_dir)
@@ -156,7 +156,7 @@ def test_bucket_env_gives_s3_backend(tmp_path, monkeypatch, _aws_creds):
         boto3.client("s3", region_name="us-east-1").create_bucket(Bucket=BUCKET)
 
         from vmn_exp.core.storage_resolve import resolve_experiment_storage
-        storage = resolve_experiment_storage()
+        storage = resolve_experiment_storage(clock=RealClock())
 
     assert _is_s3(storage), f"Expected S3 backend, got {type(storage).__name__}"
 
@@ -176,7 +176,7 @@ def test_flags_beat_env(tmp_path, monkeypatch):
     monkeypatch.delenv("VMN_EXPERIMENT_BUCKET", raising=False)
 
     from vmn_exp.core.storage_resolve import resolve_experiment_storage
-    storage = resolve_experiment_storage(dir=flag_dir)
+    storage = resolve_experiment_storage(dir=flag_dir, clock=RealClock())
 
     root = _storage_root(storage)
     assert root is not None and root.startswith(flag_dir)
@@ -233,7 +233,7 @@ def test_import_mlflow_in_repo_visible_to_exp_storage(tmp_path, monkeypatch):
         endpoint_url=None,
         backend="local",
     )
-    rc = import_mlflow_run_without_repo(args)
+    rc = import_mlflow_run_without_repo(args, real_io())
     assert rc == 0
 
     # The run should now be in the repo's experiment storage.

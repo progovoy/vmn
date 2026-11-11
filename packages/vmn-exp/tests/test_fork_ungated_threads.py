@@ -25,6 +25,7 @@ needs_fork = pytest.mark.skipif(
 
 _PRELUDE = r"""
 import os, sys, threading, time
+from vmn_exp.core.real_io import RealClock, RealHost
 from vmn_exp.sdk import fork_safety, sysmetrics
 
 IN_FLIGHT = threading.Event()
@@ -60,7 +61,7 @@ _FORK_DURING_NVML_INIT = _PRELUDE + r"""
 sysmetrics.MIN_SAMPLE_INTERVAL_SEC = 5.0   # the priming sleep: never waited for
 
 
-def slow_build_collector(pid=None):
+def slow_build_collector(pid=None, clock=None):
     IN_FLIGHT.set()
     RELEASE.wait()
     DONE.set()
@@ -68,7 +69,7 @@ def slow_build_collector(pid=None):
 
 
 sysmetrics.build_collector = slow_build_collector
-sampler = sysmetrics.Sampler(lambda values: None, enabled=True)
+sampler = sysmetrics.Sampler(lambda values: None, enabled=True, clock=RealClock())
 assert IN_FLIGHT.wait(10), "nvmlInit never started"
 waited = fork_and_check()
 assert waited < 3, f"the fork waited {waited:.2f}s: it waited for the priming sleep"
@@ -92,7 +93,7 @@ class SlowSink:
 
 storage = LocalSnapshotStorage(sys.argv[1], area="runs")
 storage.save("app", "0.0.1-dev.a.b", {"verstr": "0.0.1-dev.a.b"}, {})
-run = Run(storage, "app", "0.0.1-dev.a.b", 60, random=RealRandom())
+run = Run(storage, "app", "0.0.1-dev.a.b", 60, clock=RealClock(), host=RealHost(), random=RealRandom())
 run._open()
 run._alerter_instance = Alerter(AlertConfig(sinks=[SlowSink()], on=["alert"]))
 assert run.alert("loss exploded") is True

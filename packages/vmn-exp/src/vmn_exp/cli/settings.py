@@ -22,7 +22,7 @@ def add_settings_parser(subparsers):
 
 
 def settings_run_without_repo(args, io):
-    storage = _get_storage(args)
+    storage = _get_storage(args, io.clock)
     if args.action == "set":
         return _set(storage, args)
     text = read_settings_text(storage, args.name)

@@ -270,11 +270,11 @@ READ_ONLY_ACTIONS = frozenset({"list", "show", "compare", "diff", "export", "imp
                                "export-metrics", "similar"})
 
 
-def _open_checked_storage(vcs, params, action, args=None):
+def _open_checked_storage(vcs, params, action, args=None, *, clock):
     """The experiment storage; a read-only action refuses a configured store
     that doesn't exist (a mistyped URI) instead of listing nothing."""
     writer = action not in READ_ONLY_ACTIONS or getattr(args, "compact", False)
-    storage = _get_experiment_storage(vcs, params, writer=writer)
+    storage = _get_experiment_storage(vcs, params, writer=writer, clock=clock)
     if not writer:
         require_store(storage, store_uri(params))
     return storage
@@ -304,7 +304,7 @@ def handle_experiment(vmn_ctx, io):
             return err
 
     try:
-        storage = _open_checked_storage(vcs, params, action, args)
+        storage = _open_checked_storage(vcs, params, action, args, clock=io.clock)
     except ValueError as exc:
         VMN_LOGGER.error(str(exc))
         return 1

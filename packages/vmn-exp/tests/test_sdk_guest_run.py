@@ -6,6 +6,7 @@ import logging
 import pytest
 from stream_fakes import APP, V, StreamRecorder
 
+from vmn_exp.core.real_io import RealClock, RealHost, RealRandom
 from vmn_exp.core.streams import guest_writer_id
 from vmn_exp.core.writer import set_default_writer_id
 from vmn_exp.sdk import run as run_module
@@ -39,7 +40,7 @@ class _AlertSpy(GuestRun):
 def _open(storage, cls=GuestRun, **kwargs):
     kwargs.setdefault("writer", GUEST)
     run = cls(storage, APP, V, 3600, sync_interval_sec=0, export_env=False,
-              install_hooks=None, **kwargs)
+              install_hooks=None, clock=RealClock(), host=RealHost(), random=RealRandom(), **kwargs)
     run._open()
     return run
 

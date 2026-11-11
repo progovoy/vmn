@@ -22,7 +22,7 @@ from vmn_exp.sdk import start_run
 from vmn_exp.sdk.exit_code import ExitCodeNote
 from vmn_exp.sdk.process_hooks import ProcessHooks
 from vmn_exp.sdk.run import Run
-from vmn_exp.core.real_io import RealRandom
+from vmn_exp.core.real_io import RealClock, RealHost, RealRandom
 
 
 @pytest.fixture(autouse=True)
@@ -276,7 +276,7 @@ def _open_run(tmp_path, install_hooks=None):
     storage = LocalSnapshotStorage(str(tmp_path), area="runs")
     storage.save("app", ABANDONED_VERSTR, meta(ABANDONED_VERSTR), {})
     run = Run(storage, "app", ABANDONED_VERSTR, 3600, sync_interval_sec=0,
-              install_hooks=install_hooks, random=RealRandom())
+              install_hooks=install_hooks, clock=RealClock(), host=RealHost(), random=RealRandom())
     run._open()
     return run, storage
 

@@ -17,6 +17,7 @@ from vmn_exp.cli.run import _Supervision
 from vmn_exp.core.real_io import real_io
 from vmn_exp.storage import buffered
 from vmn_exp.storage.buffered import BufferedRemoteStorage
+from vmn_exp.core.real_io import RealClock
 
 
 @pytest.fixture(autouse=True)
@@ -60,7 +61,7 @@ class _Sync:
 
 
 def _supervision(bucket):
-    pod = BufferedRemoteStorage(bucket, bucket.root + "-buffers", area="runs")
+    pod = BufferedRemoteStorage(bucket, bucket.root + "-buffers", area="runs", clock=RealClock())
     args = argparse.Namespace(capture_output=False, kill_grace_sec=1)
     sup = _Supervision(pod, APP, V, args, wait=FakeWait(), io=real_io())
     sup.sync = _Sync(pod, bucket)

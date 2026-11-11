@@ -14,6 +14,7 @@ from vmn_exp.core.writer import own_stream
 from vmn_exp.storage import buffered
 from vmn_exp.storage.buffered import BufferedRemoteStorage
 from vmn_exp.storage.local import LocalSnapshotStorage
+from vmn_exp.core.real_io import RealClock
 
 APP, V, W = "app", "v", "w"
 FINISHED = yaml.dump({"state": "finished"})
@@ -31,7 +32,7 @@ def _bucket(monkeypatch, tmp_path):
 def pod(tmp_path):
     remote = s3_storage()
     remote.save(APP, V, meta(V), {})
-    return BufferedRemoteStorage(remote, str(tmp_path), area="runs")
+    return BufferedRemoteStorage(remote, str(tmp_path), area="runs", clock=RealClock())
 
 
 def _unreachable(*args, **kwargs):

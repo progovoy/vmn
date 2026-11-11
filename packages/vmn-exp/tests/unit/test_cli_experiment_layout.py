@@ -6,6 +6,7 @@ from types import SimpleNamespace
 
 import pytest
 
+from fakes.clock import FakeClock
 from fakes.console import FakeConsole
 from fakes.random import FakeRandom
 from similar_seed import seed, verstr
@@ -110,6 +111,6 @@ def test_dispatch_resolves_handlers_through_the_experiment_module(monkeypatch, a
     monkeypatch.setattr(experiment, "_open_checked_storage", lambda *a, **k: "storage")
     monkeypatch.setattr(experiment, handler, lambda *a, **k: got.append(a[2]) or 7)
     args = parse_user_commands(["exp", action, "my_app"])
-    io = SimpleNamespace(console=FakeConsole(), random=FakeRandom())
+    io = SimpleNamespace(console=FakeConsole(), random=FakeRandom(), clock=FakeClock())
     assert experiment.handle_experiment(SimpleNamespace(vcs=None, args=args), io) == 7
     assert got == ["storage"]

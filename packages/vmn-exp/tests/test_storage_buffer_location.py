@@ -14,6 +14,7 @@ from s3_helpers import entry, meta
 from vmn_exp.storage import buffer_owner, buffered
 from vmn_exp.storage.buffered import BufferedRemoteStorage
 from vmn_exp.storage.local import LocalSnapshotStorage
+from vmn_exp.core.real_io import RealClock
 
 fcntl = pytest.importorskip("fcntl")
 
@@ -40,7 +41,7 @@ def buffers(tmp_path):
 
 @pytest.fixture
 def pod(bucket, buffers):
-    return BufferedRemoteStorage(bucket, buffers, area="runs")
+    return BufferedRemoteStorage(bucket, buffers, area="runs", clock=RealClock())
 
 
 def _marker(root):
@@ -104,7 +105,7 @@ def test_a_kept_buffer_releases_its_owner_lock(monkeypatch, pod):
 
 
 def test_a_dropped_storage_releases_its_owner_lock(bucket, buffers):
-    pod = BufferedRemoteStorage(bucket, buffers, area="runs")
+    pod = BufferedRemoteStorage(bucket, buffers, area="runs", clock=RealClock())
     pod.append_log_entry(APP, V, W, entry(0))  # ships at once: nothing pending
     root = pod._buffer_root
     ref = weakref.ref(pod)

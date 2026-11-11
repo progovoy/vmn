@@ -180,7 +180,7 @@ def build_app(
     ctx = ServerContext(
         manager, source, TTLCache(APPS_TTL_SEC),
         open_workspace_storage=lambda ws: workspace_storage(ws),
-        open_edit_storage=lambda uri: open_storage(uri, area=RUNS, buffer_logs=True),
+        open_edit_storage=lambda uri: open_storage(uri, area=RUNS, buffer_logs=True, clock=deps.io.clock),
         probe_store=lambda uri: storage_access.probe_store(uri, random=deps.io.random),
         app_exists=lambda *args: app_exists(*args),
     )

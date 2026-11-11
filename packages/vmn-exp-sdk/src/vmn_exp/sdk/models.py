@@ -44,8 +44,8 @@ def _resolve_storage(storage=None):
     """Resolve experiment storage from env or the current checkout."""
     if storage is not None:
         return storage
-    from vmn_exp.core.storage_resolve import resolve_experiment_storage
-    return resolve_experiment_storage()
+    from vmn_exp.sdk.store_resolve import resolve_storage
+    return resolve_storage()
 
 
 def _run_to_ref(run, app_name):

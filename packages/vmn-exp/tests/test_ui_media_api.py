@@ -10,7 +10,7 @@ from vmn_exp.core.png import encode_png
 from vmn_exp.sdk.run import Run
 from vmn_exp.snapshot import open_storage
 from vmn_exp.storage.areas import local_store_root
-from vmn_exp.core.real_io import RealRandom, real_io
+from vmn_exp.core.real_io import RealClock, RealHost, RealRandom, real_io
 
 APP = "app"
 V = "1.0.0-dev.media"
@@ -28,7 +28,7 @@ def storage(tmp_path):
 
 @pytest.fixture
 def run(storage):
-    run = Run(storage, APP, V, 60, random=RealRandom())
+    run = Run(storage, APP, V, 60, clock=RealClock(), host=RealHost(), random=RealRandom())
     run._open()
     yield run
     run.finish()

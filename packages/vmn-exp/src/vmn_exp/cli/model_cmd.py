@@ -20,8 +20,7 @@ import json
 import logging
 
 from vmn_exp.core.storage_resolve import resolve_experiment_storage
-from vmn_exp.registry.log import set_alias as _set_alias
-from vmn_exp.registry.log import remove_alias as _remove_alias
+from vmn_exp.registry.log import remove_alias as _remove_alias, set_alias as _set_alias
 from vmn_exp.registry.datasets import copied_fields, reference_fields, register_dataset_version
 from vmn_exp.registry.log import read_uses, set_version_status
 from vmn_exp.registry.names import valid_model_name, valid_alias_name, parse_ref
@@ -38,7 +37,7 @@ _LOG = logging.getLogger(__name__)
 # Storage helpers
 # ---------------------------------------------------------------------------
 
-def _get_storage(args):
+def _get_storage(args, clock):
     """Build experiment storage for registry operations from args / env."""
     return resolve_experiment_storage(
         dir=getattr(args, "dir", None),
@@ -46,6 +45,7 @@ def _get_storage(args):
         bucket=getattr(args, "bucket", None),
         prefix=getattr(args, "prefix", None),
         endpoint_url=getattr(args, "endpoint_url", None),
+        clock=clock,
     )
 
 
@@ -275,7 +275,7 @@ def model_run_without_repo(args, io):
     Returns an int exit code (0 = ok, 1 = error).  Always returns an int
     (never None) because every model action is repo-free.
     """
-    storage = _get_storage(args)
+    storage = _get_storage(args, io.clock)
 
     dispatch = {
         "register": _cmd_register,

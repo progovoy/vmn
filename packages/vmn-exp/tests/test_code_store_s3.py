@@ -13,6 +13,7 @@ from vmn_exp.storage.areas import local_store_root
 from vmn_exp.sdk import start_run
 from vmn_exp.storage.files import METADATA_FILE, PATCH_FILES
 from vmn_exp.storage.open import open_storage
+from vmn_exp.core.real_io import RealClock
 
 BUCKET = "vmn-code-store"
 PATCH_NAMES = {filename for _, filename, _ in PATCH_FILES}
@@ -126,7 +127,7 @@ def test_runs_synced_to_s3_share_one_remote_code_object(app_layout, s3, tarballs
 def test_runs_straight_to_s3_without_a_local_dir(app_layout, s3, tarballs):
     _bootstrap(app_layout)
     _dirty(app_layout, untracked="remote only")
-    storage = open_storage(f"s3://{BUCKET}/exp", None, area="runs", buffer_logs=True)
+    storage = open_storage(f"s3://{BUCKET}/exp", None, area="runs", buffer_logs=True, clock=RealClock())
 
     ids = []
     for _ in range(2):

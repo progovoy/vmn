@@ -17,6 +17,7 @@ from vmn_exp.core.status import RUN_STATE_FILE
 from vmn_exp.storage.areas import local_store_root
 from vmn_exp.storage.cached import CachedSnapshotStorage
 from vmn_exp.storage.local import LocalSnapshotStorage
+from vmn_exp.core.real_io import RealClock
 
 TRAIN = "def train_step():\n    a = 1\n    b = 2\n    c = 3\n    d = 4\n    return {}\n"
 CHANGES = features(["train.py"], [TRAIN_STEP], author="alice@x.io")
@@ -99,7 +100,7 @@ def test_over_a_direct_remote_store_the_hint_reads_the_new_run_from_its_log_buff
     from vmn_exp.snapshot import open_storage
     from vmn_exp.storage.uri import s3_uri
 
-    storage = open_storage(s3_uri(BUCKET, PREFIX), area="runs", buffer_logs=True)
+    storage = open_storage(s3_uri(BUCKET, PREFIX), area="runs", buffer_logs=True, clock=RealClock())
     prior = seed(storage, "app", verstr(1), changes=CHANGES)
     storage.sync_log_to_remote("app", prior, WRITER)
     indexed_snapshot(storage, "app", wait=True)

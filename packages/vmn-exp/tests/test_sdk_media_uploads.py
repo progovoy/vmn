@@ -9,7 +9,7 @@ import pytest
 from vmn_exp.sdk.run import Run
 from vmn_exp.snapshot import LocalSnapshotStorage
 from vmn_exp.storage.cached import CachedSnapshotStorage
-from vmn_exp.core.real_io import RealRandom
+from vmn_exp.core.real_io import RealClock, RealHost, RealRandom
 
 APP = "app"
 VERSTR = "0.0.1-dev.aaaaaaa.bbbbbbb"
@@ -45,7 +45,7 @@ def _png_path(tmp_path):
 def test_log_image_and_log_table_return_without_waiting_on_the_store(
     storage, tmp_path
 ):
-    run = Run(storage, APP, VERSTR, 60, random=RealRandom())
+    run = Run(storage, APP, VERSTR, 60, clock=RealClock(), host=RealHost(), random=RealRandom())
     run._open()
     started = time.monotonic()
     run.log_image("s", _png_path(tmp_path), step=0)

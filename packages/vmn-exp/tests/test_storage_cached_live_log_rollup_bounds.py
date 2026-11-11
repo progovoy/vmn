@@ -9,6 +9,7 @@ from vmn_exp.core.writer import own_stream
 from vmn_exp.storage import buffered, cached_logs
 from vmn_exp.storage.buffered import BufferedRemoteStorage
 from vmn_exp.storage.ship_state import finalizing
+from vmn_exp.core.real_io import RealClock
 
 APP = "app"
 V = "0.0.1-dev.aaa1111.bbb2222"
@@ -61,7 +62,7 @@ def test_a_finalizer_ship_never_rolls_up(tmp_path):
 
 
 def test_an_exit_flush_never_rolls_up(tmp_path):
-    pod = BufferedRemoteStorage(s3_storage(), str(tmp_path), area="runs", flush_interval_sec=0)
+    pod = BufferedRemoteStorage(s3_storage(), str(tmp_path), area="runs", flush_interval_sec=0, clock=RealClock())
     pod.save(APP, V, meta(V), {})
     stream = own_stream(pod, APP, V)
     for i in range(ROLLUP):

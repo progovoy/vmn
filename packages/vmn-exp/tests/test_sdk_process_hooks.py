@@ -118,6 +118,7 @@ _ABANDON_ON_A_BUFFER = """
     # Imported after the SDK, as storage/open.py imports it lazily.
     from vmn_exp.storage.buffered import BufferedRemoteStorage
     from vmn_exp.storage.local import LocalSnapshotStorage
+    from vmn_exp.core.real_io import RealClock
 
     # Runs where the buffer's exit flush (registered at its import) runs.
     atexit.register(lambda: print("FINALIZED_BEFORE_FLUSH", run._finished, flush=True))
@@ -127,7 +128,8 @@ _ABANDON_ON_A_BUFFER = """
             return True
 
     remote = RemoteDir(os.environ["STORE"], "runs")
-    run = start_run("app", storage=BufferedRemoteStorage(remote, os.environ["TMPDIR"], area="runs"),
+    run = start_run("app", storage=BufferedRemoteStorage(remote, os.environ["TMPDIR"], area="runs",
+                                                          clock=RealClock()),
                     system_metrics=False, heartbeat_interval_sec=3600)
     run.log_note("first")
     run.log_note("last")

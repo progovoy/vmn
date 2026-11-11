@@ -21,7 +21,6 @@ from the remote's size like any local copy's.
 import atexit
 import os
 import shutil
-import time
 import uuid
 import weakref
 
@@ -62,16 +61,13 @@ atexit.register(close_all)
 class BufferedRemoteStorage(CachedSnapshotStorage):
     _local_is_replica = False
 
-    def __init__(
-        self,
-        remote,
-        buffers_dir,
-        area=RUNS,
-        flush_interval_sec=DEFAULT_FLUSH_INTERVAL_SEC,
-    ):
+    def __init__(self, remote, buffers_dir, area=RUNS,
+                 flush_interval_sec=DEFAULT_FLUSH_INTERVAL_SEC, *, clock):
         """*buffers_dir*: where this storage's buffer dirs go
-        (:func:`vmn_exp.storage.host_dirs.log_buffers_dir`)."""
+        (:func:`vmn_exp.storage.host_dirs.log_buffers_dir`); *clock*: what
+        the flush interval is timed on."""
         self._buffers_dir = buffers_dir
+        self._clock = clock
         self._flush_interval_sec = flush_interval_sec
         self._start_buffer(remote, area)
 
@@ -123,7 +119,8 @@ class BufferedRemoteStorage(CachedSnapshotStorage):
 
     def _open_area(self, name):
         return BufferedRemoteStorage(
-            self._remote.in_area(name), self._buffers_dir, name, self._flush_interval_sec)
+            self._remote.in_area(name), self._buffers_dir, name, self._flush_interval_sec,
+            clock=self._clock)
 
     def load_record(self, app_name, verstr):
         return self._remote.load_record(app_name, verstr)
@@ -186,7 +183,7 @@ class BufferedRemoteStorage(CachedSnapshotStorage):
         # unshipped instead; close() (or a later due check) retries them.
         key = (app_name, verstr, writer_id)
         last = self._flushed_at.get(key)
-        due = last is None or time.monotonic() - last >= self._flush_interval_sec
+        due = last is None or self._clock.monotonic() - last >= self._flush_interval_sec
         if not due or self._request_ship(app_name, verstr):
             self._mark_unshipped(key)
             return True
@@ -224,7 +221,7 @@ class BufferedRemoteStorage(CachedSnapshotStorage):
     def sync_log_to_remote(self, app_name, verstr, writer_id):
         self._this_process()
         key = (app_name, verstr, writer_id)
-        self._flushed_at[key] = time.monotonic()
+        self._flushed_at[key] = self._clock.monotonic()
         super().sync_log_to_remote(app_name, verstr, writer_id)
         self._unshipped.discard(key)
         if self._unshipped or self._unshipped_metrics:
@@ -249,7 +246,7 @@ class BufferedRemoteStorage(CachedSnapshotStorage):
         last = self._metrics_flushed_at.get(key)
         self._unshipped_metrics.add(key)
         _PENDING.add(self)
-        due = last is None or time.monotonic() - last >= self._flush_interval_sec
+        due = last is None or self._clock.monotonic() - last >= self._flush_interval_sec
         if due and not self._request_ship(app_name, verstr):
             try:
                 self.sync_metrics_to_remote(app_name, verstr, writer_id)
@@ -260,7 +257,7 @@ class BufferedRemoteStorage(CachedSnapshotStorage):
     def sync_metrics_to_remote(self, app_name, verstr, writer_id):
         self._this_process()
         key = (app_name, verstr, writer_id)
-        self._metrics_flushed_at[key] = time.monotonic()
+        self._metrics_flushed_at[key] = self._clock.monotonic()
         super().sync_metrics_to_remote(app_name, verstr, writer_id)
         self._unshipped_metrics.discard(key)
 

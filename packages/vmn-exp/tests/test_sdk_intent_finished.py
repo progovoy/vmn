@@ -6,7 +6,7 @@ from vmn_exp.core.fold import fold_intent, fold_log
 from vmn_exp.sdk.run import Run
 from vmn_exp.snapshot import LocalSnapshotStorage
 from vmn_exp.storage.cached import CachedSnapshotStorage
-from vmn_exp.core.real_io import RealRandom
+from vmn_exp.core.real_io import RealClock, RealHost, RealRandom
 
 APP = "app"
 VERSTR = "0.0.1-dev.aaaaaaa.bbbbbbb"
@@ -28,7 +28,7 @@ def finished(tmp_path, remote):
     storage = CachedSnapshotStorage(LocalSnapshotStorage(str(tmp_path / "local"), "runs"),
                                     remote)
     storage.save(APP, VERSTR, {"verstr": VERSTR, "timestamp": "2026-01-01T00:00:00Z"}, {})
-    run = Run(storage, APP, VERSTR, 60, random=RealRandom())
+    run = Run(storage, APP, VERSTR, 60, clock=RealClock(), host=RealHost(), random=RealRandom())
     run._open()
     run.finish()
     return run

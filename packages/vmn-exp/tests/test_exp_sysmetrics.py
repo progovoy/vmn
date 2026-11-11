@@ -21,12 +21,13 @@ from vmn_exp.core.status import load_run_state
 from vmn_exp.sdk import start_run, sysmetrics
 from vmn_exp.sdk.reader import get_run
 from exp_helpers import _PY, _bootstrap, _experiment, _storage, extract_dev_verstr
+from vmn_exp.core.real_io import RealClock
 
 _FAKE_SAMPLE = {"sys_cpu_percent": 12.5, "sys_rss_mb": 64.0}
 
 
 def _use_collector(monkeypatch, collector):
-    monkeypatch.setattr(sysmetrics, "build_collector", lambda pid=None: collector)
+    monkeypatch.setattr(sysmetrics, "build_collector", lambda pid=None, clock=None: collector)
 
 
 def _use_fake_collector(monkeypatch):
@@ -130,7 +131,7 @@ def test_exp_run_samples_the_child_not_the_supervisor(app_layout, capfd, monkeyp
     _bootstrap(app_layout)
     seen = {}
 
-    def _build(pid=None):
+    def _build(pid=None, clock=None):
         seen["pid"] = pid
         return lambda: dict(_FAKE_SAMPLE)
 
@@ -161,7 +162,7 @@ def test_sdk_samples_its_own_process(app_layout, monkeypatch):
     _bootstrap(app_layout)
     seen = {}
 
-    def _build(pid=None):
+    def _build(pid=None, clock=None):
         seen["pid"] = pid
         return lambda: dict(_FAKE_SAMPLE)
 
@@ -215,7 +216,7 @@ def test_longer_run_records_several_samples(app_layout, monkeypatch):
 
 def test_build_collector_returns_none_without_optional_deps(monkeypatch):
     _no_optional_deps(monkeypatch)
-    assert sysmetrics.build_collector() is None
+    assert sysmetrics.build_collector(clock=RealClock()) is None
 
 
 def test_no_collector_is_a_silent_noop(app_layout, monkeypatch, caplog):
@@ -321,7 +322,7 @@ def test_real_collector_reports_plausible_values():
     psutil = pytest.importorskip("psutil")
 
     for pid in (None, os.getpid()):  # both mean "this process and its children"
-        collector = sysmetrics.build_collector(pid)
+        collector = sysmetrics.build_collector(pid, clock=RealClock())
         assert collector is not None
         values = collector()
 

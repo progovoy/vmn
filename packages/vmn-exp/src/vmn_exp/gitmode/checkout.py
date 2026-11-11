@@ -8,7 +8,7 @@ its own, only when there is something to initialize.
 import os
 
 from version_stamp.api import get_repo_lock, resolve_root_path
-from vmn_exp.core.storage_resolve import _get_experiment_storage
+from vmn_exp.sdk.store_resolve import configured_storage
 from vmn_exp.core.writer import create_run, merge_conf_into_params
 from vmn_exp.gitmode import capture
 from vmn_exp.gitmode.coldstart import build_vcs, tracked_vcs
@@ -33,7 +33,7 @@ def stamped_apps():
 def build_storage(vcs):
     params = {}
     merge_conf_into_params(vcs, params)
-    return _get_experiment_storage(vcs, params)
+    return configured_storage(vcs, params)
 
 
 def checkout_source(app_name, parent, nested, storage, capture_env=None, python_exe=None):

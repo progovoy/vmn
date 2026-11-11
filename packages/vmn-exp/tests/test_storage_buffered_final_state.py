@@ -14,6 +14,7 @@ from vmn_exp.storage import buffered
 from vmn_exp.storage.buffered import BufferedRemoteStorage
 from vmn_exp.storage.cached import local_side
 from vmn_exp.storage.local import LocalSnapshotStorage
+from vmn_exp.core.real_io import RealClock
 
 APP, V, W = "app", "v", "w"
 RUNNING = {"state": "running", "attempt": "a1"}
@@ -37,7 +38,7 @@ def bucket(tmp_path):
 
 @pytest.fixture
 def pod(bucket, tmp_path):
-    return BufferedRemoteStorage(bucket, str(tmp_path / "buffers"), area="runs")
+    return BufferedRemoteStorage(bucket, str(tmp_path / "buffers"), area="runs", clock=RealClock())
 
 
 def _store_state(side, state):
