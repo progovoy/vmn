@@ -130,6 +130,7 @@ def _note_uncaught_exception(exc_value):
 
 def start_run(
     app_name=None,
+    *,
     note=None,
     params=None,
     parent=None,
@@ -157,8 +158,9 @@ def start_run(
 ):
     """Create an experiment (or reopen one), mark it running and return the ``Run``.
 
-    ``app_name=None`` resolves the app from the current checkout. Use the result
-    as a context manager, or call ``finish()`` yourself.
+    ``app_name=None`` resolves the app from the current checkout. Every other
+    argument is keyword-only. Use the result as a context manager, or call
+    ``finish()`` yourself.
 
     With ``VMN_SNAPSHOT_METADATA`` set (a container built from ``vmn-exp
     export``) no git checkout is needed: the run records against that snapshot

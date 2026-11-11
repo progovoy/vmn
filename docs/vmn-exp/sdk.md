@@ -82,7 +82,7 @@ sdk`. So [`vmn-exp rerun`](experiments.md#rerun) needs the command spelled out
 
 ```python
 start_run(
-    app_name=None, note=None, params=None, parent=None, nested=False,
+    app_name=None, *, note=None, params=None, parent=None, nested=False,
     heartbeat_interval_sec=None, storage=None, system_metrics=None,
     sync_interval_sec=<env/conf/30>, run_id=None, all_ranks=False, name=None, tags=None,
     capture_env=None, fork_from=None, fork_step=None, rewind_to_step=None,
@@ -90,6 +90,10 @@ start_run(
     on_sigterm=None, sigterm_exit=None, reopen=False, export_env=True,
 )
 ```
+
+Only `app_name` may be passed by position; every other argument is
+keyword-only, so `start_run("my_app", "baseline")` raises `TypeError` (write
+`note="baseline"`). `create_run` takes its arguments the same way.
 
 | Argument | Means |
 |---|---|
