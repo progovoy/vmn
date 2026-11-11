@@ -67,7 +67,6 @@ PAGE_TOTAL = """
 """
 
 PAGE_TOTAL_IS = "(total) => (" + PAGE_TOTAL + ")() === total"
-PAGE_TOTAL_SHOWN = "() => (" + PAGE_TOTAL + ")() !== null"
 
 VISIBLE_PILLS = """
 () => [...document.querySelectorAll('table[aria-label="experiments"] tbody .status-pill')]
