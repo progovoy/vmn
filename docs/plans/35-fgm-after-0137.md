@@ -23,6 +23,9 @@ Status: **in progress** (2026-11-11).
 3. **The Models page** takes ~45 s for 241 models / 7.7k versions.
 4. **A model's `artifact_uri`** joins the run path to an absolute `s3://` path.
 5. **Stamp tree, Actions and Config** show in the nav of a store-only workspace.
+   Kept by design (plan 19 §1.2): Stamp tree and Actions are disabled there
+   with the reason "store workspace: no checkout". There is no Config item;
+   Settings is the store's own settings page.
 
 ## 2. Nested carriers (decided: an option, and the default says so)
 
