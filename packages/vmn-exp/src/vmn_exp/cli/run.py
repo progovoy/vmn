@@ -17,6 +17,7 @@ import time
 from vmn_exp.cli import fork
 from vmn_exp.cli.intent_arg import append_intent, read_intent
 from vmn_exp.cli.output_tee import OutputTee, output_artifact, popen_kwargs
+from vmn_exp.cli.supervise_loop import popen_waiter, watch
 from vmn_exp.cli.supervised_env import adopt_requested, supervised_env
 from vmn_exp.cli.supervisor import (
     BackgroundSync,
@@ -51,7 +52,7 @@ from vmn_exp.core.writer import (
 )
 from version_stamp.api import VMN_LOGGER, measure_runtime_decorator, now_iso
 
-_METRICS_TAIL_INTERVAL = 0.5  # seconds between metrics-file polls during a run
+_METRICS_TAIL_INTERVAL = 0.5  # seconds between supervision ticks while the child lives
 
 KILL_GRACE_ENV = "VMN_EXP_KILL_GRACE_SEC"
 DEFAULT_KILL_GRACE_SEC = 30
@@ -403,10 +404,17 @@ class _Supervision:
         sync_interval = resolve_sync_sec(
             getattr(self.args, "sync_interval", None), self.exp_conf
         )
-        last_sync = last_heartbeat = time.monotonic()
-        while proc.poll() is None:
+        tick = self._tick(sampler, sync_interval, heartbeat_interval, time.monotonic())
+        watch(lambda: proc.poll() is not None, popen_waiter(proc), tick,
+              time.monotonic, _METRICS_TAIL_INTERVAL)
+
+    def _tick(self, sampler, sync_interval, heartbeat_interval, started):
+        """One poll while the child lives: ingest, sync, beat, hook, grace."""
+        last_sync = last_heartbeat = started
+
+        def tick(now):
+            nonlocal last_sync, last_heartbeat
             self.guard("metrics ingestion", self._ingest_new)
-            now = time.monotonic()
             if sync_interval and now - last_sync > sync_interval:
                 self.sync.request()
                 last_sync = now
@@ -421,7 +429,8 @@ class _Supervision:
             if self.on_tick is not None:
                 self.guard("supervision hook", self.on_tick, self)
             self.forwarder.enforce_grace()
-            time.sleep(_METRICS_TAIL_INTERVAL)
+
+        return tick
 
     def request_stop(self):
         """End the child early, on purpose: SIGTERM now, SIGKILL after the grace.
