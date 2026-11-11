@@ -14,7 +14,6 @@ from version_stamp.core.constants import (
     JINJA_TAG_RE,
     LEGACY_TRACKING_PREFIX,
 )
-from version_stamp.core.logging import VMN_LOGGER
 
 # libyaml's loader is ~10x faster than the pure-Python one, and experiment
 # listings parse one metadata.yml (and one run_state.yml) per run.
@@ -224,31 +223,24 @@ def comment_out_jinja(text: str) -> str:
     return JINJA_TAG_RE.sub(lambda m: "{% raw %}" + m.group(1) + "{% endraw %}", text)
 
 
+def find_managed_root(start, exists):
+    """The first of ``start`` and its ancestors holding .git or .vmn, else None."""
+    path = start
+    while not any(exists(os.path.join(path, m)) for m in (".git", ".vmn")):
+        parent = os.path.dirname(path)
+        if parent == path:
+            return None
+        path = parent
+    return path
+
+
 def resolve_root_path():
-    cwd = os.getcwd()
-    if "VMN_WORKING_DIR" in os.environ:
-        cwd = os.environ["VMN_WORKING_DIR"]
-
-    root_path = os.path.realpath(os.path.expanduser(cwd))
-
-    exist = os.path.exists(os.path.join(root_path, ".git"))
-    exist = exist or os.path.exists(os.path.join(root_path, ".vmn"))
-    while not exist:
-        try:
-            prev_path = root_path
-            root_path = os.path.realpath(os.path.join(root_path, ".."))
-            if prev_path == root_path:
-                raise RuntimeError()
-
-            exist = os.path.exists(os.path.join(root_path, ".git"))
-            exist = exist or os.path.exists(os.path.join(root_path, ".vmn"))
-        except Exception:
-            VMN_LOGGER.debug("Logged exception: ", exc_info=True)
-            root_path = None
-            break
+    cwd = os.environ.get("VMN_WORKING_DIR", os.getcwd())
+    root_path = find_managed_root(
+        os.path.realpath(os.path.expanduser(cwd)), os.path.exists
+    )
     if root_path is None:
         raise RuntimeError("Running from an unmanaged directory")
-
     return root_path
 
 
