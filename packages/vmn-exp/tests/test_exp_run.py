@@ -542,6 +542,31 @@ def test_atexit_finalizes_a_forgotten_run_as_succeeded(app_layout):
     assert st.derive_status(state) == st.SUCCEEDED
 
 
+def test_sys_exit_3_without_a_with_block_reads_failed_3(app_layout):
+    """``sys.exit(main())`` with a run left open: the job failed, and so does
+    the run, with the process's own exit code."""
+    _bootstrap(app_layout)
+
+    proc = _run_python(
+        app_layout,
+        _sdk_script(
+            app_layout.app_name,
+            "import sys\n"
+            "run = start_run(APP)\n"
+            "print(run.id)\n"
+            "sys.stdout.flush()\n"
+            "sys.exit(3)\n",
+        ),
+    )
+    assert proc.returncode == 3, proc.stderr
+
+    verstr = proc.stdout.strip().splitlines()[-1]
+    state = _state(app_layout, verstr)
+    assert state["state"] == "finished"
+    assert state["exit_code"] == 3
+    assert st.derive_status(state) == st.FAILED
+
+
 def test_atexit_finalizes_a_crashed_run_as_failed(app_layout):
     """The one abandon case that must keep reading failed: an uncaught
     exception no ``with`` block ever got a chance to see."""

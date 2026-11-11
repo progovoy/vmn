@@ -8,15 +8,20 @@
 import os
 import subprocess
 import time
+from functools import partial
 
 import pytest
 import yaml
 from exp_helpers import _SRC_PATH, _PY, _bootstrap, _storage
+from s3_helpers import meta
 
-from vmn_exp.snapshot import open_storage
+from vmn_exp.snapshot import LocalSnapshotStorage, open_storage
 from vmn_exp.core.status import load_run_state
 from vmn_exp.sdk import run as run_module
 from vmn_exp.sdk import start_run
+from vmn_exp.sdk.exit_code import ExitCodeNote
+from vmn_exp.sdk.process_hooks import ProcessHooks
+from vmn_exp.sdk.run import Run
 
 
 @pytest.fixture(autouse=True)
@@ -231,3 +236,97 @@ def test_workload_exception_is_never_masked_by_the_store(app_layout, flaky):
             raise TrainingDiverged("loss is nan")
 
     assert run not in run_module._OPEN_RUNS
+
+
+# ---------------------------------------------------------------------------
+# A run left open at exit takes the exit code sys.exit(N) gave the process
+# ---------------------------------------------------------------------------
+
+ABANDONED_VERSTR = "0.0.1-dev.aaaaaaa.ddddddd"
+
+
+class _NotedExit:
+    def __init__(self, code):
+        self.code = code
+
+    def noted(self):
+        return self.code
+
+
+class _FakeSys:
+    def __init__(self):
+        self.excepthook = lambda *exc: None
+        self.exit = self._exit
+
+    @staticmethod
+    def _exit(*args):
+        raise SystemExit(*args)
+
+
+class _FakeAtexit:
+    def __init__(self):
+        self.registered = []
+
+    def register(self, func):
+        self.registered.append(func)
+
+
+def _open_run(tmp_path, install_hooks=None):
+    storage = LocalSnapshotStorage(str(tmp_path), area="runs")
+    storage.save("app", ABANDONED_VERSTR, meta(ABANDONED_VERSTR), {})
+    run = Run(storage, "app", ABANDONED_VERSTR, 3600, sync_interval_sec=0,
+              install_hooks=install_hooks)
+    run._open()
+    return run, storage
+
+
+def _hooks(fake_sys, fake_atexit, note):
+    return partial(run_module._install_process_hooks, ProcessHooks(lambda: 1),
+                   fake_sys, fake_atexit, note)
+
+
+def test_an_abandoned_run_takes_the_noted_nonzero_exit_code(tmp_path):
+    run, storage = _open_run(tmp_path)
+
+    run_module._finalize_open_runs(exit_note=_NotedExit(3))
+
+    state = load_run_state(storage, "app", run.id)
+    assert state["state"] == "finished" and state["exit_code"] == 3
+    assert "error" not in state
+
+
+def test_an_uncaught_exception_still_wins_over_a_noted_exit_code(tmp_path, monkeypatch):
+    run, storage = _open_run(tmp_path)
+    monkeypatch.setattr(run_module, "_uncaught_exception", RuntimeError("boom"))
+
+    run_module._finalize_open_runs(exit_note=_NotedExit(3))
+
+    state = load_run_state(storage, "app", run.id)
+    assert state["exit_code"] == run_module.ABANDONED_EXIT_CODE
+    assert state["error"]["message"] == "boom"
+
+
+def test_a_swallowed_sys_exit_before_the_run_opened_is_ignored(tmp_path):
+    fake_sys, fake_atexit, note = _FakeSys(), _FakeAtexit(), ExitCodeNote()
+    note.install(fake_sys)
+    with pytest.raises(SystemExit):
+        fake_sys.exit(3)  # swallowed by the application: argparse, say
+    run, storage = _open_run(tmp_path, install_hooks=_hooks(fake_sys, fake_atexit, note))
+
+    [finalize_at_exit] = fake_atexit.registered
+    finalize_at_exit()
+
+    assert load_run_state(storage, "app", run.id)["exit_code"] == 0
+
+
+def test_the_atexit_finalizer_reads_a_sys_exit_after_the_run_opened(tmp_path):
+    fake_sys, fake_atexit = _FakeSys(), _FakeAtexit()
+    run, storage = _open_run(
+        tmp_path, install_hooks=_hooks(fake_sys, fake_atexit, ExitCodeNote()))
+    with pytest.raises(SystemExit):
+        fake_sys.exit(4)
+
+    [finalize_at_exit] = fake_atexit.registered
+    finalize_at_exit()
+
+    assert load_run_state(storage, "app", run.id)["exit_code"] == 4

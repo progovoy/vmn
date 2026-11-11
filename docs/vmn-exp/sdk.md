@@ -584,7 +584,16 @@ yourself when a `with` block doesn't fit. It is idempotent.
   run as **failed** (exit code 1) and is re-raised. `sys.exit(N)` inside it
   records `N` (0 for no argument).
 - A run still open at interpreter exit is finalized too: succeeded after a
-  clean exit, failed after an uncaught exception.
+  clean exit, failed after an uncaught exception (exit code 1), and failed
+  with exit code `N` after `sys.exit(N)` (`run = start_run(...)` then
+  `sys.exit(main())` reads what `main()` returned). The SDK learns `N` by
+  wrapping `sys.exit` from the first `start_run()`; only the main thread's
+  call counts, and one made before the run opened is forgotten. Two exits stay
+  unseen and read succeeded: a hand-written `raise SystemExit(N)` and
+  `os._exit(N)`; use `with start_run(...)` or `run.finish(exit_code=N)` there.
+  A `sys.exit(N)` that the application swallows (`except SystemExit`) after
+  the run opened, followed by a clean exit with the run still open, reads
+  failed with `N`.
 - A failed run records its exception in the final `run_state.yml` as `error`:
   `type` (the class, module-qualified unless a builtin, e.g.
   `torch.cuda.OutOfMemoryError`), `message` (`str(exc)`), `traceback` (capped
@@ -962,7 +971,8 @@ handler after the import (`signal.signal(signal.SIGTERM, signal.SIG_DFL)`, or
 yours); runs then are not finalized on SIGTERM.
 
 The first `start_run()` of a process chains `sys.excepthook` (an uncaught
-exception marks an abandoned run failed) and registers the atexit finalizer
+exception marks an abandoned run failed), wraps `sys.exit` (it records `N`
+and calls the `sys.exit` that was current) and registers the atexit finalizer
 that finishes runs left open. Because it registers after the run's storage
 was imported, it runs before that storage's own exit flush (a bucket's log
 buffer, a local journal), which then ships what the finalizer wrote.

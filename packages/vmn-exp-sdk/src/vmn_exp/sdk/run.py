@@ -66,6 +66,7 @@ from vmn_exp.sdk.context import (  # noqa: F401  (re-exported API)
 from vmn_exp.sdk.create import SNAPSHOT_METADATA_ENV, create_record  # noqa: F401
 from vmn_exp.sdk import fork_safety  # noqa: F401  (registers the fork handlers)
 from vmn_exp.sdk.background_gate import BackgroundGate, RunBackground
+from vmn_exp.sdk.exit_code import ExitCodeNote, exit_status
 from vmn_exp.sdk.heartbeat import Heartbeat
 from vmn_exp.sdk.log_buffer import LogBuffer
 from vmn_exp.sdk.log_sync import LogSync
@@ -106,19 +107,18 @@ ALERT_DRAIN_SEC = 5
 # A run that reached interpreter exit still open was abandoned. Most of the
 # time that is just an mlflow-style "forgot to call finish()" — the process
 # fell off the end cleanly — and must read as succeeded, like the workload's
-# own exit code says. Only a genuinely uncaught exception (see
-# ``_note_uncaught_exception`` below) makes it read as failed instead.
+# own exit code says. An uncaught exception (see ``_note_uncaught_exception``
+# below) makes it read as failed with this code instead, and ``sys.exit(N)``
+# (noted by ``_EXIT_NOTE``) with N.
 ABANDONED_EXIT_CODE = 1
 
 # The uncaught exception that reached the top of this process, if any,
-# recorded as the abandoned runs' ``error``. Only it flips the atexit-abandoned
-# default from succeeded to failed: ``SystemExit`` never reaches
+# recorded as the abandoned runs' ``error``. ``SystemExit`` never reaches
 # ``sys.excepthook`` (CPython special-cases it before running atexit
-# handlers), so a bare ``sys.exit(N)`` outside a context-managed run stays
-# indistinguishable from a clean exit here — the same as it would be for any
-# other process without our instrumentation. The hook is chained at the first
-# run open (``_PROCESS_HOOKS``), not on import.
+# handlers); ``_EXIT_NOTE`` wraps ``sys.exit`` for that. Both hooks are
+# installed at the first run open (``_install_process_hooks``), not on import.
 _uncaught_exception = None
+_EXIT_NOTE = ExitCodeNote()
 
 
 def _note_uncaught_exception(exc_value):
@@ -276,8 +276,7 @@ def start_run(
         sigterm_exit=sigterm_exit,
         export_env=export_env,
         install_hooks=functools.partial(
-            _PROCESS_HOOKS.install_once, sys, atexit, _finalize_open_runs,
-            _note_uncaught_exception),
+            _install_process_hooks, _PROCESS_HOOKS, sys, atexit, _EXIT_NOTE),
     )
     run.start_step = start_step
     run._steps = StepCounter(
@@ -658,7 +657,7 @@ class Run(RunMetrics, MetricDefinitions, RunArtifacts, RunMedia, RunAlerts, RunB
         if isinstance(exc, SystemExit):
             # sys.exit(0) inside the block is a clean, intentional exit — not
             # an error — and the real code (when non-zero) beats a generic 1.
-            self.finish(exit_code=_system_exit_code(exc))
+            self.finish(exit_code=exit_status(exc.code))
             return False
         self.finish(exit_code=1, error=exc)
         return False  # never swallow — nor replace — the workload's exception
@@ -837,13 +836,15 @@ class Run(RunMetrics, MetricDefinitions, RunArtifacts, RunMedia, RunAlerts, RunB
             self._output.request_upload()
 
 
-def _finalize_open_runs(exit_code=None, deadline=None, media_share=1.0, **final_state):
+def _finalize_open_runs(exit_code=None, deadline=None, media_share=1.0, exit_note=None,
+                        **final_state):
     """Never leave a run claiming ``running`` just because nobody finished it.
 
     With no explicit *exit_code* (the atexit case) a clean process exit reads
-    as succeeded, and only a genuinely uncaught exception reads as failed —
-    see ``_uncaught_exception``. ``_finalize_signaled`` always passes an
-    explicit code, so a killed process is unaffected.
+    as succeeded; a genuinely uncaught exception reads as failed (see
+    ``_uncaught_exception``), else the code *exit_note* noted from
+    ``sys.exit(N)``. ``_finalize_signaled`` always passes an explicit code, so
+    a killed process is unaffected.
 
     Only this process's runs: a forked child exiting normally must not finalize
     — and so mark failed — the parent's still-running run. A run opened with
@@ -855,8 +856,7 @@ def _finalize_open_runs(exit_code=None, deadline=None, media_share=1.0, **final_
     """
     error = None
     if exit_code is None:
-        exit_code = ABANDONED_EXIT_CODE if _uncaught_exception is not None else 0
-        error = _uncaught_exception
+        exit_code, error = _abandoned_exit(exit_note)
     # One shared deadline for every run's uploads: a hung remote must not
     # spend the whole budget on each run in turn. Media files are waited for
     # while recording (their entries must precede the final flush); the rest
@@ -870,6 +870,13 @@ def _finalize_open_runs(exit_code=None, deadline=None, media_share=1.0, **final_
     ]
     for run in recorded:
         _quietly(run._close_remote_writers, deadline)
+
+
+def _abandoned_exit(exit_note):
+    """The exit code and error of runs still open at a process exit."""
+    if _uncaught_exception is not None:
+        return ABANDONED_EXIT_CODE, _uncaught_exception
+    return (0 if exit_note is None else exit_note.noted()), None
 
 
 def _end_attempt(run, deadline, media_share, exit_code, error, final_state):
@@ -914,16 +921,6 @@ def _left(deadline):
     return max(0.0, deadline - time.monotonic())
 
 
-def _system_exit_code(exc):
-    """``sys.exit()``'s effective process exit code, as the interpreter itself
-    computes it: no argument (or ``None``) is 0, a non-int argument (a message)
-    is printed and counts as 1, anything else is used as-is."""
-    code = exc.code
-    if code is None:
-        return 0
-    return code if isinstance(code, int) else 1
-
-
 def _finalize_signaled(signum):
     """A run a signal ended exits ``128 + N``, as a shell reports it — or is
     released, when it was opened with ``on_sigterm="release"``."""
@@ -952,6 +949,18 @@ def _sigterm_raises():
 
 def _has_open_runs():
     return bool(context.open_runs())
+
+
+def _install_process_hooks(process_hooks, sys_module, atexit_module, exit_note):
+    """At each run open: the excepthook and atexit finalizer (once per
+    process), the ``sys.exit`` note, and forget a ``sys.exit`` the
+    application swallowed before this run opened."""
+    process_hooks.install_once(
+        sys_module, atexit_module,
+        functools.partial(_finalize_open_runs, exit_note=exit_note),
+        _note_uncaught_exception)
+    exit_note.install(sys_module)
+    exit_note.clear()
 
 
 _PROCESS_HOOKS = ProcessHooks(os.getpid)
