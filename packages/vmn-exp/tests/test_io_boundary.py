@@ -78,6 +78,19 @@ def test_real_io_entries_name_existing_modules_and_carry_a_reason():
     assert not bad
 
 
+# SnapshotStorage is the filesystem interface for store data (plan 44 G14): its
+# local implementation is real IO, declared with a "storage: " reason.
+STORAGE_REASON = "storage: "
+CORE_STORAGE_MODULES = {"vmn_exp.core.sqlite_conn", "vmn_exp.core.sqlite_files", "vmn_exp.core.index_io_process"}
+
+
+def test_no_ui_or_cli_module_is_on_the_real_io_list_as_storage():
+    storage = {m for m, reason in REAL_IO.items() if reason.startswith(STORAGE_REASON)}
+    assert storage, "the local Storage implementation modules are declared in REAL_IO"
+    misplaced = [m for m in storage if not m.startswith("vmn_exp.storage.") and m not in CORE_STORAGE_MODULES]
+    assert not misplaced
+
+
 def test_real_wired_entries_name_existing_names_and_carry_a_reason():
     modules = _module_paths()
     bad = [
