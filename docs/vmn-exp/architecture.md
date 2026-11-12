@@ -426,3 +426,9 @@ flowchart LR
 
 Deleting the file costs one rebuild, never data
 ([The experiment index](experiments.md#the-experiment-index-per-host-cache)).
+
+In code the index is `ExperimentIndex` in `vmn_exp/core/index.py`, a facade
+assembled from mixins that keep all state on the index:
+`core/index_surface.py` (properties, freshness, the snapshots it serves).
+`core/index_direct.py` builds the same snapshot by reading every record, the
+fallback when the index is unavailable.

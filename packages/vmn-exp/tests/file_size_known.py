@@ -11,7 +11,7 @@ KNOWN_OVERSIZED = {
     'vmn_exp.core.app_settings': 401,
     'vmn_exp.core.env': 352,
     'vmn_exp.core.fold': 430,
-    'vmn_exp.core.index': 1231,
+    'vmn_exp.core.index': 1010,
     'vmn_exp.core.index_io_process': 334,
     'vmn_exp.core.index_snapshot': 399,
     'vmn_exp.core.index_store': 340,

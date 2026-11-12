@@ -45,6 +45,13 @@ remote store its full listings run behind serving, a chunk applied per
 refresh (:mod:`experiment_index_sweep_behind`). :meth:`freshness` says
 which of these it is busy with, between refreshes too.
 
+This module is the facade: :class:`ExperimentIndex` is assembled from mixins
+that keep all state on the index — :mod:`~vmn_exp.core.index_surface`
+(properties, freshness, snapshots) — and :mod:`~vmn_exp.core.index_direct`
+builds snapshots without it. What tests patch here (the chunk size, the
+retry interval, the record readers, the process-wide registry) is read here,
+the moved code reaching it through seam methods such as ``_chunk()``.
+
 Storage is duck-typed (``list_files``, ``load_file``, and optionally
 ``list_record_names``/``list_files(keys=)``/``direct_files``/``read_file_from``/
 ``plain_record_dir``/``index_cache_path``/``cache_identity``); like the rest of
@@ -56,12 +63,18 @@ import threading
 from contextlib import nullcontext
 from dataclasses import replace
 
-from vmn_exp.core.fold import fold_log, fold_row
+from vmn_exp.core.fold import fold_row
 from vmn_exp.core.gc_pause import gc_paused
 from vmn_exp.core import index_freshness
 from vmn_exp.core.index_follower import apply_delta
 from vmn_exp.core.index_baseline import ListingBaseline
 from vmn_exp.core.index_bulk import BulkPublish, loading_snapshot
+from vmn_exp.core.index_direct import (  # noqa: F401  (importers' names)
+    _direct_folds,
+    _run_states,
+    direct_snapshot,
+    snapshot_of_folds,
+)
 from vmn_exp.core.index_first_rows import first_rows, first_rows_of, kept_parts, kept_snapshot
 from vmn_exp.core.index_io_process import IOProcessError, start_io_process  # noqa: F401
 from vmn_exp.core.index_journal_mark import JournalMark
@@ -78,25 +91,20 @@ from vmn_exp.core.index_vmx_check import VmxCheck
 from vmn_exp.core.index_remote_workers import RemoteLoaders, worker_count
 from vmn_exp.core.index_rows import adopted as _adopted
 from vmn_exp.core.index_rows import row_copies as _row_copies
-from vmn_exp.core.index_snapshot import (
-    IndexSnapshot,
-    RowCache,
-    new_side_tables,
-    put_side_tables,
-)
+from vmn_exp.core.index_snapshot import IndexSnapshot, RowCache  # noqa: F401  (importers' name)
 from vmn_exp.core.index_store import IndexStore
+from vmn_exp.core.index_surface import FIRST_SNAPSHOT_WAIT_SEC, IndexSurface  # noqa: F401
 from vmn_exp.core.index_sweep import (
     DEFAULT_FULL_SWEEP_SEC,
     METADATA_FILE,
     Sweep,
 )
 from vmn_exp.core.index_load_pool import LoadPool
-from vmn_exp.core.index_views import lean_row
 from vmn_exp.core.index_workers import load_new_records
 from vmn_exp.core.log import load_log
 from vmn_exp.core.ports import wall_seconds
 from vmn_exp.core.real_io import real_io
-from vmn_exp.core.status import load_run_state, observed_at_by_verstr
+from vmn_exp.core.status import load_run_state
 from vmn_exp.core.traced_lock import TracedLock
 
 _LOGGER = logging.getLogger(__name__)
@@ -110,9 +118,6 @@ _REMOTE_CHUNK = 500
 # behind serving hands over before letting the next refresh serve the
 # journal's hints (and the ui see the refresh end, not a stuck one).
 BEHIND_REFRESH_SEC = 30.0
-# How long a request on an index that published nothing yet waits for its
-# first snapshot before it gets an empty one saying it is loading.
-FIRST_SNAPSHOT_WAIT_SEC = 0.5
 # The newest persisted rows a warm restart serves before reading back the rest.
 FIRST_ROWS = 500
 FIRST_ROWS_MAX = 2000  # with their ancestors and the newest outer runs
@@ -130,7 +135,7 @@ def _listed_at(work_item):
     return sig[1] if isinstance(sig, (list, tuple)) and len(sig) > 1 else 0
 
 
-class ExperimentIndex:
+class ExperimentIndex(IndexSurface):
     """Incrementally maintained rows for one app of one storage backend.
 
     *clock* (a :class:`~vmn_exp.core.ports.Clock`) times its refreshes,
@@ -188,6 +193,11 @@ class ExperimentIndex:
     def _monotonic(self):
         return self._clock.monotonic()
 
+    # -- seams: the module globals tests patch, read at call time ------------
+
+    def _chunk(self):
+        return _REMOTE_CHUNK
+
     @classmethod
     def follower(cls, cache_store, scope, *, clock=None):
         """An index that never reads storage: each refresh applies
@@ -196,128 +206,6 @@ class ExperimentIndex:
         index._store = cache_store
         index._cache_gen = 0
         return index
-
-    @property
-    def path(self):
-        """The file the index persists in, or None."""
-        return getattr(self._store, "path", None)
-
-    @property
-    def full_sweep_sec(self):
-        """Seconds between full listings (default 300); 0 lists fully every time."""
-        return self._sweep.full_sweep_sec
-
-    @full_sweep_sec.setter
-    def full_sweep_sec(self, value):
-        self._sweep.full_sweep_sec = value
-
-    @property
-    def journaled(self):
-        """True: refreshes list only hinted and live records (plan 11 §5.2)."""
-        return self._sweep.journaled
-
-    @journaled.setter
-    def journaled(self, value):
-        self._sweep.journaled = value
-
-    def hint(self, name):
-        """The store's journal named *name*: the next refresh re-reads it (and
-        loads it, if new) without listing anything else."""
-        self._sweep.hint(name)
-
-    def journal_at(self, ms):
-        """The journal hinted every entry up to *ms* (its reader's cursor):
-        once refreshed, the records stand at that mark (persisted with them)."""
-        self._sweep.journal_at(ms)
-
-    def resume_journal(self, oldest_ms):
-        """Carry on from the persisted records when their journal mark is
-        no older than *oldest_ms* (the oldest entry the journal still holds):
-        no full listing, the caller replays the journal from the mark it
-        returns. None: no such mark — the index needs :meth:`reconcile`."""
-        mark = self._mark.load()
-        if mark is None or mark < oldest_ms:
-            return None
-        self._sweep.resume()
-        return mark
-
-    def overflowed(self, names):
-        """The journal named too many of the app's records in one tick:
-        re-read *names* and list the record names (not their files) for
-        anything else it missed."""
-        self._sweep.overflowed(names)
-
-    @property
-    def drift(self):
-        """Records the consistency check found changed with no journal entry."""
-        return self._sweep.drift
-
-    @property
-    def last_reconcile_at(self):
-        """Wall time the last full listing or consistency round began."""
-        return self._sweep.last_reconcile_at
-
-    @property
-    def records(self):
-        """A copy of ``{key: record}`` as last refreshed."""
-        return dict(self._records or {})
-
-    @property
-    def record_count(self):
-        return len(self._records or ())
-
-    @property
-    def published(self):
-        """The current snapshot, or None before the first (never waits)."""
-        return self._snapshot
-
-    @property
-    def refreshing(self):
-        """True while a refresh holds the index (diagnostics; never waits)."""
-        return self._lock.locked()
-
-    def freshness(self):
-        """``{as_of, refreshing, phase, progress}`` of the current snapshot
-        (:mod:`~vmn_exp.core.index_freshness`), plus ``stalled_sec`` while a
-        refresh runs; never waits. A journaled index's full listing behind
-        serving (progress: the share of records listed) or catch-up on the
-        journal (a replay, an overflow, hints queued) shows as
-        ``full_listing``/``journal`` between refreshes too. ``unreadable``
-        (:meth:`Unreadable.summary`: the I/O helper's, which reads the
-        records) counts the records set aside, absent when none."""
-        state = self._reported_freshness()
-        if state["refreshing"]:
-            state["stalled_sec"] = self._freshness.stalled_sec(state["phase"], state["progress"])
-        unreadable = self._io_unreadable if self._io is not None else self._unreadable.summary()
-        if unreadable:
-            state["unreadable"] = unreadable
-        checking = self._vmx.state()
-        if checking:
-            state["checking"] = checking
-        return state
-
-    def _reported_freshness(self):
-        state = self._freshness.state(self._lock.locked())
-        behind = self._sweep.listing_phase()
-        if state["phase"] == index_freshness.MIGRATING:
-            return state
-        if behind is not None and (
-                behind[0] == index_freshness.FULL_LISTING or state["phase"] == index_freshness.IDLE):
-            state["phase"], state["progress"] = behind
-        new = self._sweep.relisted_new()
-        loading = self._loading(len(self._order or ()))
-        if loading is not None and (new is None or (new and new[1] > _REMOTE_CHUNK)):
-            rows, expected = loading  # a cold index's load behind serving: the share served
-            state["progress"] = round(rows / expected, 3) if expected else None
-        return state
-
-    def full_listing_due(self):
-        """Whether the next refresh lists storage fully (diagnostics)."""
-        return self._sweep._full_due(self._monotonic())
-
-    def reconcile(self):
-        """Make the next refresh a full listing."""
-        self._sweep.request_full()
 
     # -- refresh -------------------------------------------------------------
 
@@ -1009,77 +897,6 @@ class ExperimentIndex:
             self._loading(len(order)),
         )
 
-    def snapshot_now(self, wait_sec=FIRST_SNAPSHOT_WAIT_SEC):
-        """The current :class:`IndexSnapshot`, never waiting for a first load
-        longer than *wait_sec* (what a background-refreshed server serves):
-        until one is published, an empty snapshot whose ``loading`` is ``(0,
-        records expected)`` — None while not even their names are listed."""
-        snap = self._snapshot
-        if snap is not None or self._cache_gen is not None:
-            return snap or self._first_load()
-        self._revalidate_in_background()
-        self._servable.wait(wait_sec)
-        snap = self._snapshot or self._first_rows
-        if snap is not None:
-            return snap
-        new = self._sweep.relisted_new()
-        expected = new[0] + new[1] if new else None
-        if self._placeholder is None or self._placeholder[0] != expected:
-            self._placeholder = (expected, loading_snapshot(self.app_name, expected))
-        return self._placeholder[1]
-
-    def snapshot(self):
-        """The current :class:`IndexSnapshot`. The first call of an index
-        with persisted records answers them as soon as they are read and
-        refreshes them from storage in the background; a cold index answers
-        once its first load is done."""
-        snap = self.published
-        if snap is not None:
-            return snap
-        if self._cache_gen is not None:
-            return self._first_load()
-        self._revalidate_in_background()
-        self._published.wait()
-        # The background load failed: load here, meeting its error.
-        return self._snapshot or self._first_load()
-
-    def _revalidate_in_background(self):
-        with self._revalidator_lock:
-            if self._revalidator is not None:
-                return
-            self._revalidator = threading.Thread(
-                target=self._revalidate, daemon=True, name="vmn-index-revalidate"
-            )
-            self._revalidator.start()
-
-    def _revalidate(self):
-        try:
-            self.refresh()
-        except Exception:
-            _LOGGER.debug("Background index refresh failed", exc_info=True)
-
-    def wait_revalidated(self, timeout=None):
-        """Wait for the refresh a first :meth:`snapshot` started, if any."""
-        if self._revalidator is not None:
-            self._revalidator.join(timeout)
-
-    # -- copies of the current snapshot (call refresh() first) ---------------
-
-    def rows(self, with_create_note=False):
-        """``experiment_row`` dicts in storage order — fresh copies, ``idx`` and
-        ``metric_summary`` and ``outputs`` set.
-
-        ``with_create_note`` adds ``create_note``: the first ``create`` entry's
-        note, which ``vmn-exp list`` shows for a run without a metadata note.
-        """
-        snap = self._snapshot
-        return _row_copies(snap, with_create_note) if snap is not None else []
-
-    def run_states(self):
-        """``{verstr: raw run state or None}`` for the rows' experiments."""
-        snap = self._snapshot
-        return dict(snap.run_states) if snap is not None else {}
-
 
 # ---------------------------------------------------------------------------
 # Process-wide access with a direct fallback
@@ -1147,44 +964,6 @@ def direct_rows(
     if read_run_state is None:
         return rows, {}
     return rows, _run_states(storage, app_name, rows, read_run_state)
-
-
-def _direct_folds(storage, app_name, read_log):
-    metas = storage.list_snapshots(app_name)
-    for idx, meta in enumerate(metas, 1):
-        yield idx, meta, fold_log(read_log(storage, app_name, meta["verstr"]))
-
-
-def _run_states(storage, app_name, rows, read_run_state=load_run_state):
-    return {r["verstr"]: read_run_state(storage, app_name, r["verstr"]) for r in rows}
-
-
-def snapshot_of_folds(app_name, folds, run_states=None):
-    """An :class:`IndexSnapshot` (generation 0) of *folds*, ``(idx, metadata,
-    fold)`` per run; ``run_states(rows)`` gives the runs' ``(run states,
-    observed_at)`` once their rows are built (none without it)."""
-    rows, notes, sides = [], {}, new_side_tables()
-    for idx, meta, fold in folds:
-        verstr = meta["verstr"]
-        row, notes[verstr], *values = lean_row(idx, meta, fold)
-        rows.append(row)
-        put_side_tables(sides, verstr, values)
-    states, observed = run_states(rows) if run_states else ({}, {})
-    return IndexSnapshot.build(app_name, 0, rows, states, notes, observed, **sides)
-
-
-def direct_snapshot(storage, app_name, schema=None, read_log=load_log,
-                    read_run_state=load_run_state):
-    """An :class:`IndexSnapshot` (generation 0) built by reading every record
-    (with the caller's loaders), summarized by *schema* like
-    :func:`indexed_snapshot`'s."""
-
-    def run_states(rows):
-        states = _run_states(storage, app_name, rows, read_run_state)
-        return states, observed_at_by_verstr(storage, app_name, states)
-
-    folds = _direct_folds(storage, app_name, read_log)
-    return snapshot_of_folds(app_name, folds, run_states).summarized(schema)
 
 
 def indexed_snapshot(
