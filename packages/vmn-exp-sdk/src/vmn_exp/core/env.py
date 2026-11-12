@@ -168,11 +168,11 @@ _DIGEST_ENV_VARS = (
 )
 
 
-def _container_info():
-    """Return container info dict, or ``None`` if no evidence of a container."""
+def _container_info(environ):
+    """Container info from *environ* (an Env), or ``None`` if no evidence of a container."""
     result: dict = {}
     for var in _DIGEST_ENV_VARS:
-        val = os.environ.get(var)
+        val = environ.get(var)
         if val:
             result["image_digest"] = val
             break
@@ -200,7 +200,8 @@ def _threading_info():
 # ---------------------------------------------------------------------------
 
 def capture_env() -> dict:
-    """Return a full environment dict (python/platform/hostname/packages/cuda/container)."""
+    """Return the environment dict (python/platform/hostname/packages/cuda);
+    :func:`capture_env_safe` adds the container info of the Env it is given."""
     packages, truncated = scan_packages()
     env: dict = {
         "python": {
@@ -222,9 +223,6 @@ def capture_env() -> dict:
     cuda = _cuda_info()
     if cuda:
         env["cuda"] = cuda
-    container = _container_info()
-    if container:
-        env["container"] = container
     return env
 
 
@@ -295,10 +293,10 @@ CAPTURE_ENV_ENV = "VMN_CAPTURE_ENV"
 _OPT_OUT_VALS = frozenset(("0", "false", "False", "no", "off"))
 
 
-def opted_in(explicit, env_var, conf_key, exp_conf=None):
+def opted_in(explicit, env_var, conf_key, exp_conf=None, *, env):
     """Whether an on-by-default feature is on.
 
-    Precedence: explicit arg > *env_var* > ``exp_conf[conf_key]`` > True.
+    Precedence: explicit arg > *env_var* (of the Env *env*) > ``exp_conf[conf_key]`` > True.
 
     *explicit* controls the override:
 
@@ -310,7 +308,7 @@ def opted_in(explicit, env_var, conf_key, exp_conf=None):
     """
     if explicit is False:
         return False
-    if os.environ.get(env_var) in _OPT_OUT_VALS:
+    if env.get(env_var) in _OPT_OUT_VALS:
         return False
     if explicit is True:
         return True
@@ -320,21 +318,22 @@ def opted_in(explicit, env_var, conf_key, exp_conf=None):
     return True
 
 
-def should_capture(explicit, exp_conf=None):
+def should_capture(explicit, exp_conf=None, *, env):
     """Return True if the environment should be captured (see :func:`opted_in`)."""
-    return opted_in(explicit, CAPTURE_ENV_ENV, "capture_env", exp_conf)
+    return opted_in(explicit, CAPTURE_ENV_ENV, "capture_env", exp_conf, env=env)
 
 
-def capture_env_safe(python_exe=None):
+def capture_env_safe(environ, python_exe=None):
     """Capture the environment dict; return ``None`` on any failure (never raises).
 
     When *python_exe* is given the child interpreter is probed via
     ``env_from_interpreter``; otherwise the current interpreter is captured.
+    The container info comes from *environ*, the Env the run is created in.
     """
     try:
-        if python_exe:
-            return env_from_interpreter(python_exe, timeout=5)
-        return capture_env()
+        captured = env_from_interpreter(python_exe, timeout=5) if python_exe else capture_env()
+        container = _container_info(environ)
+        return {**captured, "container": container} if container else captured
     except Exception:
         import logging
 

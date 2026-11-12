@@ -10,8 +10,6 @@ run (``run.release()``) is reopened the same way. A finished run is reopened
 only on request (``reopen=True`` / ``VMN_RESUME_REOPEN=1``): reopening clears
 its exit code, so a resubmitted job must not do it by accident.
 """
-import os
-
 from vmn_exp.core.fork import resolve_run
 from vmn_exp.core.app_conf import experiment_conf
 from vmn_exp.core.run_finish import FINISHED, RunRefusedError
@@ -83,18 +81,19 @@ def existing_run(storage, app_name, ref, from_env):
         raise ValueError(f"{exc}. {hint}.") from None
 
 
-def locate(app_name, ref, storage, action="resume", from_env=False):
+def locate(app_name, ref, storage, action="resume", from_env=False, *, env):
     """``(app_name, storage, verstr, prior_state, exp_conf)``; ValueError if not
-    found (for ``action="resume"``, with the hint of :func:`existing_run`)."""
-    meta_path = os.environ.get(SNAPSHOT_METADATA_ENV)
+    found (for ``action="resume"``, with the hint of :func:`existing_run`).
+    The Env *env* says whether this is an exported snapshot and names the app."""
+    meta_path = env.get(SNAPSHOT_METADATA_ENV)
     exp_conf = {}
     if meta_path:
-        app_name = _resolve_app_name(app_name, lambda: snapshot_app_names(meta_path))
+        app_name = _resolve_app_name(app_name, lambda: snapshot_app_names(meta_path), env)
         storage = storage or snapshot_mode_storage()
     else:
         require_checkout_here()
         checkout = gitmode()
-        app_name = _resolve_app_name(app_name, checkout.stamped_apps)
+        app_name = _resolve_app_name(app_name, checkout.stamped_apps, env)
         vcs = checkout.build_vcs(app_name)
         exp_conf = experiment_conf(vcs)
         if storage is None:

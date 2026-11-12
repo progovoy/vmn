@@ -2,6 +2,7 @@
 the search runs on the calling thread under a deadline, so no thread is left
 scoring once the budget is spent, and nothing is printed past it."""
 import argparse
+import os
 import threading
 import time
 
@@ -40,7 +41,7 @@ def _warm_app_with_priors(app_layout, count):
 def _hint(storage, app_layout, new, capfd, clock):
     capfd.readouterr()
     similar_hint.print_hint(storage, app_layout.app_name, new, argparse.Namespace(), {},
-                            clock=clock)
+                            clock=clock, env=os.environ)
     return [line for line in capfd.readouterr().err.splitlines() if "similar run" in line]
 
 

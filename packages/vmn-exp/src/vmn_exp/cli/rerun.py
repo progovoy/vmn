@@ -62,7 +62,7 @@ def experiment_rerun(vcs, params, storage, args, repo_lock=None, *, io):
         report.print_recipe(source, args.json)
         return 0
     if args.dry_run:
-        return _dry_run(vcs, storage, source, args, io.clock.now())
+        return _dry_run(vcs, storage, source, args, io.clock.now(), io.env)
     return _execute(vcs, params, storage, args, source, repo_lock, io)
 
 
@@ -122,21 +122,21 @@ def _code_of(storage, app_name, metadata, patches):
     return resolve_code(storage, app_name, dict(metadata, **summary, code=key), patches)
 
 
-def _capture_env(vcs, storage, args, source, now):
-    """Capture the env the rerun will record, warning about everything that
-    makes the rerun differ from the original."""
-    env = None
-    if should_capture(args.capture_env, experiment_conf(vcs)):
-        env = capture_env_safe(_detect_python_exe(source.invocation.command))
-    report.warn(storage, source, env, now)
-    return env
+def _capture_env(vcs, storage, args, source, now, env):
+    """Capture the env the rerun will record (its opt-out read from the Env
+    *env*), warning about everything that makes the rerun differ from the original."""
+    captured = None
+    if should_capture(args.capture_env, experiment_conf(vcs), env=env):
+        captured = capture_env_safe(env, _detect_python_exe(source.invocation.command))
+    report.warn(storage, source, captured, now)
+    return captured
 
 
-def _dry_run(vcs, storage, source, args, now):
+def _dry_run(vcs, storage, source, args, now, env):
     checkouts, err = plan_workdir(vcs, source.metadata, source.patches, args.worktree_dir)
     if err:
         return _refuse(source, err)
-    _capture_env(vcs, storage, args, source, now)
+    _capture_env(vcs, storage, args, source, now, env)
     report.print_plan(source, checkouts)
     return 0
 
@@ -152,7 +152,7 @@ def _execute(vcs, params, storage, args, source, repo_lock, io):
             cwd, err = _child_dir(workdir, source.invocation.cwd)
             if err:
                 return _refuse(source, err)
-            captured = _capture_env(vcs, storage, args, source, io.clock.now())
+            captured = _capture_env(vcs, storage, args, source, io.clock.now(), io.env)
             verstr, err = _claim(vcs, storage, args, source, captured, io.env)
             if err is not None:
                 return err

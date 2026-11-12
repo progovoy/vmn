@@ -83,7 +83,7 @@ def test_command_sink_gets_the_alert_in_its_environment(tmp_path):
         "json.dump({k: v for k, v in os.environ.items() if k.startswith('VMN_ALERT_')}, "
         f"open({str(out)!r}, 'w'))"
     )
-    CommandSink(f'"{sys.executable}" -c "{script}"').send(_alert())
+    CommandSink(f'"{sys.executable}" -c "{script}"', os.environ).send(_alert())
     env = json.loads(out.read_text())
     assert env["VMN_ALERT_TITLE"] == "loss exploded"
     assert env["VMN_ALERT_TRIGGER"] == "alert"
@@ -95,7 +95,7 @@ def test_command_sink_gets_the_alert_in_its_environment(tmp_path):
 
 def test_failing_command_raises_from_the_sink_itself():
     with pytest.raises(Exception):
-        CommandSink("exit 3").send(_alert())
+        CommandSink("exit 3", os.environ).send(_alert())
 
 
 def test_config_from_conf_builds_sinks_and_triggers(monkeypatch):

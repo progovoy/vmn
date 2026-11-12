@@ -21,7 +21,6 @@ is set aside as the caller would, not read again at the store that refused
 it, and a record set aside is left to the caller's due retry.
 """
 import importlib
-import os
 import pickle
 import sys
 import threading
@@ -46,7 +45,7 @@ def worker_count():
 
 class _Worker:
     def __init__(self, spec):
-        self._proc = _spawn(worker_command(__name__), dict(os.environ))
+        self._proc = _spawn(worker_command(__name__), None)
         _send(self._proc.stdin, spec)
 
     def ask(self, request):

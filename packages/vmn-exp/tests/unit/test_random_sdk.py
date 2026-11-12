@@ -44,7 +44,7 @@ def test_comment_id_keeps_its_prefix_and_length():
 
 
 def test_a_runs_initial_attempt_comes_from_random():
-    state = Run._initial_state(60, None, FakeHost(), FakeRandom())
+    state = Run._initial_state(60, None, FakeHost(), FakeRandom(), {})
 
     assert state["attempt"] == FakeRandom().token_hex(6)
 

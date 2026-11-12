@@ -14,8 +14,8 @@ GPU_NODE_UTIL_PERCENT = "sys_gpu_node_util_percent"
 _MB = float(1024 * 1024)
 
 
-def _visible_handles(pynvml):
-    """NVML handles of the devices ``CUDA_VISIBLE_DEVICES`` exposes to the run.
+def _visible_handles(pynvml, env):
+    """NVML handles of the devices *env*'s ``CUDA_VISIBLE_DEVICES`` exposes to the run.
 
     NVML enumerates every physical device on the node; CUDA only the listed
     ones — by index or by (a unique prefix of) UUID, stopping at the first
@@ -23,7 +23,7 @@ def _visible_handles(pynvml):
     """
     count = pynvml.nvmlDeviceGetCount()
     handles = [pynvml.nvmlDeviceGetHandleByIndex(i) for i in range(count)]
-    raw = os.environ.get("CUDA_VISIBLE_DEVICES")
+    raw = env.get("CUDA_VISIBLE_DEVICES")
     if raw is None:
         return handles
     visible = []
@@ -62,7 +62,8 @@ def gpu_probe(pynvml, pids=None):
         pynvml.nvmlInit()
         # Handles are stable for the process's lifetime, so resolve them once
         # instead of per device per tick.
-        handles = _visible_handles(pynvml)
+        # The devices the real process's CUDA runtime sees.
+        handles = _visible_handles(pynvml, os.environ)
     except Exception:
         # No driver, no device, a container without /dev/nvidia*: all normal.
         _LOGGER.debug("pynvml is installed but no GPU is reachable", exc_info=True)

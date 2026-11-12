@@ -426,7 +426,7 @@ def test_ambiguous_app_name_error_names_the_candidates():
 
     os.environ.pop("VMN_APP_NAME", None)
     with pytest.raises(ValueError) as exc:
-        _resolve_app_name(None, lambda: ["alpha", "beta"])
+        _resolve_app_name(None, lambda: ["alpha", "beta"], os.environ)
 
     message = str(exc.value)
     assert "alpha" in message and "beta" in message

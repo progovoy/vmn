@@ -195,7 +195,7 @@ def test_image_digest_from_env():
         old = os.environ.pop(var, None)
         try:
             os.environ[var] = "sha256:abc123"
-            info = _container_info()
+            info = _container_info(os.environ)
         finally:
             if old is None:
                 os.environ.pop(var, None)

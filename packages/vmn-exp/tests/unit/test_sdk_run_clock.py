@@ -64,7 +64,7 @@ def test_final_upload_deadline_is_the_run_clock_plus_timeout(tmp_path):
 
     deadline = run._final_deadline(10)
     assert deadline == 1010.0
-    assert run._final_deadline() == 1000.0 + run_module.final_upload_timeout_sec()
+    assert run._final_deadline() == 1000.0 + run_module.final_upload_timeout_sec(os.environ)
 
     clock.advance(4)
     assert run._time_left(deadline) == 6.0

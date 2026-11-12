@@ -247,12 +247,11 @@ def start_run(
     prior_state, start_step = None, None
     ref, reopen = resume.requested_run_id(run_id, reopen, io.env, context.consume_env)
     fork.check_modes(ref, fork_from, rewind_to_step)
-    adopted = None if ref else _adopted_record(app_name, storage, parent, nested, fork_from)
+    adopted = None if ref else _adopted_record(app_name, storage, parent, nested, fork_from, io.env)
     if ref:
         # Resume: locate the existing run; env stays as originally captured.
         app_name, storage, verstr, prior_state, exp_conf = resume.locate(
-            app_name, ref, storage, from_env=not run_id
-        )
+            app_name, ref, storage, from_env=not run_id, env=io.env)
         now = io.clock.now()
         resume.check_reopenable(app_name, verstr, prior_state, reopen, not run_id, now)
         if rewind_to_step is not None:
@@ -262,8 +261,7 @@ def start_run(
     else:
         if fork_from:
             app_name, storage, source, fork_step = fork.locate_source(
-                app_name, fork_from, fork_step, storage
-            )
+                app_name, fork_from, fork_step, storage, io.env)
         app_name, storage, verstr, exp_conf = create_record(
             app_name, note, params, parent, nested, storage, name,
             capture_env=capture_env, code=code, env=io.env,
@@ -308,13 +306,13 @@ def start_run(
     return run
 
 
-def _adopted_record(app_name, storage, parent, nested, fork_from):
-    """The record of the run ``vmn-exp run`` offers this process, when it
-    takes it (:mod:`vmn_exp.sdk.guest_run`); None otherwise."""
+def _adopted_record(app_name, storage, parent, nested, fork_from, env):
+    """The record of the run ``vmn-exp run`` offers this process in *env*, when
+    it takes it (:mod:`vmn_exp.sdk.guest_run`); None otherwise."""
     from vmn_exp.sdk.guest_run import adopted_record
 
-    return adopted_record(app_name, storage, parent, nested, fork_from,
-                          context.context_run(), os.environ, os.getppid, resume.locate)
+    return adopted_record(app_name, storage, parent, nested, fork_from, context.context_run(),
+                          env, os.getppid, resume.locate, context.consume_env)
 
 
 def _run_class(adopted):
@@ -341,9 +339,9 @@ def _record_resume_inputs(run, note, params):
         run.log_note(note)
 
 
-def _checkout_relative_cwd():
-    """This process's cwd relative to its checkout; None when git-free."""
-    if os.environ.get(SNAPSHOT_METADATA_ENV):
+def _checkout_relative_cwd(env):
+    """This process's cwd relative to its checkout; None when git-free (*env* says)."""
+    if env.get(SNAPSHOT_METADATA_ENV):
         return None
     return repo_relative_cwd(os.getcwd(), try_repo_root())
 
@@ -377,7 +375,7 @@ class Run(RunMetrics, MetricDefinitions, RunArtifacts, RunMedia, RunAlerts, RunB
         self._storage = storage
         self._clock = clock
         self._host = host
-        self._env = env  # what its alert config reads
+        self._env = env  # what its alert config, output cap and timeouts read
         # The writer id of this run's own streams; None: the process's.
         self._writer = writer
         # Installs the process's excepthook and atexit finalizer at open;
@@ -409,7 +407,7 @@ class Run(RunMetrics, MetricDefinitions, RunArtifacts, RunMedia, RunAlerts, RunB
         self._last_sync = self._monotonic_start
         self._ctx_prev = None
 
-        self._state = self._initial_state(heartbeat_interval_sec, prior_state, host, random)
+        self._state = self._initial_state(heartbeat_interval_sec, prior_state, host, random, env)
         # A resumed run's duration spans every attempt, from the first start.
         self._elapsed_before = (
             resume.elapsed_before(self._state, clock.now()) if prior_state is not None else 0.0
@@ -432,7 +430,7 @@ class Run(RunMetrics, MetricDefinitions, RunArtifacts, RunMedia, RunAlerts, RunB
         self._heartbeat = Heartbeat(self._gate.wrap(self._beat), heartbeat_interval_sec)
         self._media_uploads = MediaUploads(self._gate.wrap(self._save_artifact_file))
         self._output = (
-            RunOutput(storage, app_name, verstr, self._gate, clock=clock.monotonic)
+            RunOutput(storage, app_name, verstr, self._gate, clock=clock.monotonic, env=env)
             if capture_output else None
         )
         # No pid: this process *is* the workload.
@@ -445,7 +443,7 @@ class Run(RunMetrics, MetricDefinitions, RunArtifacts, RunMedia, RunAlerts, RunB
         )
 
     @staticmethod
-    def _initial_state(heartbeat_interval_sec, prior_state, host, random):
+    def _initial_state(heartbeat_interval_sec, prior_state, host, random, env):
         started_at = now_iso()
         state = {
             "state": "running",
@@ -453,7 +451,7 @@ class Run(RunMetrics, MetricDefinitions, RunArtifacts, RunMedia, RunAlerts, RunB
             # argv is the honest answer, and consumers read the key.
             "command": list(sys.argv),
             "runner": RUNNER_SDK,
-            "cwd": _checkout_relative_cwd(),
+            "cwd": _checkout_relative_cwd(env),
             "pid": host.pid(),
             "host": host.hostname(),
             # This process's attempt at the run: a duplicate attempt's
@@ -538,7 +536,7 @@ class Run(RunMetrics, MetricDefinitions, RunArtifacts, RunMedia, RunAlerts, RunB
     def _final_deadline(self, timeout_sec=None):
         """The deadline *timeout_sec* (default: the final-upload timeout) from now."""
         if timeout_sec is None:
-            timeout_sec = final_upload_timeout_sec()
+            timeout_sec = final_upload_timeout_sec(self._env)
         return self._clock.monotonic() + timeout_sec
 
     def _time_left(self, deadline):
@@ -683,16 +681,16 @@ def _quietly(step, *args, **kwargs):
         return False
 
 
-def final_upload_timeout_sec():
-    """How long finalizing waits for the last uploads: ``VMN_EXP_FINAL_UPLOAD_TIMEOUT_SEC``
+def final_upload_timeout_sec(env):
+    """How long finalizing waits for the last uploads: *env*'s ``VMN_EXP_FINAL_UPLOAD_TIMEOUT_SEC``
     when a positive number, else a minute. Read when a run is finalized."""
-    return positive_env_sec(real_io().env, FINAL_UPLOAD_TIMEOUT_ENV, FINAL_REMOTE_TIMEOUT_SEC)
+    return positive_env_sec(env, FINAL_UPLOAD_TIMEOUT_ENV, FINAL_REMOTE_TIMEOUT_SEC)
 
 
-def sigterm_timeout_sec():
-    """How long finalizing under SIGTERM waits: ``VMN_EXP_FINAL_UPLOAD_TIMEOUT_SEC``
+def sigterm_timeout_sec(env):
+    """How long finalizing under SIGTERM waits: *env*'s ``VMN_EXP_FINAL_UPLOAD_TIMEOUT_SEC``
     when a positive number, else 25 s (or the final-upload default, if lower)."""
-    timeout = positive_env_sec(real_io().env, FINAL_UPLOAD_TIMEOUT_ENV, None)
+    timeout = positive_env_sec(env, FINAL_UPLOAD_TIMEOUT_ENV, None)
     if timeout is None:
         return min(FINAL_REMOTE_TIMEOUT_SEC, SIGTERM_FINAL_TIMEOUT_SEC)
     return timeout
@@ -703,7 +701,7 @@ def _finalize_signaled(signum):
     released, when it was opened with ``on_sigterm="release"``."""
     name = signal.Signals(signum).name
     runs = context.open_runs()
-    deadline = runs[-1]._final_deadline(sigterm_timeout_sec()) if runs else None
+    deadline = runs[-1]._final_deadline(sigterm_timeout_sec(runs[-1]._env)) if runs else None
     with finalizing():
         _finalize_open_runs(128 + signum, deadline=deadline, media_share=SIGTERM_MEDIA_SHARE,
                             received_signal=name, signal=name)
@@ -716,7 +714,7 @@ def install_signal_handlers():
     again after installing a SIGTERM handler of your own (it is chained), or
     when the SDK is first imported from a worker thread.
     """
-    signals.install(_finalize_signaled, timeout=sigterm_timeout_sec,
+    signals.install(_finalize_signaled, timeout=lambda: sigterm_timeout_sec(real_io().env),
                     raises=_sigterm_raises, has_work=_has_open_runs)
 
 

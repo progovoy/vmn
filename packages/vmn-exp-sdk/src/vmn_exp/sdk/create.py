@@ -144,7 +144,7 @@ def record_source(app_name, parent, nested, storage, capture_env, env, python_ex
                                _codeless_io(env))
     require_checkout_here()
     return gitmode().checkout_source(
-        app_name, parent, nested, storage, capture_env=capture_env, python_exe=python_exe)
+        app_name, parent, nested, storage, capture_env=capture_env, python_exe=python_exe, env=env)
 
 
 def source_kind(code, env):
@@ -167,7 +167,7 @@ def _codeless_io(env):
     from vmn_exp.sdk.codeless import CodelessIO
 
     return CodelessIO(snapshot_mode_storage, pick_parent,
-                      lambda capture: _maybe_capture_env(None, capture), now_iso,
+                      lambda capture: _maybe_capture_env(None, capture, env), now_iso,
                       functools.partial(_shared_dir_lock, env))
 
 
@@ -267,7 +267,7 @@ def pick_parent(storage, app_name, parent, nested):
 def snapshot_source(app_name, meta_path, parent, nested, storage, capture_env=None, *, env):
     """Container mode: the :data:`RecordSource` of an exported snapshot, no
     git needed."""
-    app_name = _resolve_app_name(app_name, lambda: snapshot_app_names(meta_path))
+    app_name = _resolve_app_name(app_name, lambda: snapshot_app_names(meta_path), env)
     if storage is None:
         storage = snapshot_mode_storage()
     record = snapshot_record(meta_path, app_name)
@@ -275,7 +275,7 @@ def snapshot_source(app_name, meta_path, parent, nested, storage, capture_env=No
         raise creation_failed(app_name, 1)
     app_name, code_verstr, template = record
     # Env and the export's features are read OUTSIDE the lock.
-    captured = _maybe_capture_env(None, capture_env)
+    captured = _maybe_capture_env(None, capture_env, env)
     features = exported_features(meta_path)
     parent = pick_parent(storage, app_name, parent, nested)
     return RecordSource(app_name, storage, code_verstr, template, parent, captured,
@@ -293,8 +293,8 @@ def _shared_dir_lock(env):
     return get_repo_lock(lock_root)
 
 
-def _maybe_capture_env(vcs, capture_env_param, python_exe=None):
-    """Return the captured env dict, or None when opted out or capture fails."""
-    if not should_capture(capture_env_param, experiment_conf(vcs)):
+def _maybe_capture_env(vcs, capture_env_param, env, python_exe=None):
+    """The env dict captured from the Env *env*, or None when opted out or capture fails."""
+    if not should_capture(capture_env_param, experiment_conf(vcs), env=env):
         return None
-    return capture_env_safe(python_exe)
+    return capture_env_safe(env, python_exe)

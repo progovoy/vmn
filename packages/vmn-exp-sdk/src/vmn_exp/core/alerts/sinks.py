@@ -3,10 +3,9 @@
 A sink raises when delivery fails; the dispatcher (:mod:`.dispatch`) turns that
 into a log line, so a sink can stay a few plain lines. Add a sink by writing a
 class with ``send(alert, timeout)`` and registering a builder in
-:data:`SINK_TYPES`.
+:data:`SINK_TYPES` (called with the conf entry and the caller's Env).
 """
 import json
-import os
 import subprocess
 import urllib.request
 
@@ -66,16 +65,18 @@ def slack_payload(alert):
 
 
 class CommandSink:
-    """Runs a shell command with the alert in ``VMN_ALERT_*`` env vars."""
+    """Runs a shell command in *env* (an Env) plus the alert's ``VMN_ALERT_*`` vars."""
 
-    def __init__(self, command):
+    def __init__(self, command, env):
         self.command = command
+        self.env = env
+
+    def child_env(self, alert):
+        return {**self.env, **alert_env(alert)}
 
     def send(self, alert, timeout=DEFAULT_TIMEOUT_SEC):
-        env = dict(os.environ)
-        env.update(alert_env(alert))
         subprocess.run(
-            self.command, shell=True, env=env, timeout=timeout, check=True,
+            self.command, shell=True, env=self.child_env(alert), timeout=timeout, check=True,
             stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
         )
 
@@ -94,16 +95,17 @@ def alert_env(alert):
 
 
 SINK_TYPES = {
-    "webhook": lambda spec: WebhookSink(spec["url"]),
-    "slack": lambda spec: SlackSink(spec["url"]),
-    "command": lambda spec: CommandSink(spec["command"]),
+    "webhook": lambda spec, env: WebhookSink(spec["url"]),
+    "slack": lambda spec, env: SlackSink(spec["url"]),
+    "command": lambda spec, env: CommandSink(spec["command"], env),
 }
 
 
-def build_sink(spec):
-    """The sink a conf entry describes, or None for an unknown/incomplete one."""
+def build_sink(spec, env):
+    """The sink a conf entry describes, or None for an unknown/incomplete one;
+    a command sink runs in *env*."""
     builder = SINK_TYPES.get((spec or {}).get("type"))
     try:
-        return builder(spec) if builder else None
+        return builder(spec, env) if builder else None
     except (KeyError, TypeError):
         return None

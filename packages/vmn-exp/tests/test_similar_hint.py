@@ -63,7 +63,7 @@ def _hinted(app_layout, capfd, clock):
     """The stderr of the hint for a new run, printed on *clock*."""
     new = extract_dev_verstr(_create(app_layout, capfd, "--no-similar").out)
     similar_hint.print_hint(_storage(app_layout), app_layout.app_name, new,
-                            argparse.Namespace(), {}, clock=clock)
+                            argparse.Namespace(), {}, clock=clock, env=os.environ)
     return capfd.readouterr()
 
 
@@ -172,7 +172,7 @@ def test_the_hint_reads_the_index_cache_and_never_lists_the_store(app_layout, ca
         monkeypatch.setattr(LocalSnapshotStorage, listing, _never)
 
     similar_hint.print_hint(_storage(app_layout), app_layout.app_name, new,
-                            argparse.Namespace(), {}, clock=FakeClock())
+                            argparse.Namespace(), {}, clock=FakeClock(), env=os.environ)
 
     [line] = _hints(capfd.readouterr().err)
     assert line.startswith(HEAD + prior)

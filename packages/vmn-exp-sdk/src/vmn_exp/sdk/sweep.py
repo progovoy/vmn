@@ -1,6 +1,7 @@
 """The params of the sweep trial this process runs (``vmn-exp sweep agent``)."""
 import json
-import os
+
+from vmn_exp.core.real_io import real_io
 
 SWEEP_PARAMS_ENV = "VMN_SWEEP_PARAMS"
 
@@ -12,7 +13,12 @@ def sweep_params():
     ``$VMN_SWEEP_PARAMS`` (next to the ``--name=value`` arguments the command
     template adds). Each call returns a fresh dict.
     """
-    raw = os.environ.get(SWEEP_PARAMS_ENV)
+    return params_from(real_io().env)
+
+
+def params_from(env):
+    """:func:`sweep_params` of the Env *env*."""
+    raw = env.get(SWEEP_PARAMS_ENV)
     if not raw:
         return {}
     params = json.loads(raw)

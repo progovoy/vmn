@@ -56,18 +56,20 @@ class GuestRun(Run):
 
 
 def adopted_record(app_name, storage, parent, nested, fork_from, active, env, getppid,
-                   locate):
+                   locate, consume):
     """``(app_name, storage, verstr, exp_conf)`` of the run ``vmn-exp run``
-    offers this process (:func:`vmn_exp.sdk.adoption.requested`), found with
+    offers this process in the Env *env* (:func:`vmn_exp.sdk.adoption.requested`;
+    a granted offer is consumed with ``consume(names)``), found with
     *locate* (``resume.locate``); None when there is none to take, or when
     the store this process resolved does not hold it — then with a warning,
     and the caller creates its own run as without the offer."""
-    verstr = adoption.requested(env, getppid, parent, nested, fork_from, active)
+    verstr = adoption.requested(dict(env), getppid, parent, nested, fork_from, active)
     if verstr is None:
         return None
+    consume((adoption.ADOPT_RUN_ID_ENV, adoption.ADOPT_PID_ENV))
     try:
         app_name, storage, verstr, _, exp_conf = locate(app_name, verstr, storage,
-                                                        action="adopt")
+                                                        action="adopt", env=env)
     except ValueError as exc:
         _LOGGER.warning(f"vmn: not recording into run {verstr} of vmn-exp run: {exc}. "
                         "This process resolved a store without it (give it the "

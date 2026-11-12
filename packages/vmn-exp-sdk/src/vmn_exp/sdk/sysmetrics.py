@@ -75,13 +75,13 @@ TREE_WALK_DUTY = 0.01
 USS_EVERY_N_TICKS = 10
 
 
-def enabled(explicit, exp_conf=None):
+def enabled(explicit, exp_conf=None, *, env):
     """Whether a run samples system metrics: on unless something opts out.
 
     Precedence: explicit (``False`` from ``--no-system-metrics`` or the SDK
-    kwarg) > ``VMN_SYSTEM_METRICS`` > conf ``experiment.system_metrics`` > True.
+    kwarg) > *env*'s ``VMN_SYSTEM_METRICS`` > conf ``experiment.system_metrics`` > True.
     """
-    return opted_in(explicit, SYSTEM_METRICS_ENV, "system_metrics", exp_conf)
+    return opted_in(explicit, SYSTEM_METRICS_ENV, "system_metrics", exp_conf, env=env)
 
 
 def sdk_enabled(explicit, env, exp_conf=None):
@@ -89,7 +89,7 @@ def sdk_enabled(explicit, env, exp_conf=None):
     samples this process's tree (*env* says) — explicit ``True`` still samples."""
     if explicit is None and env.get(SUPERVISOR_SAMPLES_ENV):
         return False
-    return enabled(explicit, exp_conf)
+    return enabled(explicit, exp_conf, env=env)
 
 
 # Optional modules found missing; never looked for again in this process.

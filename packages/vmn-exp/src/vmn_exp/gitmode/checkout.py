@@ -34,10 +34,11 @@ def build_storage(vcs):
     return conf_storage(vcs)
 
 
-def checkout_source(app_name, parent, nested, storage, capture_env=None, python_exe=None):
-    """The normal mode's :data:`RecordSource`: cold-start if needed, capture;
-    its lock is the repo lock, held only to claim."""
-    app_name = _resolve_app_name(app_name, stamped_apps)
+def checkout_source(app_name, parent, nested, storage, capture_env=None, python_exe=None, *,
+                    env):
+    """The normal mode's :data:`RecordSource`: cold-start if needed, capture
+    (from the Env *env*); its lock is the repo lock, held only to claim."""
+    app_name = _resolve_app_name(app_name, stamped_apps, env)
     root_path = resolve_root_path()
     os.makedirs(os.path.join(root_path, ".vmn"), exist_ok=True)
 
@@ -52,14 +53,14 @@ def checkout_source(app_name, parent, nested, storage, capture_env=None, python_
     # Capture env and the run's features OUTSIDE the repo lock (both are
     # read-only and may block on subprocess probing), and store the code there
     # too: it is keyed by content, so it needs no lock.
-    env = _maybe_capture_env(vcs, capture_env, python_exe=python_exe)
+    run_env = _maybe_capture_env(vcs, capture_env, env, python_exe=python_exe)
     code = capture.ensure_code(storage, vcs, captured)
     features = capture_features(vcs, captured)
     # The claim itself is atomic (create_exclusive); the lock keeps a run from
     # being created while another vmn command holds the repo.
     return RecordSource(
         app_name, storage, captured.code_verstr, record_template(vcs, captured, code),
-        parent, env, features, lambda: get_repo_lock(root_path), experiment_conf(vcs),
+        parent, run_env, features, lambda: get_repo_lock(root_path), experiment_conf(vcs),
     )
 
 

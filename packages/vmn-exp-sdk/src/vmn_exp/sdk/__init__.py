@@ -6,16 +6,15 @@ vmn_exp.snapshot, vmn_exp.ui or vmn_exp.cli (vmn_exp.gitmode only lazily) —
 so it ships as its own distribution (packages/vmn-exp/tests/test_packaging_split.py).
 """
 import importlib
-import os
 
 APP_NAME_ENV = "VMN_APP_NAME"
 
 
-def _resolve_app_name(app_name, candidates):
+def _resolve_app_name(app_name, candidates, env):
     """The app to record against, or to read from, when the caller named none.
 
     One rule for the write side and the read side: an explicit name wins, then
-    ``VMN_APP_NAME`` (which ``vmn-exp run`` exports to its child, so a script it
+    the Env *env*'s ``VMN_APP_NAME`` (which ``vmn-exp run`` exports to its child, so a script it
     launched needs no argument), then the checkout's sole app. *candidates* lists
     what the caller counts as eligible — stamped apps for the writer, apps with
     experiments for the reader.
@@ -23,7 +22,7 @@ def _resolve_app_name(app_name, candidates):
     if app_name:
         return app_name
 
-    from_env = os.environ.get(APP_NAME_ENV)
+    from_env = env.get(APP_NAME_ENV)
     if from_env:
         return from_env
 

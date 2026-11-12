@@ -212,7 +212,7 @@ def _create_experiment(vcs, storage, args, extra_create_data=None, *, env):
         parent=parent,
         name=getattr(args, "run_name", None),
         capture_env=capture_env,
-        python_exe=python_exe,
+        python_exe=python_exe, env=env,
     )
     if err is None:
         fork.seed(storage, app_name, verstr, source)
@@ -263,7 +263,7 @@ def experiment_run(vcs, params, storage, args, repo_lock=None, *, io):
     from vmn_exp.cli.similar_hint import print_hint
 
     exp_conf = experiment_conf(vcs)
-    print_hint(storage, app_name, verstr, args, exp_conf, command=run_cmd, clock=io.clock)
+    print_hint(storage, app_name, verstr, args, exp_conf, run_cmd, clock=io.clock, env=io.env)
     return run_supervision(
         storage, app_name, verstr, args, exp_conf,
         getattr(vcs, "vmn_root_path", None), io,
@@ -314,7 +314,7 @@ class _Supervision:
         self.sync = BackgroundSync(self._sync_once, self._sync_final, wait)
         self.state_uploads = StateUploads(storage, app_name, verstr, wait, self.guard)
         self.forwarder = SignalForwarder(*_kill_graces(args, io.env), self.clock)
-        self.output = output_artifact(storage, app_name, verstr, args, self.clock)
+        self.output = output_artifact(storage, app_name, verstr, args, self.clock, io.env)
         self.tee = None
         # Every stream the metrics were appended to: an adopted child that
         # compacts its own stream moves the copy on to a new owner's.
@@ -347,7 +347,7 @@ class _Supervision:
         from vmn_exp.sdk import sysmetrics  # exp's __init__ imports the CLI
 
         self.samples_tree = sysmetrics.enabled(
-            getattr(self.args, "system_metrics", None), self.exp_conf
+            getattr(self.args, "system_metrics", None), self.exp_conf, env=self.io.env
         )
         env = self._child_env(dict(self.io.env), self.io.host.pid())
         try:

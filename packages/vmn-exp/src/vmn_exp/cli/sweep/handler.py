@@ -52,7 +52,7 @@ def sweep_create(vcs, storage, args, env):
     verstr, err = _experiment_create_core(
         vcs, storage, note=args.note, name=args.run_name, parent=parent,
         extra_create_data={"tags": {"sweep": spec["method"]}},
-        capture_env=getattr(args, "capture_env", None),
+        capture_env=getattr(args, "capture_env", None), env=env,
     )
     if err is not None:
         return err

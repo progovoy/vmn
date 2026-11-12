@@ -56,14 +56,15 @@ BEHIND_NOTE = ("similar runs: the search is still filing runs — results incomp
 INNER_RUN_ENVS = ("VMN_EXPERIMENT_ID", "VMN_SWEEP_TRIAL")
 
 
-def print_hint(storage, app_name, verstr, args, exp_conf, command=None, *, clock):
+def print_hint(storage, app_name, verstr, args, exp_conf, command=None, *, clock, env):
     """Print the hint for the new run *verstr* (running *command*, an argv),
     when wanted and found within :data:`BUDGET_SEC` on *clock*'s monotonic
-    time (a :class:`~vmn_exp.core.ports.Clock`, also the search's)."""
+    time (a :class:`~vmn_exp.core.ports.Clock`, also the search's); not inside
+    a run the Env *env* names."""
     monotonic = clock.monotonic
     deadline = monotonic() + BUDGET_SEC
     try:
-        if not _wanted(args, exp_conf):
+        if not _wanted(args, exp_conf, env):
             return
         local = local_side(storage)
         path = index_path(storage, app_name)
@@ -81,11 +82,11 @@ def print_hint(storage, app_name, verstr, args, exp_conf, command=None, *, clock
         print(line, file=sys.stderr)
 
 
-def _wanted(args, exp_conf):
+def _wanted(args, exp_conf, env):
     if getattr(args, "similar_hint", None) is False or not hint_enabled(exp_conf):
         return False
     return not getattr(args, "parent", None) and not any(
-        os.environ.get(name) for name in INNER_RUN_ENVS)
+        env.get(name) for name in INNER_RUN_ENVS)
 
 
 def _check(deadline, monotonic):

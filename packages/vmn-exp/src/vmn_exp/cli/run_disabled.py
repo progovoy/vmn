@@ -15,7 +15,7 @@ NOTICE = "vmn-exp: VMN_MODE=disabled - running the command without recording a r
 
 
 def exec_if_disabled(args, env):
-    """Under ``VMN_MODE=disabled`` replace this process with ``args.run_cmd``
+    """Under *env*'s ``VMN_MODE=disabled`` replace this process with ``args.run_cmd`` in *env*
     (2, a usage error, when there is no command); None otherwise, for the normal ``run``."""
     if not is_disabled(None, env):
         return None
@@ -30,7 +30,6 @@ def exec_if_disabled(args, env):
     sys.stderr.flush()
     from vmn_exp.cli.run import _child_cwd  # the supervisor stack, only when needed
 
-    env = os.environ
     os.chdir(_child_cwd(env))
     os.execvpe(run_cmd[0], run_cmd, dict(env, VMN_METRICS_FILE=os.devnull))
     return 0  # only reached when execvpe is stubbed out

@@ -97,6 +97,7 @@ def _worker_command():
 
 
 def _spawn(cmd, env):
+    """Start *cmd*; *env* None: a worker inherits this process's real environment."""
     return subprocess.Popen(
         cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, env=env
     )
@@ -111,7 +112,7 @@ def run_in_worker(cmd, payload):
     """The unpickled answer of the worker *cmd* to the pickled *payload* on
     its stdin; None if it failed."""
     try:
-        proc = _spawn(cmd, dict(os.environ))
+        proc = _spawn(cmd, None)
         out, _ = proc.communicate(pickle.dumps(payload, pickle.HIGHEST_PROTOCOL))
         return pickle.loads(out) if proc.returncode == 0 else None
     except Exception:

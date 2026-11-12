@@ -61,6 +61,7 @@ def experiment_create(vcs, params, storage, args, repo_lock=None, *, clock, env)
         parent=parent,
         name=getattr(args, "run_name", None),
         capture_env=getattr(args, "capture_env", None),
+        env=env,
     )
     if err is not None:
         return err
@@ -87,7 +88,7 @@ def experiment_create(vcs, params, storage, args, repo_lock=None, *, clock, env)
         repo_lock.release()
     from vmn_exp.cli.similar_hint import print_hint
 
-    print_hint(storage, app_name, verstr, args, experiment_conf(vcs), clock=clock)
+    print_hint(storage, app_name, verstr, args, experiment_conf(vcs), clock=clock, env=env)
     print(verstr)
     return 0
 
@@ -102,6 +103,8 @@ def _experiment_create_core(
     name=None,
     capture_env=None,
     python_exe=None,
+    *,
+    env,
 ):
     """Create the experiment record (snapshot + initial log entry).
 
@@ -111,6 +114,7 @@ def _experiment_create_core(
     *capture_env* follows the same precedence as ``start_run(capture_env=...)``:
     ``None`` = check opt-out chain, ``True`` = force on, ``False`` = force off.
     *python_exe*, when given, is probed instead of the current interpreter.
+    *env* is the Env the capture opt-out is read from and the capture records.
     """
     from vmn_exp.cli import experiment as _exp
     from vmn_exp.core.env import (
@@ -122,7 +126,7 @@ def _experiment_create_core(
 
     if from_snapshot:
         app_name = _exp._app_name(vcs)
-        env = capture_env_safe() if should_capture(capture_env, exp_conf) else None
+        captured_env = capture_env_safe(env) if should_capture(capture_env, exp_conf, env=env) else None
         return _experiment_create_from_snapshot(
             storage,
             app_name,
@@ -131,7 +135,7 @@ def _experiment_create_core(
             extra_create_data=extra_create_data,
             parent=parent,
             name=name,
-            env=env,
+            env=captured_env,
         )
 
     captured, err = capture.capture_snapshot(vcs)
@@ -139,12 +143,12 @@ def _experiment_create_core(
         return None, err
 
     # Capture env before the record is created (env capture is read-only).
-    env = (
-        capture_env_safe(python_exe) if should_capture(capture_env, exp_conf) else None
+    captured_env = (
+        capture_env_safe(env, python_exe) if should_capture(capture_env, exp_conf, env=env) else None
     )
     code = capture.ensure_code(storage, vcs, captured)
     verstr = record_run(
-        vcs, storage, captured, code, note, extra_create_data, parent, name, env=env,
+        vcs, storage, captured, code, note, extra_create_data, parent, name, env=captured_env,
         features=capture_features(vcs, captured),
     )
     return verstr, None

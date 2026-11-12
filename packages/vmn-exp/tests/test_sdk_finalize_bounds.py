@@ -108,12 +108,12 @@ TIMEOUT_ENV = "VMN_EXP_FINAL_UPLOAD_TIMEOUT_SEC"
 )
 def test_the_final_upload_timeout_reads_a_positive_env_value(monkeypatch, value, expected):
     monkeypatch.setenv(TIMEOUT_ENV, value)
-    assert run_module.final_upload_timeout_sec() == expected
+    assert run_module.final_upload_timeout_sec(os.environ) == expected
 
 
 def test_the_final_upload_timeout_defaults_to_a_minute(monkeypatch):
     monkeypatch.delenv(TIMEOUT_ENV, raising=False)
-    assert run_module.final_upload_timeout_sec() == 60
+    assert run_module.final_upload_timeout_sec(os.environ) == 60
 
 
 def test_the_env_timeout_bounds_the_shared_upload_wait(hung_runs, monkeypatch):
@@ -190,20 +190,20 @@ def test_the_sigterm_budget_defaults_to_25_seconds(monkeypatch, sigterm_restored
 
     run_module.install_signal_handlers()
 
-    assert run_module.sigterm_timeout_sec() == 25
+    assert run_module.sigterm_timeout_sec(os.environ) == 25
     assert signals._STATE["timeout"]() == 25
 
 
 @pytest.mark.parametrize("value, expected", [("40", 40.0), ("5", 5.0)])
 def test_the_env_timeout_also_sets_the_sigterm_budget(monkeypatch, value, expected):
     monkeypatch.setenv(TIMEOUT_ENV, value)
-    assert run_module.sigterm_timeout_sec() == expected
+    assert run_module.sigterm_timeout_sec(os.environ) == expected
 
 
 def test_a_lowered_module_timeout_still_bounds_the_sigterm_budget(monkeypatch):
     monkeypatch.delenv(TIMEOUT_ENV, raising=False)
     monkeypatch.setattr(run_module, "FINAL_REMOTE_TIMEOUT_SEC", TIMEOUT)
-    assert run_module.sigterm_timeout_sec() == TIMEOUT
+    assert run_module.sigterm_timeout_sec(os.environ) == TIMEOUT
 
 
 APP = "app"

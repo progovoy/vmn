@@ -81,27 +81,27 @@ def _conf_system_metrics(app_layout, value):
 
 def test_enabled_by_default(monkeypatch):
     monkeypatch.delenv(sysmetrics.SYSTEM_METRICS_ENV, raising=False)
-    assert sysmetrics.enabled(None) is True
-    assert sysmetrics.enabled(None, {}) is True
+    assert sysmetrics.enabled(None, env=os.environ) is True
+    assert sysmetrics.enabled(None, {}, env=os.environ) is True
 
 
 @pytest.mark.parametrize("value", _OPT_OUT_VALUES)
 def test_env_var_opts_out(monkeypatch, value):
     monkeypatch.setenv("VMN_SYSTEM_METRICS", value)
-    assert sysmetrics.enabled(None) is False
+    assert sysmetrics.enabled(None, env=os.environ) is False
     # An explicit True overrides conf, never the env var (as with capture_env).
-    assert sysmetrics.enabled(True, {"system_metrics": True}) is False
+    assert sysmetrics.enabled(True, {"system_metrics": True}, env=os.environ) is False
 
 
 def test_conf_opts_out_and_explicit_true_overrides_it(monkeypatch):
     monkeypatch.delenv(sysmetrics.SYSTEM_METRICS_ENV, raising=False)
-    assert sysmetrics.enabled(None, {"system_metrics": False}) is False
-    assert sysmetrics.enabled(True, {"system_metrics": False}) is True
+    assert sysmetrics.enabled(None, {"system_metrics": False}, env=os.environ) is False
+    assert sysmetrics.enabled(True, {"system_metrics": False}, env=os.environ) is True
 
 
 def test_explicit_false_beats_everything(monkeypatch):
     monkeypatch.setenv("VMN_SYSTEM_METRICS", "1")
-    assert sysmetrics.enabled(False, {"system_metrics": True}) is False
+    assert sysmetrics.enabled(False, {"system_metrics": True}, env=os.environ) is False
 
 
 # ---------------------------------------------------------------------------

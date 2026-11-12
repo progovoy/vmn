@@ -50,7 +50,7 @@ def load_alert_config(app_name=None, exp_conf=None, root=None, *, env):
     alerts = (exp_conf or {}).get("alerts") or {}
     specs = list(alerts.get("sinks") or []) + _env_sink_specs(env)
     return AlertConfig(
-        sinks=[s for s in map(build_sink, specs) if s is not None],
+        sinks=[s for s in (build_sink(spec, env) for spec in specs) if s is not None],
         # YAML 1.1 reads a bare `on:` key as the boolean True.
         on=_triggers(env, alerts.get("on", alerts.get(True))),
         wait_sec=_number(alerts.get("wait_sec"), DEFAULT_WAIT_SEC),

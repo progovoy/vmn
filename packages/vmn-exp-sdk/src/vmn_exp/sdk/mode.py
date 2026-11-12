@@ -7,8 +7,6 @@ and ``autolog()`` patches nothing. Precedence mirrors ``capture_env``: an
 explicit ``start_run(mode=...)`` beats ``VMN_MODE``, which beats the default,
 ``"enabled"``.
 """
-from vmn_exp.core.real_io import real_io
-
 MODES = ("enabled", "disabled")
 
 
@@ -19,9 +17,3 @@ def is_disabled(mode, env):
     if mode not in MODES:
         raise ValueError(f"mode must be one of {MODES}, got {mode!r}")
     return mode == "disabled"
-
-
-def disabled_here():
-    """:func:`is_disabled` of the real environment, for ``autolog()`` (an SDK
-    entry point, handed no env)."""
-    return is_disabled(None, real_io().env)

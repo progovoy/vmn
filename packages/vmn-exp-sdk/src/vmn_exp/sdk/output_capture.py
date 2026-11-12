@@ -74,9 +74,9 @@ class FdCapture:
 class RunOutput:
     """A run's captured console: the fd tee plus its off-thread uploads."""
 
-    def __init__(self, storage, app_name, verstr, gate=None, *, clock):
+    def __init__(self, storage, app_name, verstr, gate=None, *, clock, env):
         self._artifact = OutputArtifact(
-            storage, app_name, verstr, output_cap_bytes(None), clock=clock
+            storage, app_name, verstr, output_cap_bytes(None, env), clock=clock
         )
         self._capture = FdCapture(self._artifact.write)
         # Off the heartbeat thread: a slow upload must not delay a beat.

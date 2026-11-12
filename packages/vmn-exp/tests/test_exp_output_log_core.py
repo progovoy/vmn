@@ -83,12 +83,12 @@ def test_concurrent_writers_lose_no_bytes():
 
 def test_cap_bytes_from_flag_then_env_then_default(monkeypatch):
     monkeypatch.delenv(ol.OUTPUT_CAP_ENV, raising=False)
-    assert ol.output_cap_bytes(None) == ol.DEFAULT_OUTPUT_CAP_MB * 1024 * 1024
+    assert ol.output_cap_bytes(None, os.environ) == ol.DEFAULT_OUTPUT_CAP_MB * 1024 * 1024
     monkeypatch.setenv(ol.OUTPUT_CAP_ENV, "2")
-    assert ol.output_cap_bytes(None) == 2 * 1024 * 1024
-    assert ol.output_cap_bytes(0.5) == 512 * 1024
+    assert ol.output_cap_bytes(None, os.environ) == 2 * 1024 * 1024
+    assert ol.output_cap_bytes(0.5, os.environ) == 512 * 1024
     monkeypatch.setenv(ol.OUTPUT_CAP_ENV, "junk")
-    assert ol.output_cap_bytes(None) == ol.DEFAULT_OUTPUT_CAP_MB * 1024 * 1024
+    assert ol.output_cap_bytes(None, os.environ) == ol.DEFAULT_OUTPUT_CAP_MB * 1024 * 1024
 
 
 def test_pump_tees_to_the_destination_and_the_sink(tmp_path):

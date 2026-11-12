@@ -25,7 +25,6 @@ Depends on ``vmn_exp.core`` and the storage helpers only, never on
 log folding it shares with the CLI and the ui lives in
 :mod:`vmn_exp.core.log`.
 """
-import os
 
 import vmn_exp.core.index as experiment_index
 from vmn_exp.core.app_conf import read_experiment_conf
@@ -65,10 +64,10 @@ from vmn_exp.sdk.store_resolve import resolve_storage
 # ---------------------------------------------------------------------------
 
 
-def _app_candidates(storage):
+def _app_candidates(storage, env):
     """Apps a reader may default to: the exported snapshot's app in git-free
-    mode, else the apps with runs in *storage*."""
-    meta_path = os.environ.get(SNAPSHOT_METADATA_ENV)
+    mode (*env* says), else the apps with runs in *storage*."""
+    meta_path = env.get(SNAPSHOT_METADATA_ENV)
     return (meta_path and snapshot_app_names(meta_path)) or storage.list_apps()
 
 
@@ -82,7 +81,8 @@ def _resolve(app_name, storage):
     """
     root_path = None if (app_name and storage) else try_repo_root()
     storage = storage or resolve_storage(repo_root=root_path or False)
-    app_name = _resolve_app_name(app_name, lambda: _app_candidates(storage))
+    env = real_io().env  # reached only from the public readers, SDK entry points
+    app_name = _resolve_app_name(app_name, lambda: _app_candidates(storage, env), env)
     return app_name, storage, root_path
 
 
