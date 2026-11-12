@@ -1,4 +1,5 @@
 """vmn_exp.sdk.reader.param_importance: importance over an app's filtered runs."""
+import os
 import pytest
 
 from vmn_exp.core.query import QueryError
@@ -10,7 +11,7 @@ APP = "app"
 
 
 def _storage(tmp_path):
-    return open_storage(root=str(tmp_path), area="runs", clock=RealClock())
+    return open_storage(root=str(tmp_path), area="runs", clock=RealClock(), env=os.environ)
 
 
 def _run(storage, i, loss, **params):

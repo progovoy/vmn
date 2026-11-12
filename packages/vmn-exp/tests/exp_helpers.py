@@ -23,7 +23,7 @@ def _storage(app_layout, area="runs"):
 
     from vmn_exp.storage.areas import local_store_root
 
-    return open_storage(root=local_store_root(app_layout.repo_path), area=area, clock=RealClock())
+    return open_storage(root=local_store_root(app_layout.repo_path), area=area, clock=RealClock(), env=os.environ)
 
 
 def _experiment(

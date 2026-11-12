@@ -1,6 +1,7 @@
 """What a similar-runs answer reads besides its FTS match: the shown runs'
 facts and run states in one query each from the persisted index, and a
 snapshot sync skips the runs whose row and command did not move."""
+import os
 import pytest
 from fakes.clock import FakeClock
 from similar_seed import features, finished, seed, verstr
@@ -21,7 +22,7 @@ pytestmark = pytest.mark.skipif(not similar_fts.fts5_available(),
 
 @pytest.fixture
 def indexed(tmp_path):
-    storage = open_storage(root=str(tmp_path / "store"), area="runs", clock=RealClock())
+    storage = open_storage(root=str(tmp_path / "store"), area="runs", clock=RealClock(), env=os.environ)
     for n in range(RUNS):
         seed(storage, APP, verstr(n), intent={"text": f"focal loss try {n}"},
              changes=features([f"f{n}.py"]), goal=("loss", "min"), metrics={"loss": n})

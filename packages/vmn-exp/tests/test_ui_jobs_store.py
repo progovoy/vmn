@@ -3,6 +3,7 @@
 Each action, run as a store job, must leave the store exactly as the CLI
 leaves an identical store (timestamps and writer ids aside).
 """
+import os
 import argparse
 import threading
 import time
@@ -29,7 +30,7 @@ _VOLATILE = {"timestamp", "ts", "writer", "writer_id", "actor", "seq", "created_
 
 def _store(tmp_path, name):
     uri = f"file://{tmp_path}/{name}"
-    storage = open_storage(uri, area=RUNS, clock=RealClock())
+    storage = open_storage(uri, area=RUNS, clock=RealClock(), env=os.environ)
     storage.save(APP, V, {"verstr": V, "timestamp": "2026-01-01T00:00:00Z"}, {})
     for step in range(5):
         append_to_log(storage, APP, V, create_log_entry("metrics", values={"loss": step}, step=step))

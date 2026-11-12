@@ -2,6 +2,7 @@
 an index refresh it writes the child markers runs lack and compacts the
 metrics of runs whose writer died (failed/stuck), so neither
 ``backfill-children`` nor ``watch --compact`` has to be run by hand."""
+import os
 import datetime
 import time
 
@@ -198,7 +199,7 @@ def test_a_served_store_workspace_gets_its_markers_back(tmp_path):
     from vmn_exp.ui.workspaces import WorkspaceManager
 
     uri = f"file://{tmp_path / 'store'}"
-    store = open_storage(store=uri, area="runs", clock=RealClock())
+    store = open_storage(store=uri, area="runs", clock=RealClock(), env=os.environ)
     outer = _run(store, points=False)
     kid = _run(store, parent=outer, points=False)
     store.unmark_child(APP, outer, kid)

@@ -3,6 +3,7 @@
 weights, and git-free (``VMN_SNAPSHOT_METADATA``)."""
 import io
 import json
+import os
 
 import pytest
 import yaml
@@ -178,7 +179,7 @@ def test_git_free_similar_takes_a_ref(container, capfd):
     code, out = _git_free(container, capfd, "create", "trainer", "--intent", "label smoothing")
     assert code == 0, out.err
     created = out.out.strip().splitlines()[-1]
-    other = seed(open_storage(root=str(container), area="runs", clock=RealClock()), "trainer", verstr(1),
+    other = seed(open_storage(root=str(container), area="runs", clock=RealClock(), env=os.environ), "trainer", verstr(1),
                  intent={"text": "label smoothing again"})
 
     code, out = _git_free(container, capfd, "similar", "trainer", "-v", created, "--json")

@@ -1,5 +1,6 @@
 """Every log reader honours a rewind: the experiment index (incrementally,
 across writers), the run page's parsed-log cache and S3 merged logs."""
+import os
 from datetime import datetime, timezone
 
 import pytest
@@ -36,7 +37,7 @@ def clock():
 @pytest.fixture
 def storage(tmp_path):
     (tmp_path / ".git").mkdir()
-    s = open_storage(root=str(tmp_path), area="runs", clock=RealClock())
+    s = open_storage(root=str(tmp_path), area="runs", clock=RealClock(), env=os.environ)
     s.save(APP, V, {"verstr": V, "timestamp": _ts(0)}, {})
     s.save_file(APP, V, "run_state.yml", "state: running\n")
     for i, loss in ((1, 1.0), (2, 0.5), (3, 0.25)):

@@ -42,7 +42,7 @@ def _store_client(tmp_path, apps):
     from vmn_exp.ui.server import create_app
 
     uri = f"file://{tmp_path}/store"
-    storage = open_storage(uri, area=RUNS, clock=RealClock())
+    storage = open_storage(uri, area=RUNS, clock=RealClock(), env=os.environ)
     for app, count in apps.items():
         _save_runs(storage, app, count)
     manager = _manager(tmp_path)
@@ -64,7 +64,7 @@ def _git_client(tmp_path, conf_apps, runs):
         (conf_dir / "conf.yml").write_text("conf: {}\n")
     store = f"file://{repo}/.vmn/store"
     for app, count in runs.items():
-        _save_runs(open_storage(store, area=RUNS, clock=RealClock()), app, count)
+        _save_runs(open_storage(store, area=RUNS, clock=RealClock(), env=os.environ), app, count)
     manager = _manager(tmp_path)
     manager.attach_path("ws", str(repo))
     return TestClient(create_app(manager, io=real_io()))

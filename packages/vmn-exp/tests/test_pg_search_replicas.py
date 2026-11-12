@@ -1,5 +1,6 @@
 """``vmn_search_rows`` are written by the replica leading an app's index, on
 its refresh; a search request only reads them (plan 25 F5)."""
+import os
 import threading
 
 import pytest
@@ -42,7 +43,7 @@ def _hits(client):
 @pytest.fixture
 def store(tmp_path):
     uri = f"file://{tmp_path}/store"
-    return uri, open_storage(uri, area=RUNS, clock=RealClock())
+    return uri, open_storage(uri, area=RUNS, clock=RealClock(), env=os.environ)
 
 
 def test_followers_search_what_the_index_leader_refreshed(tmp_path, pg_dsn, store):

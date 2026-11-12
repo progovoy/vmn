@@ -6,20 +6,20 @@ SDK reader), queries (``metrics.sys_rss_mb > 1000`` spots an OOM),
 ``experiments-columns`` (charts), compare and the run detail page.
 """
 import math
+import os
 
 import pytest
 
 pytest.importorskip("fastapi")
 from fastapi.testclient import TestClient
-
 from vmn_exp.core.index import ExperimentIndex, direct_rows
 from vmn_exp.core.query import filter_rows
 from vmn_exp.core.query_extra import lean_extra
+from vmn_exp.core.real_io import RealClock, real_io
 from vmn_exp.sdk.reader import list_runs
 from vmn_exp.snapshot import LocalSnapshotStorage, open_storage
 from vmn_exp.storage.areas import local_store_root
 from vmn_exp.ui.readers.diffs import experiment_diff_from_snapshot
-from vmn_exp.core.real_io import RealClock, real_io
 
 APP = "app"
 BASE = f"/api/v1/workspaces/ws/apps/{APP}"
@@ -53,7 +53,7 @@ def _seed(storage):
 
 
 def _store(tmp_path):
-    return open_storage(root=local_store_root(str(tmp_path / "repo")), area="runs", clock=RealClock())
+    return open_storage(root=local_store_root(str(tmp_path / "repo")), area="runs", clock=RealClock(), env=os.environ)
 
 
 @pytest.fixture

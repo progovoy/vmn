@@ -53,7 +53,7 @@ def child(case, work, exact, out, import_only):
     if case == "get_run":
         run(APP, exact)
     elif case == "refresh":
-        storage = open_storage(root=os.path.join(work, ".vmn", "store"), area="runs", clock=RealClock())
+        storage = open_storage(root=os.path.join(work, ".vmn", "store"), area="runs", clock=RealClock(), env=os.environ)
         assert experiment_index.shared_index(storage, APP).sync()
     elif case is not None:
         argv = {"show": ["show", APP, "-v", exact], "last20": ["list", APP, "--last", "20"],
@@ -113,7 +113,7 @@ def _private_store(root, n):
 def _change(work, verstrs, note):
     from vmn_exp.snapshot import open_storage
 
-    storage = open_storage(root=os.path.join(work, ".vmn", "store"), area="runs", clock=RealClock())
+    storage = open_storage(root=os.path.join(work, ".vmn", "store"), area="runs", clock=RealClock(), env=os.environ)
     for verstr in verstrs:
         storage.update_note(APP, verstr, note)
 

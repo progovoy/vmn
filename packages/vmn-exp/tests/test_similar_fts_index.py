@@ -2,6 +2,7 @@
 transaction (plan 24 F2): after a build, a refresh, a removal and a rewind
 the FTS table holds one document per current run, as it now is; a refresh
 that moves run states only writes none; another process sees them."""
+import os
 import sqlite3
 
 import pytest
@@ -16,7 +17,7 @@ APP = "trainer"
 
 @pytest.fixture
 def storage(tmp_path):
-    return open_storage(root=str(tmp_path / "store"), area="runs", clock=RealClock())
+    return open_storage(root=str(tmp_path / "store"), area="runs", clock=RealClock(), env=os.environ)
 
 
 @pytest.fixture

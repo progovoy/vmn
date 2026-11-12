@@ -32,7 +32,7 @@ FINISHED = "state: finished\nexit_code: 0\n"
 
 def _seed(tmp_path, n=3):
     uri = f"file://{tmp_path}/store"
-    st = open_storage(uri, area=RUNS, clock=RealClock())
+    st = open_storage(uri, area=RUNS, clock=RealClock(), env=os.environ)
     for i in range(n):
         v = f"0.0.1-dev.0000abcd.{i}"
         st.save(APP, v, {"verstr": v, "timestamp": f"2026-01-01T00:00:0{i}Z"}, {})

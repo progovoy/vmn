@@ -1,4 +1,5 @@
 """GET /api/v1/diag: admin-only, and answering while every pool thread is busy."""
+import os
 import threading
 import time
 
@@ -24,7 +25,7 @@ def _manager(tmp_path):
 
     root = tmp_path / "repo"
     (root / ".git").mkdir(parents=True, exist_ok=True)
-    storage = open_storage(root=local_store_root(str(root)), area="runs", clock=RealClock())
+    storage = open_storage(root=local_store_root(str(root)), area="runs", clock=RealClock(), env=os.environ)
     storage.save(APP, "1.0.0-dev.a", {"verstr": "1.0.0-dev.a",
                                       "timestamp": "2026-01-01T00:00:00Z"}, {})
     manager = WorkspaceManager(str(tmp_path / "data"))

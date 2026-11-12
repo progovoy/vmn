@@ -125,7 +125,7 @@ def test_writers_refuse_while_migrating(tmp_path, monkeypatch):
     assert _marker(tmp_path)["migrating"] is True
     forget_checked()
     with pytest.raises(StoreLayoutError, match="migrating"):
-        open_storage(None, str(tmp_path), area="runs", clock=RealClock())
+        open_storage(None, str(tmp_path), area="runs", clock=RealClock(), env=os.environ)
 
 
 def test_resumes_after_a_kill(tmp_path, monkeypatch):

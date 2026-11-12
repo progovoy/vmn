@@ -62,12 +62,12 @@ def _container(tmp_path, monkeypatch):
 
 
 def _local_runs(root):
-    local = open_storage(root=str(root), area="runs", clock=RealClock())
+    local = open_storage(root=str(root), area="runs", clock=RealClock(), env=os.environ)
     return local.list_snapshots(APP)
 
 
 def _bucket_runs():
-    storage = open_storage(s3_uri(BUCKET, "vmn"), area="runs", clock=RealClock())
+    storage = open_storage(s3_uri(BUCKET, "vmn"), area="runs", clock=RealClock(), env=os.environ)
     return storage.list_snapshots(APP)
 
 

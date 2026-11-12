@@ -3,6 +3,9 @@ adaptive retries, so a stalled connection fails (and is retried) instead of
 hanging an index refresh forever (botocore waits 60 s per read by default and
 retries legacy-style), and a throttling store (``SlowDown``) slows the client
 down instead of failing request after request."""
+import functools
+import os
+
 import pytest
 
 pytest.importorskip("boto3")
@@ -17,7 +20,8 @@ def _region(monkeypatch):
     monkeypatch.setenv("AWS_SECRET_ACCESS_KEY", "x")
 
 
-@pytest.mark.parametrize("make", [boto3_client, sigv4_client])
+@pytest.mark.parametrize("make", [functools.partial(boto3_client, env=os.environ), sigv4_client],
+                         ids=["boto3_client", "sigv4_client"])
 def test_the_s3_client_has_explicit_timeouts_and_retries(make):
     config = make().meta.config
     assert 0 < config.connect_timeout <= 15
@@ -29,4 +33,4 @@ def test_the_s3_client_has_explicit_timeouts_and_retries(make):
 def test_the_pool_size_is_kept():
     from vmn_exp.storage.s3_base import MAX_POOL_CONNECTIONS
 
-    assert boto3_client().meta.config.max_pool_connections == MAX_POOL_CONNECTIONS
+    assert boto3_client(env=os.environ).meta.config.max_pool_connections == MAX_POOL_CONNECTIONS

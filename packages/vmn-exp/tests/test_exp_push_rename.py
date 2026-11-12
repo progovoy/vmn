@@ -50,9 +50,9 @@ def _foreign(target, verstr=X):
 
 
 def _push(local, target, verstr=X, **kw):
-    ledger = PushLedger.for_target(local, APP, target)
+    ledger = PushLedger.for_target(local, APP, target, os.environ)
     return push_or_rename(local, target, APP, verstr, ledger,
-                          CodePusher(local, target, APP), now=RealClock().now(), **kw)
+                          CodePusher(local, target, APP), now=RealClock().now(), env=os.environ, **kw)
 
 
 def test_collision_renames_both_sides(local, target, tmp_path):
@@ -159,12 +159,12 @@ def test_rename_ledger_entry_moves(local, target, tmp_path):
     make_run(local, tmp_path)
     _foreign(target)
     new = _push(local, target).verstr
-    ledger = PushLedger.for_target(local, APP, target)
+    ledger = PushLedger.for_target(local, APP, target, os.environ)
     assert ledger.get(X) is None
     entry = ledger.get(new)
     assert entry["complete"] and entry["remote_verstr"] == new
     assert "pending_target" not in entry
-    assert push_run(local, target, APP, new, ledger).status == UP_TO_DATE
+    assert push_run(local, target, APP, new, ledger, env=os.environ).status == UP_TO_DATE
 
 
 def test_a_renamed_run_pushes_its_own_log_and_metric_streams(local, target, tmp_path):

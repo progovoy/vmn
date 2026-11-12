@@ -65,19 +65,19 @@ def _remote(storage):
 
 
 def test_s3_uri_without_a_root_writes_to_its_prefix(s3):
-    storage = open_storage(f"s3://{BUCKET}/team/exps", area="runs", clock=RealClock())
+    storage = open_storage(f"s3://{BUCKET}/team/exps", area="runs", clock=RealClock(), env=os.environ)
     assert _record(storage)
     assert _keys(s3, "team/exps/runs/trainer/")
 
 
 def test_s3_uri_without_a_prefix_uses_the_vmn_root(s3):
-    storage = open_storage(f"s3://{BUCKET}", area="runs", clock=RealClock())
+    storage = open_storage(f"s3://{BUCKET}", area="runs", clock=RealClock(), env=os.environ)
     assert _remote(storage).prefix == "vmn/runs"
 
 
 def test_s3_uri_with_a_root_is_cached_locally(s3, tmp_path):
     storage = open_storage(
-        f"s3://{BUCKET}/p", root=str(tmp_path), area="runs", clock=RealClock()
+        f"s3://{BUCKET}/p", root=str(tmp_path), area="runs", clock=RealClock(), env=os.environ
     )
     assert _record(storage)
     assert isinstance(storage._remote, S3SnapshotStorage)
@@ -87,7 +87,7 @@ def test_s3_uri_with_a_root_is_cached_locally(s3, tmp_path):
 
 def test_endpoint_url_option_reaches_the_s3_client(s3):
     storage = open_storage(
-        f"s3://{BUCKET}/p?endpoint_url=http://localhost:1", area="runs", writer=False, clock=RealClock()
+        f"s3://{BUCKET}/p?endpoint_url=http://localhost:1", area="runs", writer=False, clock=RealClock(), env=os.environ
     )
     assert _remote(storage).endpoint_url == "http://localhost:1"
 
@@ -95,7 +95,7 @@ def test_endpoint_url_option_reaches_the_s3_client(s3):
 def test_file_uri_is_the_local_root(tmp_path):
     other = tmp_path / "repo"
     storage = open_storage(
-        f"file://{tmp_path / 'nfs'}", root=str(other), area="runs", clock=RealClock()
+        f"file://{tmp_path / 'nfs'}", root=str(other), area="runs", clock=RealClock(), env=os.environ
     )
     assert _record(storage)
     assert (tmp_path / "nfs" / "runs" / APP).is_dir()
@@ -104,7 +104,7 @@ def test_file_uri_is_the_local_root(tmp_path):
 
 def test_no_root_and_no_store_is_an_error():
     with pytest.raises(ValueError):
-        open_storage(None, area="runs", clock=RealClock())
+        open_storage(None, area="runs", clock=RealClock(), env=os.environ)
 
 
 # -- resolution order -------------------------------------------------------------

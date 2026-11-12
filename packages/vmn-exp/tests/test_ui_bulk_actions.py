@@ -27,7 +27,7 @@ def _manager(tmp_path, matching=3, other=2, archived=()):
     from vmn_exp.ui.workspaces import WorkspaceManager
 
     uri = f"file://{tmp_path}/store"
-    storage = open_storage(uri, area=RUNS, clock=RealClock())
+    storage = open_storage(uri, area=RUNS, clock=RealClock(), env=os.environ)
     storage.save(APP, JOB, {"verstr": JOB, "timestamp": "2026-01-01T00:00:00Z"}, {})
     for i in range(matching + other):
         meta = {"verstr": _v(i), "timestamp": "2026-01-01T00:00:01Z", "parent": JOB,

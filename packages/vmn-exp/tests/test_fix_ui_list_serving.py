@@ -29,7 +29,7 @@ def _ts(i):
 def _app(tmp_path, **opts):
     root = tmp_path / "repo"
     (root / ".git").mkdir(parents=True, exist_ok=True)
-    storage = open_storage(root=local_store_root(str(root)), area="runs", clock=RealClock())
+    storage = open_storage(root=local_store_root(str(root)), area="runs", clock=RealClock(), env=os.environ)
 
     from vmn_exp.ui.server import create_app
     from vmn_exp.ui.workspaces import WorkspaceManager
@@ -141,9 +141,9 @@ def test_the_app_list_is_cached_per_workspace(served, monkeypatch):
     calls = []
     real = exp_reader.list_apps
 
-    def counted(root_path, clock):
+    def counted(root_path, clock, env):
         calls.append(root_path)
-        return real(root_path, clock)
+        return real(root_path, clock, env)
 
     monkeypatch.setattr(exp_reader, "list_apps", counted)
     first = client.get("/api/v1/workspaces/ws/apps").json()
@@ -278,7 +278,7 @@ def test_latest_is_found_once_per_snapshot(tmp_path, monkeypatch):
         return real(self, kind)
 
     monkeypatch.setattr(IndexSnapshot, "_latest", counted)
-    source = ExperimentSource(str(tmp_path), clock=real_io().clock, processes=real_io().processes)
+    source = ExperimentSource(str(tmp_path), clock=real_io().clock, processes=real_io().processes, env=os.environ)
     ws = Workspace(name="ws", path=str(tmp_path))
 
     for _ in range(3):

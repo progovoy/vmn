@@ -47,7 +47,7 @@ def _dirty(app_layout):
 
 
 def _online(app_layout):
-    return open_storage(URI, local_store_root(app_layout.repo_path), area="runs", clock=RealClock())
+    return open_storage(URI, local_store_root(app_layout.repo_path), area="runs", clock=RealClock(), env=os.environ)
 
 
 def _run(app_layout, storage):
@@ -56,7 +56,7 @@ def _run(app_layout, storage):
 
 
 def _remote_code_is_complete(app_layout, verstr):
-    reader = open_storage(URI, None, area="runs", clock=RealClock())
+    reader = open_storage(URI, None, area="runs", clock=RealClock(), env=os.environ)
     meta, patches = reader.load(app_layout.app_name, verstr)
     return "code_missing" not in meta and bool(patches.get("untracked_files"))
 

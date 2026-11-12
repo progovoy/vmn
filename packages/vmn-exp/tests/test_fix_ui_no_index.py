@@ -15,9 +15,9 @@ APP = "app"
 def _setup(tmp_path):
     root = tmp_path / "repo"
     (root / ".git").mkdir(parents=True)
-    storage = open_storage(root=local_store_root(str(root)), area="runs", clock=RealClock())
+    storage = open_storage(root=local_store_root(str(root)), area="runs", clock=RealClock(), env=os.environ)
     source = ExperimentSource(str(tmp_path / "data"), use_index=False, clock=real_io().clock,
-                              processes=real_io().processes)
+                              processes=real_io().processes, env=os.environ)
     return Workspace(name="ws", path=str(root)), storage, source
 
 

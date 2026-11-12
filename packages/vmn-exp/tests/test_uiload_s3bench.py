@@ -81,7 +81,7 @@ def test_vmn_reads_the_seeded_store(tmp_path):
 def _read_seeded_store(tmp_path):
     manifest = s3bench_seed.seed(str(tmp_path), PARAMS, NOW, workers=1)
     assert s3bench_moto.load(str(tmp_path), "bench", "vmn-exp") == manifest["objects"]
-    storage = open_storage("s3://bench/vmn-exp", area=RUNS, writer=False, clock=RealClock())
+    storage = open_storage("s3://bench/vmn-exp", area=RUNS, writer=False, clock=RealClock(), env=os.environ)
     rows = list_runs(manifest["app"], storage=storage, use_index=False, include_archived=True)
     assert len(rows) == PARAMS["runs"]
     by_status = {}

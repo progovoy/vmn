@@ -121,7 +121,7 @@ def test_git_free_run_from_an_exported_snapshot_has_no_credentials(tmp_path):
         "base_commit": "abc", "remote": TOKEN_URL,
         "changesets": {".": {"hash": "abc", "remote": TOKEN_URL}},
     }))
-    storage = open_storage(root=str(tmp_path / "exp"), area="runs", clock=RealClock())
+    storage = open_storage(root=str(tmp_path / "exp"), area="runs", clock=RealClock(), env=os.environ)
 
     verstr, err = create_from_snapshot(storage, "testapp", str(meta_path))
 

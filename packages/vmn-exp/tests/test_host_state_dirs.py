@@ -24,7 +24,7 @@ def override(monkeypatch, tmp_path):
 
 
 def _local(tmp_path, name):
-    st = LocalSnapshotStorage(str(tmp_path / name))
+    st = LocalSnapshotStorage(str(tmp_path / name), env=os.environ)
     st.save(APP, "1.0.0-dev.a", {"verstr": "1.0.0-dev.a"}, {})
     return st
 
@@ -50,7 +50,7 @@ def test_index_cache_disabled_by_legacy_none(monkeypatch, tmp_path):
 
 def test_push_ledger_lives_in_the_state_dir(override, tmp_path):
     st = _local(tmp_path, "store")
-    ledger = PushLedger(st, APP, "rid")
+    ledger = PushLedger(st, APP, "rid", os.environ)
     ledger.put("1.0.0-dev.a", {"complete": True})
     assert ledger.dir.startswith(str(override / "push") + os.sep)
     assert "rid" in ledger.dir
@@ -62,7 +62,7 @@ def test_nothing_but_records_written_into_the_store(override, tmp_path):
 
     st = _local(tmp_path, "store")
     ExperimentIndex(st, APP, st.index_cache_path(APP)).refresh()
-    PushLedger(st, APP, "rid").put("1.0.0-dev.a", {"complete": True})
+    PushLedger(st, APP, "rid", os.environ).put("1.0.0-dev.a", {"complete": True})
     stray = [p for p in _files_under(tmp_path / "store")
              if ".sqlite" in p or f"{os.sep}.push{os.sep}" in p]
     assert stray == []

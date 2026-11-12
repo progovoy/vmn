@@ -2,6 +2,7 @@
 listener hears each refresh (none clobbers another), a noting refresher notes
 the index it is asked about, and an inline snapshot lists fully without
 changing the shared index's sweep interval."""
+import os
 import time
 
 from vmn_exp.core.index import ExperimentIndex
@@ -50,7 +51,7 @@ def test_a_noting_refresher_notes_the_index_then_asks_its_refresher():
 
 
 def test_an_inline_snapshot_leaves_the_shared_sweep_interval_alone(tmp_path):
-    storage = open_storage(root=str(tmp_path / "store"), area="runs", clock=RealClock())
+    storage = open_storage(root=str(tmp_path / "store"), area="runs", clock=RealClock(), env=os.environ)
     index = ExperimentIndex(storage, "app", full_sweep_sec=300)
     InlineRefresher().snapshot(index)
     assert index.full_sweep_sec == 300

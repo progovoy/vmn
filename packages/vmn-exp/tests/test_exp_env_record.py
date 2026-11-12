@@ -347,7 +347,7 @@ def test_snapshot_meta_mode_captures(tmp_path, monkeypatch):
         "base_version: 0.0.1\nbase_commit: abc\nbranch: master\n"
     )
 
-    storage = open_storage(root=str(tmp_path / "exp"), area="runs", clock=RealClock())
+    storage = open_storage(root=str(tmp_path / "exp"), area="runs", clock=RealClock(), env=os.environ)
 
     env = capture_env()
     verstr, err = create_from_snapshot(

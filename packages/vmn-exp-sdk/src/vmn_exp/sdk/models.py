@@ -21,6 +21,7 @@ from __future__ import annotations
 import os
 import shutil
 
+from vmn_exp.core.real_io import real_io
 from vmn_exp.registry.log import remove_alias as _log_remove_alias
 from vmn_exp.registry.log import set_alias as _log_set_alias
 from vmn_exp.registry.names import absolute_artifact_path, valid_model_name
@@ -219,7 +220,7 @@ def download_model(ref, dst=None, *, storage=None, record=True) -> str:
         )
 
     if absolute_artifact_path(artifact_path):
-        local = location_local_path(artifact_path, store=storage)
+        local = location_local_path(artifact_path, store=storage, env=real_io().env)
         if local is None:
             raise FileNotFoundError(f"Artifact {artifact_path!r} not found.")
     else:

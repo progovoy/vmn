@@ -94,11 +94,11 @@ def _open_journal(ws, storage, cache_path, clock, index_clock=None):
 
 class ExperimentSource:
     def __init__(self, data_dir, use_index=True, refresher=None, cache_dsn=None,
-                 search_rows=None, store_upkeep=None, *, clock, processes, index_clock=None):
+                 search_rows=None, store_upkeep=None, *, clock, env, processes, index_clock=None):
         """*index_clock*: the indexes' and their caches' (see
         :class:`~vmn_exp.core.index.ExperimentIndex`; None: their modules'
-        own clocks)."""
-        self._index_clock = index_clock
+        own clocks). *env*: the host's, which git workspaces' stores read."""
+        self._index_clock, self._env = index_clock, env
         self._db_dir = os.path.join(data_dir, "index")
         # --no-index: git workspaces' indexes are kept in memory only.
         self._ws_db_dir = self._db_dir if use_index else None
@@ -134,7 +134,7 @@ class ExperimentSource:
         with self._lock:
             if ws.name not in self._indexes:
                 self._indexes[ws.name] = ui_index.WorkspaceIndex(
-                    ws.path, self._ws_db_dir, processes=self._processes, clock=self._clock,
+                    ws.path, self._ws_db_dir, processes=self._processes, clock=self._clock, env=self._env,
                     index_clock=self._index_clock)
             return self._indexes[ws.name]
 

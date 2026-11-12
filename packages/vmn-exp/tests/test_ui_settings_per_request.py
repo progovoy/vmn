@@ -1,5 +1,6 @@
 """Plan 28 A0 follow-up: an inline-refresh server reads an app's store
 settings once per request, however many read paths ask for them."""
+import os
 import time
 
 import pytest
@@ -37,7 +38,7 @@ def _client(tmp_path):
     from vmn_exp.ui.workspaces import WorkspaceManager
 
     uri = f"file://{tmp_path}/store"
-    storage = open_storage(uri, area=RUNS, clock=RealClock())
+    storage = open_storage(uri, area=RUNS, clock=RealClock(), env=os.environ)
     verstr = "0.0.1-dev.abc1234.def5678.r1"
     storage.save(APP, verstr, {"verstr": verstr, "timestamp": "2026-01-01T00:00:01Z"}, {})
     storage.save_file(APP, verstr, "run_state.yml", "state: finished\nexit_code: 0\n")

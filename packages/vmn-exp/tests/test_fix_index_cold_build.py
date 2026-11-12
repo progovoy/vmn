@@ -30,7 +30,7 @@ def _logger():
 
 
 def _storage(root):
-    return open_storage(root=local_store_root(str(root)), area="runs", clock=RealClock())
+    return open_storage(root=local_store_root(str(root)), area="runs", clock=RealClock(), env=os.environ)
 
 
 def _dir(root, verstr):

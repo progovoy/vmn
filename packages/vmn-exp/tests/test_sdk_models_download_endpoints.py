@@ -33,9 +33,9 @@ def endpoints(monkeypatch):
     built = []
     real = s3_base.boto3_client
 
-    def recording(endpoint_url=None, proxies=None):
+    def recording(endpoint_url=None, proxies=None, *, env):
         built.append(endpoint_url)
-        return real(endpoint_url, proxies)
+        return real(endpoint_url, proxies, env=env)
 
     monkeypatch.setattr(s3_base, "boto3_client", recording)
     with mocked_bucket(monkeypatch):
@@ -46,15 +46,15 @@ def endpoints(monkeypatch):
 
 
 def test_one_bucket_key_on_two_endpoints_caches_apart(endpoints):
-    aws = location_local_path(ARTIFACT)
-    minio = location_local_path(f"{ARTIFACT}?endpoint_url={MINIO}")
-    other = location_local_path(f"{ARTIFACT}?endpoint_url={OTHER}")
+    aws = location_local_path(ARTIFACT, env=os.environ)
+    minio = location_local_path(f"{ARTIFACT}?endpoint_url={MINIO}", env=os.environ)
+    other = location_local_path(f"{ARTIFACT}?endpoint_url={OTHER}", env=os.environ)
     assert len({aws, minio, other}) == 3
-    assert location_local_path(f"{ARTIFACT}?endpoint_url={MINIO}") == minio
+    assert location_local_path(f"{ARTIFACT}?endpoint_url={MINIO}", env=os.environ) == minio
 
 
 def test_the_cache_path_holds_no_endpoint_or_credentials(endpoints):
-    path = location_local_path(f"{ARTIFACT}?endpoint_url={SECRET_MINIO}")
+    path = location_local_path(f"{ARTIFACT}?endpoint_url={SECRET_MINIO}", env=os.environ)
     assert open(path, "rb").read() == b"minio"
     assert "s3cr3t" not in path and "minio.test" not in path
 
@@ -88,7 +88,7 @@ def test_the_uris_endpoint_still_wins_over_the_conf(tmp_path, endpoints, monkeyp
     monkeypatch.setenv(STORAGE_ENV["endpoint_url"], MINIO)
     storage = resolve_experiment_storage(dir=str(tmp_path / "local"), clock=RealClock(), env=os.environ)
     endpoints.clear()
-    assert location_local_path(f"{ARTIFACT}?endpoint_url={OTHER}", store=storage)
+    assert location_local_path(f"{ARTIFACT}?endpoint_url={OTHER}", store=storage, env=os.environ)
     assert endpoints == [OTHER]
 
 

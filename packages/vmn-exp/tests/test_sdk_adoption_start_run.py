@@ -32,7 +32,7 @@ def container(tmp_path, monkeypatch):
 
 
 def _store(root):
-    return open_storage(root=str(root), area="runs", clock=RealClock())
+    return open_storage(root=str(root), area="runs", clock=RealClock(), env=os.environ)
 
 
 def _wrapper_run(monkeypatch, store_dir):

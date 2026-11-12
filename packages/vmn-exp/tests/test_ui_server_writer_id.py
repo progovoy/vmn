@@ -29,7 +29,7 @@ def _serve(tmp_path):
 
 
 def _rewind(tmp_path):
-    storage = open_storage(f"file://{tmp_path}/store", area=RUNS, clock=RealClock())
+    storage = open_storage(f"file://{tmp_path}/store", area=RUNS, clock=RealClock(), env=os.environ)
     storage.save(APP, V, {"verstr": V, "timestamp": "2026-01-01T00:00:00Z"}, {})
     action, err = build_store_action("exp_rewind", APP, {"verstr": V, "step": 0})
     assert err is None

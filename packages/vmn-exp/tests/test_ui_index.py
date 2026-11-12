@@ -39,7 +39,7 @@ def _index(app_layout):
     from vmn_exp.ui.index import WorkspaceIndex
 
     db_dir = os.path.join(app_layout.base_dir, "ui_data", "index")
-    return WorkspaceIndex(app_layout.repo_path, db_dir=db_dir, processes=real_io().processes, clock=RealClock())
+    return WorkspaceIndex(app_layout.repo_path, db_dir=db_dir, processes=real_io().processes, clock=RealClock(), env=os.environ)
 
 
 def _rows(idx, app_layout):
@@ -151,7 +151,7 @@ def test_index_versions_cached_through_cache_store_kv(app_layout, capfd, monkeyp
 
     _seed(app_layout, capfd, n=1)
     db_dir = os.path.join(app_layout.base_dir, "ui_data", "index") if persisted else None
-    idx = WorkspaceIndex(app_layout.repo_path, db_dir=db_dir, processes=real_io().processes, clock=RealClock())
+    idx = WorkspaceIndex(app_layout.repo_path, db_dir=db_dir, processes=real_io().processes, clock=RealClock(), env=os.environ)
     puts = []
     real_put = SqliteStore.kv_put
     monkeypatch.setattr(

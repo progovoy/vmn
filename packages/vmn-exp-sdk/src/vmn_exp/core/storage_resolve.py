@@ -152,7 +152,7 @@ def _open(root, params, writer=True, *, clock, env):
 
     params = drop_remote_if_offline(params, root, env)
     return open_storage(store_uri(params), root, area=RUNS, buffer_logs=True,
-                        writer=writer, lent_options=_lent_options(params), clock=clock)
+                        writer=writer, lent_options=_lent_options(params), clock=clock, env=env)
 
 
 def _lent_options(params):

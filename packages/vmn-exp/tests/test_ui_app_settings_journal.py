@@ -27,7 +27,7 @@ def served(tmp_path, monkeypatch):
 
     monkeypatch.setattr(experiment_source, "SETTINGS_RECHECK_SEC", 3600)
     uri = f"file://{tmp_path}/store"
-    storage = open_storage(uri, area=RUNS, clock=RealClock())
+    storage = open_storage(uri, area=RUNS, clock=RealClock(), env=os.environ)
     v = "0.0.1-dev.0000abcd.0"
     storage.save(APP, v, {"verstr": v, "timestamp": "2026-01-01T00:00:00Z"}, {})
     manager = WorkspaceManager(os.path.join(tmp_path, "ui_data"))

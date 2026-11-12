@@ -172,16 +172,16 @@ def build_app(
     upkeep = app.state.store_upkeep = deps.upkeep
     source = ExperimentSource(manager.data_dir, use_index=use_index, refresher=refresher,
                               cache_dsn=cache_dsn, search_rows=search_rows,
-                              store_upkeep=upkeep, clock=deps.io.clock, processes=deps.io.processes,
-                              index_clock=deps.status_clock)
+                              store_upkeep=upkeep, clock=deps.io.clock, env=deps.io.env,
+                              processes=deps.io.processes, index_clock=deps.status_clock)
     # Looked up at call time, so a test's patch of this module or of
     # storage_access/storage.open still applies.
     ctx = ServerContext(
         manager, source, TTLCache(APPS_TTL_SEC),
-        open_workspace_storage=lambda ws: workspace_storage(ws, deps.io.clock),
-        open_edit_storage=lambda uri: open_storage(uri, area=RUNS, buffer_logs=True, clock=deps.io.clock),
-        probe_store=lambda uri: storage_access.probe_store(uri, random=deps.io.random),
-        app_exists=lambda *args: app_exists(*args), clock=deps.io.clock,
+        open_workspace_storage=lambda ws: workspace_storage(ws, deps.io.clock, deps.io.env),
+        open_edit_storage=lambda uri: open_storage(uri, area=RUNS, buffer_logs=True, clock=deps.io.clock, env=deps.io.env),
+        probe_store=lambda uri: storage_access.probe_store(uri, random=deps.io.random, env=deps.io.env),
+        app_exists=lambda *args: app_exists(*args), clock=deps.io.clock, env=deps.io.env,
     )
     leaderboards = LeaderboardCache(conf_of=ctx.board_conf, now=deps.status_clock.now)
     if refresher.background:  # requests after a refresh pay no base or search build

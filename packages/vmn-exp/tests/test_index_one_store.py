@@ -20,7 +20,7 @@ APP = "trainer"
 
 @pytest.fixture
 def storage(tmp_path):
-    st = open_storage(root=str(tmp_path / "store"), area="runs", clock=RealClock())
+    st = open_storage(root=str(tmp_path / "store"), area="runs", clock=RealClock(), env=os.environ)
     seed(st, APP, verstr(1), intent={"text": "focal loss for imbalance"})
     seed(st, APP, verstr(2), intent={"text": "label smoothing"})
     return st

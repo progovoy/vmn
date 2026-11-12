@@ -31,7 +31,7 @@ def test_local_cache_identity_resolves_the_root_once(tmp_path, monkeypatch):
 
 
 def test_cached_storage_identity_resolves_the_root_once(tmp_path, monkeypatch):
-    st = open_storage(root=str(tmp_path), area="runs", clock=RealClock())
+    st = open_storage(root=str(tmp_path), area="runs", clock=RealClock(), env=os.environ)
     calls = _count_realpath(monkeypatch)
     first = st.cache_identity()
     for _ in range(100):

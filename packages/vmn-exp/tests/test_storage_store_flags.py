@@ -91,7 +91,7 @@ def test_ui_store_flag_adds_a_store_workspace(tmp_path, s3):
     manager = build_manager(args)
     stores = [w for w in manager.list() if w.kind == "store"]
     assert [w.store for w in stores] == [f"s3://{BUCKET}/team"]
-    assert _remote(workspace_storage(stores[0], RealClock())).prefix == "team/runs"
+    assert _remote(workspace_storage(stores[0], RealClock(), os.environ)).prefix == "team/runs"
 
     again = build_manager(args)  # re-attaching is a no-op
     assert len([w for w in again.list() if w.kind == "store"]) == 1
@@ -100,7 +100,7 @@ def test_ui_store_flag_adds_a_store_workspace(tmp_path, s3):
 def test_ui_workspace_storage_is_only_for_store_workspaces():
     from vmn_exp.ui.workspaces import Workspace, workspace_storage
 
-    assert workspace_storage(Workspace(name="g", kind="git", path="/x"), RealClock()) is None
+    assert workspace_storage(Workspace(name="g", kind="git", path="/x"), RealClock(), os.environ) is None
 
 
 def test_ui_store_workspaces_get_their_own_index(tmp_path):

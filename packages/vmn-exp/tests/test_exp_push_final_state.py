@@ -1,5 +1,6 @@
 """``vmn-exp push`` repairs a remote ``run_state.yml`` that a live run wrote
 but never brought to its final state, and only for the same attempt."""
+import os
 import yaml
 from push_helpers import APP, X, local_root, make_run, set_state
 
@@ -28,10 +29,10 @@ def _state(storage):
 def test_push_replaces_a_running_remote_state_with_the_same_attempts_final_state(tmp_path):
     local, remote = local_root(tmp_path), _remote(tmp_path)
     _live_mirror(local, remote, tmp_path, {"state": "running", "attempt": "a1"})
-    outcome = push_run(local, remote, APP, X)
+    outcome = push_run(local, remote, APP, X, env=os.environ)
     assert _state(remote) == _state(local)
     assert not any(RUN_STATE_FILE in w for w in outcome.warnings)
-    again = push_run(local, remote, APP, X)
+    again = push_run(local, remote, APP, X, env=os.environ)
     assert not any(RUN_STATE_FILE in w for w in again.warnings)
 
 
@@ -39,6 +40,6 @@ def test_push_keeps_the_warning_when_another_attempt_finished_the_run(tmp_path):
     local, remote = local_root(tmp_path), _remote(tmp_path)
     theirs = {"state": "finished", "attempt": "b2", "exit_code": 0}
     _live_mirror(local, remote, tmp_path, theirs)
-    outcome = push_run(local, remote, APP, X)
+    outcome = push_run(local, remote, APP, X, env=os.environ)
     assert _state(remote) == theirs
     assert any(RUN_STATE_FILE in w and "not overwritten" in w for w in outcome.warnings)

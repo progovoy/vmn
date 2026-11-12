@@ -120,7 +120,7 @@ def test_start_run_reads_the_exports_features_before_taking_the_shared_dir_lock(
     monkeypatch.setattr(sdk_create, "get_repo_lock", lock)
     monkeypatch.setattr(from_snapshot, "export_features", read)
     monkeypatch.setattr(sdk_create, "export_features", read, raising=False)
-    storage = open_storage(root=str(tmp_path / "pod-store"), area="runs", clock=RealClock())
+    storage = open_storage(root=str(tmp_path / "pod-store"), area="runs", clock=RealClock(), env=os.environ)
 
     with start_run(app_layout.app_name, storage=storage, system_metrics=False,
                    capture_env=False) as run:

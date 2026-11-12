@@ -18,7 +18,7 @@ CHANGES = features(["train.py"], [TRAIN_STEP])
 
 @pytest.fixture
 def storage(tmp_path):
-    return open_storage(root=str(tmp_path / "store"), area="runs", clock=RealClock())
+    return open_storage(root=str(tmp_path / "store"), area="runs", clock=RealClock(), env=os.environ)
 
 
 def _verstrs(items):

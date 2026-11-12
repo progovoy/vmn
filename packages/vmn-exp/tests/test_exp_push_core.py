@@ -65,8 +65,8 @@ def test_push_requires_capable_remote_target(local, target):
 
 def test_ledger_lives_in_host_state_dir_and_is_not_listed(local, target, tmp_path):
     make_run(local, tmp_path)
-    assert push_run(local, target, APP, X).status == NEW
-    ledger = PushLedger(local, APP, remote_id(target))
+    assert push_run(local, target, APP, X, env=os.environ).status == NEW
+    ledger = PushLedger(local, APP, remote_id(target), os.environ)
     state = os.environ["VMN_EXP_CACHE_DIR"]
     assert ledger.dir.startswith(os.path.join(state, "push") + os.sep)
     assert remote_id(target) in ledger.dir
@@ -79,7 +79,7 @@ def test_ledger_lives_in_host_state_dir_and_is_not_listed(local, target, tmp_pat
 
 def test_push_new_run_roundtrips_everything(local, target, tmp_path):
     make_run(local, tmp_path)
-    outcome = push_run(local, target, APP, X)
+    outcome = push_run(local, target, APP, X, env=os.environ)
     assert (outcome.verstr, outcome.status) == (X, NEW)
     assert target.load_metadata(APP, X) == local.load_metadata(APP, X)
     assert remote_log(target) == local_log(local)
@@ -92,19 +92,19 @@ def test_push_new_run_roundtrips_everything(local, target, tmp_path):
 
 def test_second_push_makes_no_remote_calls(local, target, tmp_path):
     make_run(local, tmp_path)
-    push_run(local, target, APP, X)
+    push_run(local, target, APP, X, env=os.environ)
     calls = record_calls(target._s3)
-    assert push_run(local, target, APP, X).status == UP_TO_DATE
+    assert push_run(local, target, APP, X, env=os.environ).status == UP_TO_DATE
     assert calls == []
 
 
 def test_repush_ships_only_new_lines(local, target, tmp_path):
     make_run(local, tmp_path)
     set_state(local, X, "running")  # no compaction: the segments stay apart
-    push_run(local, target, APP, X)
+    push_run(local, target, APP, X, env=os.environ)
     add_lines(local, X, [line(3)])
     calls = record_calls(target._s3)
-    assert push_run(local, target, APP, X).status == UPDATE
+    assert push_run(local, target, APP, X, env=os.environ).status == UPDATE
     shipped = ["/".join(p["Key"].rsplit("/", 2)[1:]) for op, p in calls
                if op == "PutObject" and "/log/" in p["Key"]]
     assert shipped == [log_object_name(WRITER, 1)]
@@ -115,21 +115,21 @@ def test_repush_ships_only_new_lines(local, target, tmp_path):
 def test_partial_line_is_not_shipped(local, target, tmp_path):
     make_run(local, tmp_path)
     add_lines(local, X, ['{"half": '])
-    push_run(local, target, APP, X)
+    push_run(local, target, APP, X, env=os.environ)
     assert remote_log(target) == (line(1) + line(2)).encode()
     add_lines(local, X, ['1}\n'])
-    push_run(local, target, APP, X)
+    push_run(local, target, APP, X, env=os.environ)
     assert remote_log(target) == local_log(local)
 
 
 def test_repush_uploads_only_new_artifact(local, target, tmp_path):
     make_run(local, tmp_path)
-    push_run(local, target, APP, X)
+    push_run(local, target, APP, X, env=os.environ)
     extra = tmp_path / "extra.bin"
     extra.write_bytes(b"more")
     local.save_artifact_file(APP, X, str(extra))
     calls = record_calls(target._s3)
-    push_run(local, target, APP, X)
+    push_run(local, target, APP, X, env=os.environ)
     assert [k.rsplit("/", 1)[1] for k in _puts(calls, "/artifacts/")] == ["extra.bin"]
 
 
@@ -139,7 +139,7 @@ def test_output_log_and_media_are_pushed(local, target, tmp_path):
     src.write_bytes(b"stdout")
     local.save_artifact_file(APP, X, str(src), name="outputs/output.log")
     local.save_artifact_file(APP, X, str(src), name="outputs/media/img/0.png")
-    push_run(local, target, APP, X)
+    push_run(local, target, APP, X, env=os.environ)
     names = {a["name"] for a in target.list_artifacts(APP, X)}
     assert {"outputs/output.log", "outputs/media/img/0.png"} <= names
 
@@ -152,9 +152,9 @@ def test_push_resumes_after_artifact_upload_failure(local, target, tmp_path, mon
         raise OSError("network down")
 
     monkeypatch.setattr(target, "save_artifact_file", broken)
-    assert push_run(local, target, APP, X).status == FAILED
+    assert push_run(local, target, APP, X, env=os.environ).status == FAILED
     monkeypatch.setattr(target, "save_artifact_file", upload)
-    assert push_run(local, target, APP, X).status == UPDATE
+    assert push_run(local, target, APP, X, env=os.environ).status == UPDATE
     assert target.list_artifacts(APP, X) == local.list_artifacts(APP, X)
     assert remote_log(target) == local_log(local)
 
@@ -163,14 +163,14 @@ def test_push_resumes_own_crashed_claim(local, target, tmp_path):
     make_run(local, tmp_path)
     identity = run_identity(APP, local.load_metadata(APP, X))
     put_raw(f"{target._key_prefix(APP, X)}/{CLAIM_FILE}", identity.encode())
-    assert push_run(local, target, APP, X).status == NEW
+    assert push_run(local, target, APP, X, env=os.environ).status == NEW
     assert target.load_metadata(APP, X) is not None
 
 
 def test_foreign_claim_without_metadata_is_a_collision(local, target, tmp_path):
     make_run(local, tmp_path)
     put_raw(f"{target._key_prefix(APP, X)}/{CLAIM_FILE}", b"")
-    assert push_run(local, target, APP, X).status == COLLISION
+    assert push_run(local, target, APP, X, env=os.environ).status == COLLISION
 
 
 # -- code objects ---------------------------------------------------------------
@@ -179,7 +179,7 @@ def test_foreign_claim_without_metadata_is_a_collision(local, target, tmp_path):
 def test_code_object_pushed_before_claim(local, target, tmp_path):
     make_run(local, tmp_path)
     calls = record_calls(target._s3)
-    push_run(local, target, APP, X)
+    push_run(local, target, APP, X, env=os.environ)
     keys = _puts(calls)
     marker = next(i for i, k in enumerate(keys) if "/code/" in k and "metadata" in k)
     payload = next(i for i, k in enumerate(keys) if "/code/" in k and "untracked" in k)
@@ -192,7 +192,7 @@ def test_code_object_already_on_remote_not_reuploaded(local, target, tmp_path):
     code_storage(target).save(APP, KEY, {"verstr": KEY}, PAYLOAD)
     calls = record_calls(target._s3)
     code = CodePusher(local, target, APP)
-    push_run(local, target, APP, X, code=code)
+    push_run(local, target, APP, X, code=code, env=os.environ)
     assert _puts(calls, "/code/") == []
     assert (code.uploaded, code.present) == (0, 1)
 
@@ -208,7 +208,7 @@ def test_code_object_recreated_if_pruned_between_upload_and_claim(
         return claim(*args, **kwargs)
 
     monkeypatch.setattr(target, "create_exclusive", pruned_first)
-    assert push_run(local, target, APP, X).status == NEW
+    assert push_run(local, target, APP, X, env=os.environ).status == NEW
     assert stored_code(target, APP, KEY) is not None
 
 
@@ -218,13 +218,13 @@ def test_runs_sharing_code_upload_it_once(local, target, tmp_path):
     code = CodePusher(local, target, APP)
     calls = record_calls(target._s3)
     for verstr in (X, X + ".2"):
-        assert push_run(local, target, APP, verstr, code=code).status == NEW
+        assert push_run(local, target, APP, verstr, code=code, env=os.environ).status == NEW
     assert len(_puts(calls, "/code/app/" + KEY + "/metadata")) == 1
     assert code.uploaded == 1
 
 
 def test_missing_local_code_object_reported_not_fatal(local, target, tmp_path):
     make_run(local, tmp_path, code=False)
-    outcome = push_run(local, target, APP, X)
+    outcome = push_run(local, target, APP, X, env=os.environ)
     assert outcome.status == NEW
     assert any("code missing locally" in w for w in outcome.warnings)

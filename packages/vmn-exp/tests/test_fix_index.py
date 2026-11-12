@@ -12,7 +12,7 @@ APP = "app"
 
 
 def _storage(root):
-    return open_storage(root=str(root), area="runs", clock=RealClock())
+    return open_storage(root=str(root), area="runs", clock=RealClock(), env=os.environ)
 
 
 def _make(storage, i, entries_by_writer=None, run_state=None, note=None):
@@ -278,7 +278,7 @@ def test_cached_storage_with_a_remote_folds_like_the_reader(tmp_path, monkeypatc
         storage = open_storage(
             s3_uri("vmn-bucket", "exps"),
             root=str(tmp_path / "repo"),
-            area="runs", clock=RealClock(),
+            area="runs", clock=RealClock(), env=os.environ,
         )
         verstrs = _seed(storage, n=2)
         storage.sync_log_to_remote(APP, verstrs[0], "w0")

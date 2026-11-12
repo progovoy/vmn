@@ -536,7 +536,7 @@ def _exp_log(app_layout, verstr):
     """Load an experiment's merged log (per-writer JSONL + legacy log.yml)."""
     from vmn_exp.snapshot import open_storage
 
-    storage = open_storage(root=local_store_root(app_layout.repo_path), area="runs", clock=RealClock())
+    storage = open_storage(root=local_store_root(app_layout.repo_path), area="runs", clock=RealClock(), env=os.environ)
     return storage.load_merged_log(app_layout.app_name, verstr)
 
 

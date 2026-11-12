@@ -28,7 +28,7 @@ VITE_CONFIG = os.path.join(REPO_ROOT, "packages", "vmn-exp", "webui", "vite.conf
 def ws(tmp_path):
     root = tmp_path / "repo"
     (root / ".git").mkdir(parents=True)
-    storage = open_storage(root=local_store_root(str(root)), area="runs", clock=RealClock())
+    storage = open_storage(root=local_store_root(str(root)), area="runs", clock=RealClock(), env=os.environ)
     storage.save(APP, V, {"verstr": V, "timestamp": "t"}, {})
     manager = WorkspaceManager(str(tmp_path / "data"))
     manager.attach_path("ws", str(root))

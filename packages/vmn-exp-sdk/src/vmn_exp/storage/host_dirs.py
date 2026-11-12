@@ -17,8 +17,8 @@ explicitly chosen dir is kept (:mod:`vmn_exp.storage.fs_type`). ``<store-id>``
 is a stable hash of the backend's ``cache_identity()`` (a local root's
 identity holds its absolute path), so two stores never share a file.
 
-Each resolver reads the env it is given; a storage backend, handed none,
-passes :func:`process_env`.
+Each resolver reads the env it is given (a storage backend's: what its
+opener was handed, :func:`vmn_exp.storage.open.open_storage`).
 """
 import functools
 import hashlib
@@ -31,12 +31,6 @@ from vmn_exp.core.best_effort import warn_once
 from vmn_exp.storage.fs_type import filesystem_type, is_network_fs
 
 _verified_dirs: set = set()
-
-
-def process_env():
-    """The process's environment, for the storage backends that resolve
-    their per-host dirs without being handed an env."""
-    return os.environ
 
 
 def _base(env, xdg_var, mac_parts, other_parts):

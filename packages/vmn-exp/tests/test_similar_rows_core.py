@@ -1,6 +1,7 @@
 """The runs a similar-runs query reads besides its FTS table
 (vmn_exp.core.similar_rows): from an index snapshot, or point reads on the
 persisted index — the same answers either way."""
+import os
 import sqlite3
 
 import pytest
@@ -18,7 +19,7 @@ NOW = FakeClock().now()
 
 @pytest.fixture
 def both(tmp_path):
-    storage = open_storage(root=str(tmp_path / "store"), area="runs", clock=RealClock())
+    storage = open_storage(root=str(tmp_path / "store"), area="runs", clock=RealClock(), env=os.environ)
     outer = seed(storage, APP, verstr(1), name="outer", note="sweep")
     inner = seed(storage, APP, verstr(2), parent=outer, intent={"text": "focal"},
                  changes=features(["a.py"]), goal=("loss", "min"), metrics={"loss": 1.0})

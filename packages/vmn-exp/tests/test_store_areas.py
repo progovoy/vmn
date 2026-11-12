@@ -21,8 +21,8 @@ def _keys():
 def test_runs_and_snapshots_of_one_tree_never_share_a_key(monkeypatch):
     with mocked_bucket(monkeypatch):
         uri = f"s3://{BUCKET}/team"
-        runs = open_store(uri, area=areas.RUNS)
-        snaps = open_store(uri, area=areas.SNAPSHOTS)
+        runs = open_store(uri, area=areas.RUNS, env=os.environ)
+        snaps = open_store(uri, area=areas.SNAPSHOTS, env=os.environ)
         assert snaps.create_exclusive("my_app", VERSTR, {"verstr": VERSTR}, {})
         assert runs.create_exclusive("my_app", VERSTR, {"verstr": VERSTR}, {})
         keys = [k for k in _keys() if k.endswith("metadata.yml")]
@@ -36,7 +36,7 @@ def test_runs_and_snapshots_of_one_tree_never_share_a_key(monkeypatch):
 
 def test_uri_without_path_uses_the_vmn_root(monkeypatch):
     with mocked_bucket(monkeypatch):
-        store = open_store(f"s3://{BUCKET}", area=areas.CODE)
+        store = open_store(f"s3://{BUCKET}", area=areas.CODE, env=os.environ)
         store.save("root/svc", "k", {"verstr": "k"}, {})
         assert "vmn/code/root-svc/k/metadata.yml" in _keys()
 
@@ -54,13 +54,13 @@ def test_local_root_layout_tag_form_and_one_gitignore(tmp_path):
 
 
 def test_file_uri_root_is_the_dir(tmp_path):
-    store = open_store(f"file://{tmp_path}", area=areas.SNAPSHOTS)
+    store = open_store(f"file://{tmp_path}", area=areas.SNAPSHOTS, env=os.environ)
     store.save("app", VERSTR, {"verstr": VERSTR}, {})
     assert os.path.isfile(tmp_path / "snapshots" / "app" / VERSTR / "metadata.yml")
 
 
 def test_in_area_reaches_a_sibling_area(tmp_path):
-    storage = open_storage(None, str(tmp_path), area=areas.RUNS, clock=RealClock())
+    storage = open_storage(None, str(tmp_path), area=areas.RUNS, clock=RealClock(), env=os.environ)
     storage.in_area(areas.CODE).save("app", "k", {"verstr": "k"}, {})
     assert os.path.isfile(tmp_path / "code" / "app" / "k" / "metadata.yml")
     assert storage.list_apps() == []
@@ -68,7 +68,7 @@ def test_in_area_reaches_a_sibling_area(tmp_path):
 
 def test_object_store_in_area(monkeypatch):
     with mocked_bucket(monkeypatch):
-        runs = open_store(f"s3://{BUCKET}/team", area=areas.RUNS)
+        runs = open_store(f"s3://{BUCKET}/team", area=areas.RUNS, env=os.environ)
         runs.in_area(areas.SWEEPS).save("a~s", "t0", {"verstr": "t0"}, {})
         assert "team/sweeps/a~s/t0/metadata.yml" in _keys()
 

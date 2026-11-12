@@ -3,6 +3,7 @@ direct children, each with children carrying its ``job`` (attention from
 the app's settings, its split counts), an ``open`` hint, and the app's
 ``tree_columns``; ETag/304 like the board, 404/400 for unknown/malformed."""
 import datetime
+import os
 
 import pytest
 import yaml
@@ -12,9 +13,9 @@ from fakes.clock import FakeClock
 from fastapi.testclient import TestClient
 from unit_deps import fake_deps
 from vmn_exp.core.app_settings_store import write_settings
+from vmn_exp.core.real_io import RealClock
 from vmn_exp.storage.areas import RUNS
 from vmn_exp.storage.open import open_storage
-from vmn_exp.core.real_io import RealClock
 
 APP = "app"
 BASE = f"/api/v1/workspaces/ws/apps/{APP}"
@@ -69,7 +70,7 @@ def client(tmp_path):
 
     clock = FakeClock(T0 + datetime.timedelta(minutes=90))
     uri = f"file://{tmp_path}/store"
-    storage = open_storage(uri, area=RUNS, clock=RealClock())
+    storage = open_storage(uri, area=RUNS, clock=RealClock(), env=os.environ)
     _tree(storage)
     write_settings(storage, APP, SETTINGS)
     manager = WorkspaceManager(str(tmp_path / "data"))

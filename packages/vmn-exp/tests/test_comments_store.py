@@ -1,4 +1,5 @@
 """Plan 13 §3.2 / phase 1b: comment threads on runs and reports."""
+import os
 import threading
 
 from exp_helpers import _bootstrap, _exp, _storage
@@ -13,7 +14,7 @@ REPORT = ("report", "r_abc")
 
 
 def _store(tmp_path):
-    return open_store(f"file://{tmp_path}", area=areas.RUNS)
+    return open_store(f"file://{tmp_path}", area=areas.RUNS, env=os.environ)
 
 
 def test_run_thread_lives_under_comments_app_key_verstr(tmp_path):

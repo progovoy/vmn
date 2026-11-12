@@ -2,6 +2,7 @@
 answers the current snapshot (only a first load refreshes); a caller that
 needs freshness passes a positive age: the sweep agent's early-stop check
 its check interval. One-shot readers keep refreshing."""
+import os
 import pytest
 
 from test_fix_index_refresh_scale import Clock
@@ -29,7 +30,7 @@ def clock(monkeypatch, tmp_path):
 
 @pytest.fixture
 def storage(tmp_path):
-    return open_storage(None, str(tmp_path / "store"), area="runs", clock=RealClock())
+    return open_storage(None, str(tmp_path / "store"), area="runs", clock=RealClock(), env=os.environ)
 
 
 @pytest.fixture

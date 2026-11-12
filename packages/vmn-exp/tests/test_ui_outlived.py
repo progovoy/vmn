@@ -57,7 +57,7 @@ def store(tmp_path):
     from vmn_exp.ui.workspaces import WorkspaceManager
 
     uri = f"file://{tmp_path}/store"
-    storage = open_storage(uri, area=RUNS, clock=RealClock())
+    storage = open_storage(uri, area=RUNS, clock=RealClock(), env=os.environ)
     for n, parent, state in RUNS_OF:
         meta = {"verstr": _v(n), "timestamp": f"2026-01-01T00:00:{n:02d}Z"}
         if parent:

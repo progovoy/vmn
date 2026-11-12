@@ -47,7 +47,7 @@ def experiment_push(vcs, params, app_name, args, clock, env):
     except ValueError as exc:
         VMN_LOGGER.error(str(exc))
         return 1
-    ledger = PushLedger.for_target(local, app_name, target)
+    ledger = PushLedger.for_target(local, app_name, target, env)
     adopt_failed = 0
     if args.dry_run:
         outcomes = [Outcome(v, plan_push(local, target, app_name, v, ledger))
@@ -58,7 +58,7 @@ def experiment_push(vcs, params, app_name, args, clock, env):
         code = CodePusher(local, target, app_name)
         registered = registered_runs(local)
         outcomes = [push_or_rename(local, target, app_name, v, ledger, code, registered,
-                                   now=clock.now())
+                                   now=clock.now(), env=env)
                     for v in verstrs]
     failed = _report(outcomes, args.json, args.dry_run)
     return 1 if failed or adopt_failed else 0
@@ -86,9 +86,9 @@ def _stores(vcs, params, env):
     root = experiment_dir(vcs, params, env)
     if not uri or not root:
         raise ValueError(_NO_REMOTE if root else "exp push needs a local experiment dir")
-    target = open_store(uri, area=RUNS)
+    target = open_store(uri, area=RUNS, env=env)
     require_push_target(target)
-    return LocalSnapshotStorage(root, RUNS), target
+    return LocalSnapshotStorage(root, RUNS, env=env), target
 
 
 def _select(local, app_name, refs):

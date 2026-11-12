@@ -1,5 +1,6 @@
 """The index database is shared by processes (CLI, SDK, vmn ui): a lock held
 elsewhere may slow a refresh down, never break it or cost the cache."""
+import os
 import sqlite3
 
 import pytest
@@ -18,7 +19,7 @@ def short_busy_timeout(monkeypatch):
 
 
 def _seeded(tmp_path, n=3):
-    storage = open_storage(root=str(tmp_path / "repo"), area="runs", clock=RealClock())
+    storage = open_storage(root=str(tmp_path / "repo"), area="runs", clock=RealClock(), env=os.environ)
     for i in range(n):
         v = f"0.0.1-dev.abc.r{i}"
         storage.save(APP, v, {"verstr": v, "timestamp": f"2026-01-01T00:00:0{i}Z"}, {})

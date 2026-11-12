@@ -78,7 +78,7 @@ def _load(index):
 
 @pytest.mark.serial
 def test_a_cold_index_loads_a_remote_store_at_a_sustained_rate(endpoint, tmp_path):
-    storage = open_store(f"s3://{s3bench.BUCKET}/{s3bench.ROOT}?endpoint_url={endpoint}")
+    storage = open_store(f"s3://{s3bench.BUCKET}/{s3bench.ROOT}?endpoint_url={endpoint}", env=os.environ)
     index = ExperimentIndex(storage, s3bench_seed.APP, str(tmp_path / "idx.sqlite"))
     index.journaled = True
     index.reconcile()

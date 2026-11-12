@@ -1,4 +1,5 @@
 """``vmn-exp migrate`` on object stores: S3 (moto), GCS and Azure (fakes)."""
+import os
 import boto3
 import pytest
 import yaml
@@ -117,6 +118,6 @@ def test_s3_shared_prefix_keeps_snapshots_with_code_verstr(s3):
 
     from vmn_exp.storage.open import open_storage
 
-    store = open_storage("s3://bkt/team", None, area="snapshots", writer=False, clock=RealClock())
+    store = open_storage("s3://bkt/team", None, area="snapshots", writer=False, clock=RealClock(), env=os.environ)
     assert set(store.list_verstrs("my/app")) == set(snaps)
     assert store.load_metadata("my/app", "c2")["dirty_states"] == ["modified"]

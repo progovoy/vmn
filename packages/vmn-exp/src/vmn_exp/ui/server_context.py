@@ -21,9 +21,9 @@ class ServerContext:
     *app_exists(ws, app_name, storage)* checks an app with no rows yet."""
 
     def __init__(self, manager, source, app_lists, open_workspace_storage, open_edit_storage,
-                 probe_store, app_exists, *, clock):
+                 probe_store, app_exists, *, clock, env):
         self.manager, self.source, self.app_lists = manager, source, app_lists
-        self.clock = clock
+        self.clock, self.env = clock, env
         self._open_workspace_storage = open_workspace_storage
         self._open_edit_storage = open_edit_storage
         self._probe_store = probe_store
@@ -119,7 +119,7 @@ class ServerContext:
             compute = lambda: exp_reader.list_apps_from_storage(  # noqa: E731
                 store_storage, (lambda name: self.source.persisted_count(ws, name)) if counted else None)
         else:
-            compute = lambda: exp_reader.list_apps(ws.path, self.clock)  # noqa: E731
+            compute = lambda: exp_reader.list_apps(ws.path, self.clock, self.env)  # noqa: E731
         return self.app_lists.get(ws_name, compute)
 
     def app_tags(self, ws_name):

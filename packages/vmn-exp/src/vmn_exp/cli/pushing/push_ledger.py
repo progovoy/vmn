@@ -31,18 +31,17 @@ def remote_id(target):
 
 
 class PushLedger:
-    """``PushLedger(local, app_name, remote_id)``: ``get(verstr)`` -> entry
-    dict or None, ``put(verstr, entry)``, ``delete(verstr)``; ``dir`` and
-    ``lock_path`` (where a push holds its lock)."""
+    """``PushLedger(local, app_name, remote_id, env)``: ``get(verstr)`` ->
+    entry dict or None, ``put(verstr, entry)``, ``delete(verstr)``; ``dir``
+    (under the state dir *env* names) and ``lock_path`` (where a push holds
+    its lock)."""
 
-    def __init__(self, local, app_name, remote_id):
-        self.dir = host_dirs.push_ledger_dir(
-            local.cache_identity(), remote_id, app_name, host_dirs.process_env()
-        )
+    def __init__(self, local, app_name, remote_id, env):
+        self.dir = host_dirs.push_ledger_dir(local.cache_identity(), remote_id, app_name, env)
 
     @classmethod
-    def for_target(cls, local, app_name, target):
-        return cls(local, app_name, remote_id(target))
+    def for_target(cls, local, app_name, target, env):
+        return cls(local, app_name, remote_id(target), env)
 
     @property
     def lock_path(self):

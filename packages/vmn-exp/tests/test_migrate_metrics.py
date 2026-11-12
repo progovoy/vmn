@@ -1,5 +1,6 @@
 """``vmn-exp migrate`` converts v1 ``metrics`` log entries to compacted
 ``metrics/<writer>.vmx`` files (docs/plans/12-columnar-metrics.md §9)."""
+import os
 import json
 import math
 
@@ -116,7 +117,7 @@ def _v1_local(tmp_path, **kw):
 
 def _local_storage(tmp_path):
     forget_checked()
-    return open_storage(None, str(tmp_path), area="runs", clock=RealClock())
+    return open_storage(None, str(tmp_path), area="runs", clock=RealClock(), env=os.environ)
 
 
 def test_metrics_entries_leave_the_jsonl_for_a_vmx_per_writer(tmp_path):
@@ -210,7 +211,7 @@ def test_s3_store_converts_metrics(s3):
     assert run_migrate(["--store", "s3://bkt/team"], real_io()) == 0
     assert {k: s3.get(k) for k in s3.keys()} == before
     forget_checked()
-    _assert_readers_match(open_storage("s3://bkt/team", None, area="runs", clock=RealClock()))
+    _assert_readers_match(open_storage("s3://bkt/team", None, area="runs", clock=RealClock(), env=os.environ))
 
 
 def test_log_files_a_compacted_log_supersedes_are_dropped(tmp_path):

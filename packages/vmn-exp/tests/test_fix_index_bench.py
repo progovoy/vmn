@@ -72,7 +72,7 @@ def _refresh(index, touched):
 
 
 def _storage(tmp_path):
-    storage = open_storage(root=local_store_root(str(tmp_path)), area="runs", clock=RealClock())
+    storage = open_storage(root=local_store_root(str(tmp_path)), area="runs", clock=RealClock(), env=os.environ)
     return storage, _track_record_reads(storage)
 
 

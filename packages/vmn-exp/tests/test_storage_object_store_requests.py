@@ -1,6 +1,7 @@
 """Request economy of the GCS/Azure adapters: a GCS read is one download
 (no metadata GET first), an Azure full listing reads each blob once (Azure
 has no server-side StartAfter), and a missing boto3 names the extra."""
+import os
 import builtins
 
 import pytest
@@ -78,5 +79,5 @@ def test_missing_boto3_names_the_s3_extra(monkeypatch):
 
     monkeypatch.setattr(builtins, "__import__", no_boto3)
     with pytest.raises(ImportError) as err:
-        boto3_client()
+        boto3_client(env=os.environ)
     assert str(err.value) == str(missing_extra("boto3", "s3"))

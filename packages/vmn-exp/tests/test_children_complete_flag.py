@@ -1,6 +1,7 @@
 """The per-app "every child has its marker" flag: a small object beside the
 app's records that no listing takes for a run, written by a complete
 backfill and dropped whenever a child's marker fails to be written."""
+import os
 import pytest
 from s3_helpers import mocked_bucket, s3_storage
 
@@ -148,12 +149,12 @@ def test_a_renamed_pushed_child_marks_its_parent_on_the_remote(tmp_path, s3):
     local = local_root(tmp_path)
     outer = make_run(local, tmp_path, verstr=PUSH_CODE + ".outer")
     make_run(local, tmp_path, parent=outer)
-    assert push_run(local, s3, PUSH_APP, outer).status == NEW
+    assert push_run(local, s3, PUSH_APP, outer, env=os.environ).status == NEW
     s3.save(PUSH_APP, X, run_meta(X, timestamp="2025-05-05T00:00:00Z"), {})
 
-    ledger = PushLedger.for_target(local, PUSH_APP, s3)
+    ledger = PushLedger.for_target(local, PUSH_APP, s3, os.environ)
     outcome = push_or_rename(local, s3, PUSH_APP, X, ledger,
-                             CodePusher(local, s3, PUSH_APP), now=RealClock().now())
+                             CodePusher(local, s3, PUSH_APP), now=RealClock().now(), env=os.environ)
 
     assert outcome.verstr != X
     assert s3.list_children(PUSH_APP, outer) == [outcome.verstr]

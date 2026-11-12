@@ -1,5 +1,6 @@
 """``similar --all-apps`` brings the other apps' indexes up to date side by
 side, and still searches them in the store's app order."""
+import os
 import threading
 
 import pytest
@@ -14,7 +15,7 @@ CHANGES = features(["train.py"], [TRAIN_STEP])
 
 @pytest.fixture
 def storage(tmp_path):
-    return open_storage(root=str(tmp_path / "store"), area="runs", clock=RealClock())
+    return open_storage(root=str(tmp_path / "store"), area="runs", clock=RealClock(), env=os.environ)
 
 
 def test_other_apps_are_refreshed_side_by_side_in_app_order(storage, monkeypatch):

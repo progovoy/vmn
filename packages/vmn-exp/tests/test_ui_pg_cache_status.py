@@ -2,6 +2,7 @@
 workspace cache serves ElectedIndexes there)."""
 import argparse
 import dataclasses
+import os
 import time
 
 import pytest
@@ -10,11 +11,10 @@ pytest.importorskip("fastapi")
 pytest.importorskip("psycopg")
 
 from fastapi.testclient import TestClient  # noqa: E402
-
+from vmn_exp.core.real_io import RealClock, real_io
 from vmn_exp.storage.areas import RUNS  # noqa: E402
 from vmn_exp.storage.open import open_storage  # noqa: E402
 from vmn_exp.ui.cli import build_server, server_app  # noqa: E402
-from vmn_exp.core.real_io import RealClock, real_io
 
 APP = "app"
 V = "0.0.1-dev.abc.r1"
@@ -24,7 +24,7 @@ CACHE = "/api/v1/workspaces/ws/cache"
 @pytest.fixture
 def client(tmp_path, pg_dsn):
     uri = f"file://{tmp_path}/store"
-    open_storage(uri, area=RUNS, clock=RealClock()).save(
+    open_storage(uri, area=RUNS, clock=RealClock(), env=os.environ).save(
         APP, V, {"verstr": V, "timestamp": "2026-01-01T00:00:00Z"}, {})
     path = tmp_path / "server.yml"
     path.write_text(f"db: {pg_dsn}\ndata_dir: {tmp_path / 'data'}\n"

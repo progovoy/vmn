@@ -95,7 +95,7 @@ class WorkspaceIndex:
     :class:`~vmn_exp.core.index.ExperimentIndex`; None: their modules' own).
     """
 
-    def __init__(self, root_path, db_dir=None, *, processes, clock, index_clock=None):
+    def __init__(self, root_path, db_dir=None, *, processes, clock, env, index_clock=None):
         self._index_clock = index_clock
         self.root_path = root_path
         self._processes = processes  # lists the app's tags (the versions cache key)
@@ -106,7 +106,7 @@ class WorkspaceIndex:
         self._lock = threading.Lock()
         self._in_memory = {}  # app name -> unpersisted ExperimentIndex
         self._cache = SqliteStore(self._db_path or ":memory:", clock=index_clock)
-        self._storage = exp_reader.experiment_storage(root_path, clock)
+        self._storage = exp_reader.experiment_storage(root_path, clock, env)
 
     @property
     def db_path(self):

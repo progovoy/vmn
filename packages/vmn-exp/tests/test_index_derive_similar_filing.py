@@ -150,7 +150,7 @@ class _Refresher:
 
 
 def _served(tmp_path, notes):
-    storage = open_storage(root=str(tmp_path / "store"), area="runs", clock=RealClock())
+    storage = open_storage(root=str(tmp_path / "store"), area="runs", clock=RealClock(), env=os.environ)
     runs = [seed(storage, "app", verstr(n), note=note) for n, note in enumerate(notes, 1)]
     path = str(tmp_path / "index.sqlite")
     index = ExperimentIndex(storage, "app", path, full_sweep_sec=0)

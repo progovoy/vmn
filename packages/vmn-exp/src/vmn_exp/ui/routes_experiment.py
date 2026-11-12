@@ -100,7 +100,7 @@ def register(app, prefix, ctx, job_views, leaderboards, background, series_cap, 
         # Record-relative paths (artifacts/a/b/c.txt), each part one segment.
         if not valid_artifact_path(filename):
             raise HTTPException(400, f"Invalid artifact name '{filename}'")
-        redirect = routes_media.signed_redirect(ws, app_name, verstr, filename)
+        redirect = routes_media.signed_redirect(ws, app_name, verstr, filename, ctx.env)
         if redirect is not None:
             return redirect
         download_name = filename.rsplit("/", 1)[-1]

@@ -11,6 +11,8 @@ A factory is called as ``factory(uri, area=...)`` with the parsed
 :class:`~vmn_exp.storage.uri.StoreURI` and an area name
 (:mod:`vmn_exp.storage.areas`), and returns a :class:`~vmn_exp.storage.base.SnapshotStorage`. See
 docs/vmn-exp/experiments.md ("Storage backends") for the contract it must meet.
+A built-in factory is also handed the host's ``env`` (its per-host dirs and
+credentials resolve from it).
 """
 import os
 from importlib import import_module
@@ -63,13 +65,17 @@ def known_schemes():
     return sorted(set(_BUILTINS) | set(_registered))
 
 
-def open_store(uri, area=RUNS):
-    """The backend storage *uri* names (a string or a parsed ``StoreURI``)."""
+def open_store(uri, area=RUNS, *, env):
+    """The backend storage *uri* names (a string or a parsed ``StoreURI``);
+    *env* is the host's environment a built-in backend reads."""
     parsed = parse_store_uri(uri) if isinstance(uri, str) else uri
-    return _factory(parsed.scheme)(parsed, area=area)
+    factory = _factory(parsed.scheme)
+    if parsed.scheme in _registered:  # a plugin's: the documented (uri, area)
+        return factory(parsed, area=area)
+    return factory(parsed, area=area, env=env)
 
 
-def location_local_path(uri, store=None):
+def location_local_path(uri, store=None, *, env):
     """A local path to the object at absolute *uri*, or None when it is
     missing: a file (a path or ``file://``) is its own path; an object of
     another scheme is downloaded through that scheme's backend, which says
@@ -80,7 +86,7 @@ def location_local_path(uri, store=None):
         return parsed.path if os.path.isfile(parsed.path) else None
     options = {**store.uri_options(parsed.scheme), **parsed.options} if store else parsed.options
     bucket = StoreURI(parsed.scheme, parsed.location, "", options)
-    return open_store(bucket).object_local_path(parsed.path)
+    return open_store(bucket, env=env).object_local_path(parsed.path)
 
 
 def _factory(scheme):
@@ -132,13 +138,13 @@ class _LazyEntryPoint:
 # -- built-in factories -------------------------------------------------------
 
 
-def open_file_store(uri, area):
+def open_file_store(uri, area, env):
     from vmn_exp.storage.local import LocalSnapshotStorage
 
-    return LocalSnapshotStorage(uri.path, area)
+    return LocalSnapshotStorage(uri.path, area, env=env)
 
 
-def open_s3_store(uri, area):
+def open_s3_store(uri, area, env):
     from vmn_exp.storage.s3 import S3SnapshotStorage
 
     return S3SnapshotStorage(
@@ -146,4 +152,5 @@ def open_s3_store(uri, area):
         prefix=default_prefix(uri, area),
         endpoint_url=uri.options.get("endpoint_url"),
         options=uri.options,
+        env=env,
     )

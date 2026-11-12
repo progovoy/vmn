@@ -57,7 +57,7 @@ def test_conf_weights_change_the_ranking_of_a_runs_similar_runs(client, tmp_path
 def test_the_ui_ranks_like_the_cli_and_sdk_under_the_same_conf(client, tmp_path):
     root = str(tmp_path / "ws1")
     _write_weights(root, BRANCH_ONLY)
-    storage = open_storage(root=local_store_root(root), area="runs", clock=RealClock())
+    storage = open_storage(root=local_store_root(root), area="runs", clock=RealClock(), env=os.environ)
 
     expected = find(storage, "app1", TARGET, read_experiment_conf("app1", root), clock=FakeClock())
 

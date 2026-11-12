@@ -2,6 +2,7 @@
 (``vmn_exp.storage.s3_prefix_cap``): S3 throttles per prefix (~3,500 PUT /
 5,500 GET a second), so one app's fan-outs queue behind each other instead of
 drawing ``SlowDown``s, while other apps' calls go on."""
+import os
 import threading
 import uuid
 
@@ -24,7 +25,7 @@ def client(monkeypatch):
     with mock_aws():
         bucket = f"cap-{uuid.uuid4().hex[:12]}"  # caps are per (bucket, prefix)
         boto3.client("s3").create_bucket(Bucket=bucket)
-        yield bucket, S3SnapshotStorage(bucket, prefix="exps/runs")._s3
+        yield bucket, S3SnapshotStorage(bucket, prefix="exps/runs", env=os.environ)._s3
 
 
 def _head(s3, bucket, key):
@@ -172,10 +173,10 @@ def test_unset_zero_or_invalid_keeps_the_default(monkeypatch, value):
         monkeypatch.delenv(ENV, raising=False)
     else:
         monkeypatch.setenv(ENV, value)
-    assert s3_prefix_cap.limit() == s3_prefix_cap.DEFAULT_PREFIX_CONCURRENCY
+    assert s3_prefix_cap.limit(os.environ) == s3_prefix_cap.DEFAULT_PREFIX_CONCURRENCY
     assert 0 < s3_prefix_cap.DEFAULT_PREFIX_CONCURRENCY <= MAX_POOL_CONNECTIONS
 
 
 def test_the_env_var_sets_the_cap(monkeypatch):
     monkeypatch.setenv(ENV, "7")
-    assert s3_prefix_cap.limit() == 7
+    assert s3_prefix_cap.limit(os.environ) == 7

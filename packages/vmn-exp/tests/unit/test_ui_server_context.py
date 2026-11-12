@@ -7,6 +7,7 @@ from fastapi import HTTPException
 from vmn_exp.ui.memo import TTLCache
 from vmn_exp.ui.server_context import ServerContext
 from fakes.clock import FakeClock
+from fakes.env import FakeEnv
 
 
 class FakeManager:
@@ -29,7 +30,8 @@ def _refuse(*args, **kwargs):
 def _ctx(manager, open_workspace_storage=_refuse):
     return ServerContext(manager, source=None, app_lists=TTLCache(5),
                          open_workspace_storage=open_workspace_storage,
-                         open_edit_storage=_refuse, probe_store=_refuse, app_exists=_refuse, clock=FakeClock())
+                         open_edit_storage=_refuse, probe_store=_refuse, app_exists=_refuse, clock=FakeClock(),
+                         env=FakeEnv())
 
 
 def test_unknown_workspace_is_404():

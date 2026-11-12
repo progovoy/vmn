@@ -41,7 +41,7 @@ def client(tmp_path):
     from vmn_exp.ui.workspaces import WorkspaceManager
 
     uri = f"file://{tmp_path}/store"
-    storage = open_storage(uri, area=RUNS, clock=RealClock())
+    storage = open_storage(uri, area=RUNS, clock=RealClock(), env=os.environ)
     for i, state in enumerate([_finished(0)] + KIDS):
         v = f"0.0.1-dev.{i:04d}abcd.{i}"
         meta = {"verstr": v, "timestamp": f"2026-01-01T00:00:{i:02d}Z"}

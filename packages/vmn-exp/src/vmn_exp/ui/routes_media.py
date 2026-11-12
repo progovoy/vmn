@@ -44,12 +44,12 @@ SIGNED_URL_SEC = 300
 REDIRECT = "redirect"
 
 
-def signed_redirect(ws, app_name, verstr, name):
+def signed_redirect(ws, app_name, verstr, name, env):
     """A 302 to a presigned GET of *name* for a ``downloads: redirect`` store
     workspace, None to stream it instead; 404 when the object is missing."""
     if ws.kind != "store" or ws.downloads != REDIRECT:
         return None
-    presign = getattr(open_store(ws.store, RUNS), "presign_artifact", None)
+    presign = getattr(open_store(ws.store, RUNS, env=env), "presign_artifact", None)
     if presign is None:
         return None
     is_image = media_type(name).startswith("image/")

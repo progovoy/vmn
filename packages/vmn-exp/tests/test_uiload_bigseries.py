@@ -71,7 +71,7 @@ def seeded(tmp_path_factory):
 
 
 def _storage(root):
-    return open_storage(root=local_store_root(root), area="runs", clock=RealClock())
+    return open_storage(root=local_store_root(root), area="runs", clock=RealClock(), env=os.environ)
 
 
 def test_tiny_seed_writes_one_vmx_per_run_and_no_metric_log_lines(seeded):

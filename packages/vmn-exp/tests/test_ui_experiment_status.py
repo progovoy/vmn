@@ -118,7 +118,7 @@ def _index(app_layout):
 
     return WorkspaceIndex(
         app_layout.repo_path, db_dir=os.path.join(app_layout.base_dir, "ui_index"),
-        processes=real_io().processes, clock=RealClock(),
+        processes=real_io().processes, clock=RealClock(), env=os.environ,
     )
 
 

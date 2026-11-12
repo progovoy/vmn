@@ -79,7 +79,7 @@ def store(tmp_path, clock):
     from vmn_exp.ui.workspaces import WorkspaceManager
 
     uri = f"file://{tmp_path}/store"
-    storage = open_storage(uri, area=RUNS, clock=RealClock())
+    storage = open_storage(uri, area=RUNS, clock=RealClock(), env=os.environ)
     manager = WorkspaceManager(str(tmp_path / "data"))
     manager.add_store("ws", uri)
     return (lambda: TestClient(build_app(manager, fake_deps(clock)))), storage

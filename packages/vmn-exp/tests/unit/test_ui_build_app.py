@@ -36,7 +36,7 @@ def _io():
 
 def _manager(tmp_path):
     store = tmp_path / "store"
-    open_storage(root=str(store), area="runs", clock=RealClock()).save(
+    open_storage(root=str(store), area="runs", clock=RealClock(), env=FakeEnv()).save(
         "app", RUN, {"verstr": RUN, "timestamp": "2026-01-01T00:00:00Z"}, {})
     manager = WorkspaceManager(str(tmp_path / "data"))
     manager.add_store("st", f"file://{store}")

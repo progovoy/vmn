@@ -21,7 +21,7 @@ SWEEP = "0.0.1-dev.aaaaaaa.bbbbbbb"
 
 
 def _local(tmp_path):
-    return open_storage(None, str(tmp_path), area="runs", clock=RealClock())
+    return open_storage(None, str(tmp_path), area="runs", clock=RealClock(), env=os.environ)
 
 
 def _grid(run_cap=None, n_values=6):

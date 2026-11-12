@@ -3,6 +3,7 @@ same-length line after a failed ship, one-shot turns of two clones with a
 persisted index each, mixed reader kinds over one clone's index, and seals or
 compactions whose drop of what they replaced fails, followed by a compaction
 from a fresh clone — with a long-lived (UI-like) reader converging too."""
+import os
 import random
 from collections import Counter
 
@@ -102,7 +103,7 @@ def test_one_shot_turns_keep_each_entry_once_and_each_index_exact(tmp_path, seed
 
 
 def _offline(tmp_path):
-    return open_storage(None, root=str(tmp_path / "b"), area="runs", clock=RealClock())
+    return open_storage(None, root=str(tmp_path / "b"), area="runs", clock=RealClock(), env=os.environ)
 
 
 def _read(kind, tmp_path, cache):

@@ -54,7 +54,7 @@ def test_s3_storage_lists_its_apps_without_registry(bucket):
 
 
 def test_cached_storage_merges_local_and_remote_apps(bucket, tmp_path):
-    storage = open_storage(f"s3://{bucket}/exps", str(tmp_path), area="runs", clock=RealClock())
+    storage = open_storage(f"s3://{bucket}/exps", str(tmp_path), area="runs", clock=RealClock(), env=os.environ)
     _record(storage._remote, "remote_app")
     _record(storage._local, "local_app")
     assert storage.list_apps() == ["local_app", "remote_app"]

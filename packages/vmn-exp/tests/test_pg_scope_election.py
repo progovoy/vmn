@@ -1,4 +1,5 @@
 """Two workspaces sharing an app name are separate election and wake scopes."""
+import os
 import time
 
 import pytest
@@ -20,7 +21,7 @@ class _Ws:
 
 def _seed(tmp_path, name):
     uri = f"file://{tmp_path}/{name}"
-    storage = open_storage(uri, area=RUNS, clock=RealClock())
+    storage = open_storage(uri, area=RUNS, clock=RealClock(), env=os.environ)
     verstr = f"0.0.1-dev.abc.{name}"
     storage.save(APP, verstr, {"verstr": verstr, "timestamp": "2026-01-01T00:00:00Z"}, {})
     return _Ws(name, uri), storage, verstr

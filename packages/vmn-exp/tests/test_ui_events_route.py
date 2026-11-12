@@ -2,6 +2,7 @@
 served from the background refresher, a 404 without one (the client polls),
 a 503 past the stream cap, and the /api auth guard."""
 import json
+import os
 import threading
 import time
 
@@ -9,11 +10,10 @@ import pytest
 
 pytest.importorskip("fastapi")
 from fastapi.testclient import TestClient
+from vmn_exp.core.real_io import RealClock, real_io
 from vmn_exp.storage.areas import local_store_root
 from vmn_exp.storage.open import open_storage
-
 from vmn_exp.ui import live_events
-from vmn_exp.core.real_io import RealClock, real_io
 
 APP = "app"
 EVENTS = f"/api/v1/workspaces/ws/apps/{APP}/events"
@@ -22,7 +22,7 @@ EVENTS = f"/api/v1/workspaces/ws/apps/{APP}/events"
 def _app(tmp_path, **opts):
     root = tmp_path / "repo"
     (root / ".git").mkdir(parents=True, exist_ok=True)
-    storage = open_storage(root=local_store_root(str(root)), area="runs", clock=RealClock())
+    storage = open_storage(root=local_store_root(str(root)), area="runs", clock=RealClock(), env=os.environ)
 
     from vmn_exp.ui.server import create_app
     from vmn_exp.ui.workspaces import WorkspaceManager

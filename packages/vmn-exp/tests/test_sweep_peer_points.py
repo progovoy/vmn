@@ -1,5 +1,6 @@
 """The median rule's view of a trial's target metric: a finished trial's
 series is read once, a running one again only once its log grew."""
+import os
 from vmn_exp.core.sweep import peer_points
 from vmn_exp.core.sweep.peer_points import PeerPoints, metric_points
 from vmn_exp.core.writer import append_to_log, create_log_entry
@@ -10,7 +11,7 @@ APP = "my_app"
 
 
 def _storage(tmp_path):
-    return open_storage(None, str(tmp_path), area="runs", clock=RealClock())
+    return open_storage(None, str(tmp_path), area="runs", clock=RealClock(), env=os.environ)
 
 
 def _log(storage, verstr, step, **values):

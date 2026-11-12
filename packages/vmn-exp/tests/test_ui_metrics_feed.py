@@ -5,6 +5,7 @@ top-level outer run ``vmn_job_runs``/``vmn_job_progress``/
 numbers ``experiments-status`` and an outer run's ``summary`` serve, read
 from what the index last published: a scrape never loads or refreshes one."""
 import datetime
+import os
 
 import pytest
 import yaml
@@ -15,9 +16,9 @@ from fakes.clock import FakeClock
 from fastapi.testclient import TestClient
 from unit_deps import fake_deps
 from vmn_exp.core.app_settings_store import write_settings
+from vmn_exp.core.real_io import RealClock
 from vmn_exp.storage.areas import RUNS
 from vmn_exp.storage.open import open_storage
-from vmn_exp.core.real_io import RealClock
 
 APP = "app"
 BASE = f"/api/v1/workspaces/ws/apps/{APP}"
@@ -83,7 +84,7 @@ def server(tmp_path, clock):
     from vmn_exp.ui.workspaces import WorkspaceManager
 
     uri = f"file://{tmp_path}/store"
-    storage = open_storage(uri, area=RUNS, clock=RealClock())
+    storage = open_storage(uri, area=RUNS, clock=RealClock(), env=os.environ)
     _fleet(storage)
     write_settings(storage, APP, SETTINGS)
     manager = WorkspaceManager(str(tmp_path / "data"))
@@ -236,7 +237,7 @@ def _server_with(tmp_path, extra, clock):
     from vmn_exp.ui.workspaces import WorkspaceManager
 
     uri = f"file://{tmp_path}/store"
-    storage = open_storage(uri, area=RUNS, clock=RealClock())
+    storage = open_storage(uri, area=RUNS, clock=RealClock(), env=os.environ)
     _fleet(storage)
     extra(storage)
     write_settings(storage, APP, SETTINGS)

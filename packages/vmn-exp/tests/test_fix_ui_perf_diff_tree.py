@@ -1,5 +1,6 @@
 """experiments-diff is cached, gated and capped; the stamp-tree endpoints are
 cached by the app's tag list."""
+import os
 import subprocess
 
 import pytest
@@ -31,7 +32,7 @@ def ws(tmp_path):
     _git(root, "init", "-q")
     _git(root, "-c", "user.email=a@b", "-c", "user.name=a", "commit", "-q",
          "--allow-empty", "-m", "init")
-    storage = open_storage(root=local_store_root(str(root)), area="runs", clock=RealClock())
+    storage = open_storage(root=local_store_root(str(root)), area="runs", clock=RealClock(), env=os.environ)
     manager = WorkspaceManager(str(tmp_path / "data"))
     manager.attach_path("ws", str(root))
     return TestClient(create_app(manager, io=real_io())), storage, root

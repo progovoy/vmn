@@ -36,7 +36,7 @@ IDLE = {"as_of": OCT_22, "refreshing": False, "phase": "idle", "progress": None}
 def _seed(tmp_path):
     uri = f"file://{tmp_path}/store"
     v = "0.0.1-dev.0000abcd.0"
-    open_storage(uri, area=RUNS, clock=RealClock()).save(APP, v, {"verstr": v, "timestamp": "2026-01-01T00:00:00Z"}, {})
+    open_storage(uri, area=RUNS, clock=RealClock(), env=os.environ).save(APP, v, {"verstr": v, "timestamp": "2026-01-01T00:00:00Z"}, {})
     return uri
 
 

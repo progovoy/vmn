@@ -2,6 +2,7 @@
 CLI create/run, sweeps, reruns, the SDK and imports all claim through
 ``core.writer`` — and a pruned child drops its marker. Best-effort: a marker
 that cannot be written never fails the child."""
+import os
 import pytest
 from exp_helpers import _bootstrap, _exp, _storage
 from s3_helpers import mocked_bucket, s3_storage
@@ -101,8 +102,8 @@ def test_pushing_an_offline_child_marks_its_parent_on_the_remote(tmp_path, s3):
     local = local_root(tmp_path)
     outer = make_run(local, tmp_path, verstr=X + ".outer")
     kid = make_run(local, tmp_path, verstr=X + ".kid", parent=outer)
-    assert push_run(local, s3, PUSH_APP, outer).status == NEW
+    assert push_run(local, s3, PUSH_APP, outer, env=os.environ).status == NEW
 
-    assert push_run(local, s3, PUSH_APP, kid).status == NEW
+    assert push_run(local, s3, PUSH_APP, kid, env=os.environ).status == NEW
 
     assert s3.list_children(PUSH_APP, outer) == [kid]

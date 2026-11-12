@@ -18,7 +18,7 @@ N = 200
 def generated(tmp_path_factory):
     root = str(tmp_path_factory.mktemp("scale") / "repo")
     expected = scale_store.generate(root, N, workers=2)
-    storage = open_storage(root=local_store_root(root), area="runs", clock=RealClock())
+    storage = open_storage(root=local_store_root(root), area="runs", clock=RealClock(), env=os.environ)
     rows = list_runs(scale_store.APP, storage=storage, include_archived=True)
     return root, expected, storage, rows
 

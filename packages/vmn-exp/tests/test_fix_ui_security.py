@@ -335,7 +335,7 @@ def symlinked(tmp_path):
 
     root = tmp_path / "repo"
     (root / ".git").mkdir(parents=True)
-    storage = open_storage(root=local_store_root(str(root)), area="runs", clock=RealClock())
+    storage = open_storage(root=local_store_root(str(root)), area="runs", clock=RealClock(), env=os.environ)
     storage.save("app", SYMLINK_V, {"verstr": SYMLINK_V, "timestamp": "2026-01-01T00:00:00Z"}, {})
     src = tmp_path / "real.txt"
     src.write_text("real bytes")

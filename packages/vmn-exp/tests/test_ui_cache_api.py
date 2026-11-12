@@ -23,7 +23,7 @@ def _setup(tmp_path):
     from vmn_exp.ui.workspaces import WorkspaceManager
 
     uri = f"file://{tmp_path}/store"
-    open_storage(uri, area=RUNS, clock=RealClock()).save(APP, V, {"verstr": V, "timestamp": "2026-01-01T00:00:00Z"}, {})
+    open_storage(uri, area=RUNS, clock=RealClock(), env=os.environ).save(APP, V, {"verstr": V, "timestamp": "2026-01-01T00:00:00Z"}, {})
     manager = WorkspaceManager(os.path.join(tmp_path, "ui_data"))
     manager.add_store("ws", uri)
     client = TestClient(create_app(manager, io=real_io()))

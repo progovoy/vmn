@@ -74,7 +74,7 @@ def test_the_hint_reads_the_new_run_from_the_local_side_only(app_layout, capfd):
     assert _exp(app, extra_args=["--no-similar"]) == 0
     new = extract_dev_verstr(capfd.readouterr().out)
     remote = _UnreachableRemote()
-    local = LocalSnapshotStorage(local_store_root(app_layout.repo_path), "runs")
+    local = LocalSnapshotStorage(local_store_root(app_layout.repo_path), "runs", env=os.environ)
     storage = CachedSnapshotStorage(local, remote)
 
     similar_hint.print_hint(storage, app, new, argparse.Namespace(), {}, clock=FakeClock(),
@@ -102,7 +102,7 @@ def test_over_a_direct_remote_store_the_hint_reads_the_new_run_from_its_log_buff
     from vmn_exp.snapshot import open_storage
     from vmn_exp.storage.uri import s3_uri
 
-    storage = open_storage(s3_uri(BUCKET, PREFIX), area="runs", buffer_logs=True, clock=RealClock())
+    storage = open_storage(s3_uri(BUCKET, PREFIX), area="runs", buffer_logs=True, clock=RealClock(), env=os.environ)
     prior = seed(storage, "app", verstr(1), changes=CHANGES)
     storage.sync_log_to_remote("app", prior, WRITER)
     indexed_snapshot(storage, "app", wait=True, clock=FakeClock())

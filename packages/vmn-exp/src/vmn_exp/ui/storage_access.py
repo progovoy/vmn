@@ -46,8 +46,10 @@ def _deleted(store, key):
         return False
 
 
-def probe_store(uri, random, tenancy="single", opener=open_store):
-    """The capabilities the server has on the store *uri*."""
+def probe_store(uri, random, tenancy="single", opener=None, *, env):
+    """The capabilities the server has on the store *uri* (opened with
+    *opener(uri, area)*, else for the host whose environment is *env*)."""
+    opener = opener or (lambda store, area: open_store(store, area, env=env))
     probe = Probe()
     if not _can_read(uri, opener):
         probe.warnings.append(f"cannot read {uri}")

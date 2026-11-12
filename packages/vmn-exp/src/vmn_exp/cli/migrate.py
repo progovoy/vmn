@@ -52,7 +52,7 @@ def run_migrate(argv, io):
     uri = parse_store_uri(args.store)
     if uri.scheme == "file":
         return migrate_local(uri.path, "", **opts)
-    raw = open_store(uri, area=areas.RUNS)
+    raw = open_store(uri, area=areas.RUNS, env=io.env)
     return migrate_objects(raw._s3, raw.bucket, uri.path, **opts)
 
 

@@ -40,12 +40,12 @@ def local_status(local, app_name, verstr, now):
 
 
 def push_or_rename(local, target, app_name, verstr, ledger, code,
-                   registered=frozenset(), *, now):
+                   registered=frozenset(), *, now, env):
     """:func:`push_run`, renaming the run on a collision. *registered* holds
     the ``(app, verstr)`` pairs local model versions reference. A renamed
     run's :class:`Outcome` carries ``renamed_from``; a refused rename is
     :data:`SKIPPED` with the reason as ``detail``."""
-    outcome = push_run(local, target, app_name, verstr, ledger, code)
+    outcome = push_run(local, target, app_name, verstr, ledger, code, env=env)
     if outcome.status != COLLISION:
         return outcome
     meta = local.load_metadata(app_name, verstr)
@@ -57,7 +57,7 @@ def push_or_rename(local, target, app_name, verstr, ledger, code,
         _move_local(local, app_name, verstr, new, ledger, meta)
     except Exception as e:
         return Outcome(verstr, FAILED, f"rename: {e or type(e).__name__}")
-    outcome = push_run(local, target, app_name, new, ledger, code)
+    outcome = push_run(local, target, app_name, new, ledger, code, env=env)
     if fresh and outcome.status != FAILED:
         outcome.status = NEW
     outcome.renamed_from = verstr

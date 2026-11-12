@@ -1,5 +1,6 @@
 """The run-detail log cache reads metric streams too (plan 12 §5.5): a grown
 stream costs its new blocks, and the result equals a full parse."""
+import os
 import pytest
 
 from vmn_exp.core.log import load_log, metric_series
@@ -18,7 +19,7 @@ T0 = 1_767_225_600_000_001
 @pytest.fixture
 def storage(tmp_path):
     (tmp_path / ".git").mkdir()
-    s = open_storage(root=str(tmp_path), area="runs", clock=RealClock())
+    s = open_storage(root=str(tmp_path), area="runs", clock=RealClock(), env=os.environ)
     s.save(APP, V, {"verstr": V, "timestamp": "2026-01-01T00:00:00Z"}, {})
     s.append_log_entry(APP, V, "w", {"timestamp": "2026-01-01T00:00:00.000001Z",
                                      "type": "create", "params": {"lr": 0.1}})

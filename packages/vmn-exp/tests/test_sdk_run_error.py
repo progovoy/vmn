@@ -41,7 +41,7 @@ def container(tmp_path, monkeypatch):
 
 
 def _storage(store):
-    return open_storage(root=str(store), area="runs", clock=RealClock())
+    return open_storage(root=str(store), area="runs", clock=RealClock(), env=os.environ)
 
 
 def _state(store, run_id):

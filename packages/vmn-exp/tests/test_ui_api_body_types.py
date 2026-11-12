@@ -60,8 +60,8 @@ def _manager(tmp_path):
 
     checkout = tmp_path / "checkout"
     os.makedirs(checkout / ".git")
-    _seed_runs(open_storage(root=local_store_root(str(checkout)), area="runs", clock=RealClock()))
-    _seed_runs(open_storage(root=str(tmp_path / "store"), area="runs", clock=RealClock()))
+    _seed_runs(open_storage(root=local_store_root(str(checkout)), area="runs", clock=RealClock(), env=os.environ))
+    _seed_runs(open_storage(root=str(tmp_path / "store"), area="runs", clock=RealClock(), env=os.environ))
     manager = WorkspaceManager(str(tmp_path / "data"))
     manager.attach_path("ws", str(checkout))
     manager.add_store("st", f"file://{tmp_path / 'store'}")

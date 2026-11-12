@@ -5,6 +5,7 @@ What matters most is ``create_exclusive``: exactly one of several racing
 writers may claim a name, which GCS gets from ``if_generation_match=0`` and
 Azure from ``overwrite=False`` (``If-None-Match: *``).
 """
+import os
 import threading
 
 import boto3
@@ -173,7 +174,7 @@ def test_gcs_factory_builds_from_the_uri(monkeypatch):
 
     client = FakeGCSClient()
     install_fake_gcs(monkeypatch, client)
-    store = open_store("gs://bkt/team", area="runs")
+    store = open_store("gs://bkt/team", area="runs", env=os.environ)
     assert (store.bucket, store.prefix, store.scheme) == ("bkt", "team/runs", "gs")
     assert store.create_exclusive(APP, V1, _meta(V1), {})
     assert any(k.startswith("team/runs/trainer/") for k in client.bucket("bkt").objects)
@@ -184,7 +185,7 @@ def test_azure_factory_uses_the_connection_string(monkeypatch):
 
     install_fake_azure(monkeypatch)
     monkeypatch.setenv("AZURE_STORAGE_CONNECTION_STRING", "UseDevelopmentStorage=true")
-    store = open_store("az://ctr", area="runs")
+    store = open_store("az://ctr", area="runs", env=os.environ)
     assert (store.bucket, store.prefix, store.scheme) == ("ctr", "vmn/runs", "az")
     assert store.create_exclusive(APP, V1, _meta(V1), {})
     assert not store.create_exclusive(APP, V1, _meta(V1), {})
@@ -197,5 +198,5 @@ def test_azure_factory_without_credentials_explains(monkeypatch):
     monkeypatch.delenv("AZURE_STORAGE_CONNECTION_STRING", raising=False)
     monkeypatch.delenv("AZURE_STORAGE_ACCOUNT_URL", raising=False)
     with pytest.raises(ValueError) as err:
-        open_store("az://ctr/p")
+        open_store("az://ctr/p", env=os.environ)
     assert "AZURE_STORAGE_CONNECTION_STRING" in str(err.value)

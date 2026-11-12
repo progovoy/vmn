@@ -21,7 +21,7 @@ BASE = f"/api/v1/workspaces/ws/apps/{APP}/experiments/{V}"
 def storage(tmp_path):
     root = tmp_path / "repo"
     (root / ".git").mkdir(parents=True)
-    st = open_storage(root=local_store_root(str(root)), area="runs", clock=RealClock())
+    st = open_storage(root=local_store_root(str(root)), area="runs", clock=RealClock(), env=os.environ)
     st.save(APP, V, {"verstr": V, "timestamp": "2026-01-01T00:00:00Z"}, {})
     return st
 

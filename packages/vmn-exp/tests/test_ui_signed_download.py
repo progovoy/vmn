@@ -33,7 +33,7 @@ def _client(tmp_path, downloads):
     from vmn_exp.ui.workspaces import WorkspaceManager
 
     uri = s3_uri(BUCKET, PREFIX)
-    open_storage(uri, area=RUNS, clock=RealClock()).save(APP, V, {"verstr": V, "timestamp": "2026-01-01T00:00:00Z"}, {})
+    open_storage(uri, area=RUNS, clock=RealClock(), env=os.environ).save(APP, V, {"verstr": V, "timestamp": "2026-01-01T00:00:00Z"}, {})
     manager = WorkspaceManager(os.path.join(tmp_path, "ui"))
     manager.add_store("ws", uri, downloads=downloads)
     return TestClient(create_app(manager, io=real_io()))

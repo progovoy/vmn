@@ -1,6 +1,7 @@
 """A store workspace's run diff (the run page's Changes card) answers from
 the index snapshot, never reading the runs' logs: a long-stuck outer run's
 log is thousands of 30 s segments, and the card took a minute."""
+import os
 import pytest
 from test_ui_diff_summary import _log_define_metric, _log_metrics, _log_params, _save_exp
 
@@ -76,7 +77,7 @@ def test_the_store_route_answers_from_the_snapshot(tmp_path, monkeypatch):
     from vmn_exp.ui.workspaces import WorkspaceManager
 
     uri = f"file://{tmp_path / 'store'}"
-    store = open_storage(store=uri, area="runs", clock=RealClock())
+    store = open_storage(store=uri, area="runs", clock=RealClock(), env=os.environ)
     _save_exp(store, "myapp", V1)
     _first(store, V1)
     _save_exp(store, "myapp", V2, ts="2025-01-02T00:00:00Z")

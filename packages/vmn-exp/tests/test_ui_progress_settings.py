@@ -1,17 +1,18 @@
 """Plan 28 P2 + A0: an app's ``ui.progress`` settings name the metrics an
 outer run's declared progress is read from; the rollups follow a settings
 change at once (the settings are part of their memo keys)."""
+import os
+
 import pytest
 import yaml
 
 pytest.importorskip("fastapi")
 from fastapi.testclient import TestClient  # noqa: E402
-
 from vmn_exp.core.app_settings import SettingsError, parse_settings  # noqa: E402
 from vmn_exp.core.app_settings_store import write_settings  # noqa: E402
+from vmn_exp.core.real_io import RealClock, real_io
 from vmn_exp.storage.areas import RUNS  # noqa: E402
 from vmn_exp.storage.open import open_storage  # noqa: E402
-from vmn_exp.core.real_io import RealClock, real_io
 
 APP = "app"
 BASE = f"/api/v1/workspaces/ws/apps/{APP}"
@@ -39,7 +40,7 @@ def store(tmp_path):
     from vmn_exp.ui.workspaces import WorkspaceManager
 
     uri = f"file://{tmp_path}/store"
-    storage = open_storage(uri, area=RUNS, clock=RealClock())
+    storage = open_storage(uri, area=RUNS, clock=RealClock(), env=os.environ)
     manager = WorkspaceManager(str(tmp_path / "data"))
     manager.add_store("ws", uri)
     outer = _run(storage, 1, {"dates_done": 20, "dates_total": 60})

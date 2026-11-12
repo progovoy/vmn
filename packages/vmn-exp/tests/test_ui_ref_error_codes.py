@@ -22,7 +22,7 @@ def _client(tmp_path, verstrs=VERSTRS):
     from vmn_exp.ui.workspaces import WorkspaceManager
 
     uri = f"file://{tmp_path}/store"
-    storage = open_storage(uri, area=RUNS, clock=RealClock())
+    storage = open_storage(uri, area=RUNS, clock=RealClock(), env=os.environ)
     for i, v in enumerate(verstrs):
         storage.save(APP, v, {"verstr": v, "timestamp": f"2026-01-01T00:00:0{i}Z"}, {})
     manager = WorkspaceManager(os.path.join(tmp_path, "ui_data"))

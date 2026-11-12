@@ -16,7 +16,7 @@ from vmn_exp.storage.store_marker import check_store
 
 
 def open_storage(store=None, root=None, area=SNAPSHOTS, buffer_logs=False, writer=True,
-                 lent_options=None, *, clock):
+                 lent_options=None, *, clock, env):
     """*area*'s storage for *store* (a URI, or None) over the local store
     *root* (laid out ``<root>/<area>/...``).
 
@@ -26,7 +26,9 @@ def open_storage(store=None, root=None, area=SNAPSHOTS, buffer_logs=False, write
     reader has no use for it.
 
     *clock* (a :class:`~vmn_exp.core.ports.Clock`) stamps the change journal
-    and times a log buffer's flush interval.
+    and times a log buffer's flush interval. *env* (the host's environment)
+    is what the backends resolve their per-host dirs (index cache, log
+    buffers) and credentials from.
 
     A *writer* checks each root's ``store.yml`` now (store_marker), creating
     it when absent; readers check lazily (``store_marker.require_store``).
@@ -34,17 +36,17 @@ def open_storage(store=None, root=None, area=SNAPSHOTS, buffer_logs=False, write
     *lent_options* (``{scheme: URI options}``): what a storage with no remote
     lends absolute downloads in its place (:class:`CachedSnapshotStorage`).
     """
-    raw = open_store(store, area=area) if store else None
+    raw = open_store(store, area=area, env=env) if store else None
     if writer and raw is not None:
         check_store(raw, writer)
     if writer and root and (raw is None or raw.is_remote()):
-        check_store(LocalSnapshotStorage(root, area), writer)
+        check_store(LocalSnapshotStorage(root, area, env=env), writer)
     journal_clock = wall_seconds(clock)
     remote = journaled(raw, clock=journal_clock) if raw is not None else None
     if remote is not None and not remote.is_remote():
         return CachedSnapshotStorage(remote, None, lent_options)
     if root:
-        local = LocalSnapshotStorage(root, area)
+        local = LocalSnapshotStorage(root, area, env=env)
         return CachedSnapshotStorage(local if remote else journaled(local, clock=journal_clock), remote,
                                      lent_options)
     if remote is None:
@@ -54,8 +56,8 @@ def open_storage(store=None, root=None, area=SNAPSHOTS, buffer_logs=False, write
         )
     if buffer_logs:
         from vmn_exp.storage.buffered import BufferedRemoteStorage
-        from vmn_exp.storage.host_dirs import log_buffers_dir, process_env
+        from vmn_exp.storage.host_dirs import log_buffers_dir
 
-        return BufferedRemoteStorage(remote, log_buffers_dir(remote.cache_identity(), process_env()), area=area,
+        return BufferedRemoteStorage(remote, log_buffers_dir(remote.cache_identity(), env), area=area,
                                      clock=clock)
     return remote

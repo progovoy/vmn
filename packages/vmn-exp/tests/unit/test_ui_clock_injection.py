@@ -130,7 +130,7 @@ class BackgroundRefresher:
 
 def _source(tmp_path, clock):
     return ExperimentSource(str(tmp_path / "data"), refresher=BackgroundRefresher(), clock=clock,
-                            processes=FakeProcesses())
+                            processes=FakeProcesses(), env=FakeEnv())
 
 
 def test_settings_are_rechecked_after_recheck_sec_on_the_given_clock(tmp_path):

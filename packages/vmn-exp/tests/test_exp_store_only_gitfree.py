@@ -2,6 +2,7 @@
 ``similar-backfill``) outside a git checkout: like ``prune``, they take the
 store from the store flags / ``VMN_EXPERIMENT_*`` and the app from the
 positional name — no ``--from-snapshot`` needed."""
+import os
 import pytest
 import yaml
 
@@ -23,7 +24,7 @@ def _finished():
 def store_root(tmp_path, monkeypatch):
     """An outer run whose child lost its marker, in a store next to no checkout."""
     root = tmp_path / "exps"
-    storage = open_storage(None, str(root), area="runs", clock=RealClock())
+    storage = open_storage(None, str(root), area="runs", clock=RealClock(), env=os.environ)
     outer = create_run(storage, APP, CODE, {"timestamp": "2026-01-01T00:00:00Z"}, {})
     kid = create_run(storage, APP, CODE, {"timestamp": "2026-01-01T00:00:01Z"}, {},
                      parent=outer)
@@ -40,7 +41,7 @@ def store_root(tmp_path, monkeypatch):
 
 
 def _children(root, outer):
-    return open_storage(None, str(root), area="runs", clock=RealClock()).list_children(APP, outer)
+    return open_storage(None, str(root), area="runs", clock=RealClock(), env=os.environ).list_children(APP, outer)
 
 
 def test_backfill_children_without_a_checkout_takes_the_store_flag(store_root, capfd):

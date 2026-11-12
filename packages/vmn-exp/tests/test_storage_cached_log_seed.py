@@ -4,6 +4,7 @@ host — all under one writer id) appends without losing the remote's entries:
 each copy appends to a stream of its own (``<writer>~<owner>``), which only
 its own file ever ships to.
 """
+import os
 import pytest
 from s3_helpers import cached_host, meta, mocked_bucket, raw_keys, s3_storage
 from vmn_exp.core import writer
@@ -147,7 +148,7 @@ def test_a_local_copy_dropped_under_a_live_cache_keeps_the_remote_entries(tmp_pa
 def _finished_buffered_pod(lines):
     """A direct-to-S3 pod whose run logged *lines* and finished: shipped,
     compacted, its buffer dropped."""
-    pod = open_storage(s3_uri("vmn-bucket", "exps"), area="runs", buffer_logs=True, clock=RealClock())
+    pod = open_storage(s3_uri("vmn-bucket", "exps"), area="runs", buffer_logs=True, clock=RealClock(), env=os.environ)
     assert pod.create_exclusive(APP, V, meta(V), {})
     for i, text in enumerate(lines):
         _append(pod, text, i)

@@ -24,7 +24,7 @@ def _storage_with_run(tmp_path):
     os.makedirs(path)
     with open(os.path.join(path, "metadata.yml"), "w") as f:
         yaml.dump({"format_version": 1, **{"verstr": RUN, "timestamp": "2026-09-21T12:00:01Z"}}, f)
-    return open_storage(root=local_store_root(str(tmp_path)), area="runs", clock=RealClock())
+    return open_storage(root=local_store_root(str(tmp_path)), area="runs", clock=RealClock(), env=os.environ)
 
 
 def test_no_ref_means_no_parent(tmp_path):

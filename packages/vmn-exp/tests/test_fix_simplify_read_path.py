@@ -92,7 +92,7 @@ def test_subtree_status_reads_each_subtree_run_once_and_knows_its_depth():
 def _storage(tmp_path):
     root = tmp_path / "repo"
     (root / ".git").mkdir(parents=True, exist_ok=True)
-    return str(root), open_storage(root=local_store_root(str(root)), area="runs", clock=RealClock())
+    return str(root), open_storage(root=local_store_root(str(root)), area="runs", clock=RealClock(), env=os.environ)
 
 
 def _runs(storage, n, loss=0.1):
@@ -250,9 +250,9 @@ def test_one_s3_storage_per_workspace(s3_ws, monkeypatch):
     built = []
     real = server_mod.workspace_storage
 
-    def counted(ws, clock):
+    def counted(ws, clock, env):
         built.append(ws.store)
-        return real(ws, clock)
+        return real(ws, clock, env)
 
     monkeypatch.setattr(server_mod, "workspace_storage", counted)
     client = TestClient(server_mod.create_app(s3_ws, io=real_io()))

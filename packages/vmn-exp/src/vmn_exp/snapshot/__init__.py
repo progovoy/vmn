@@ -41,7 +41,7 @@ def _get_storage(vcs, params, clock, env):
     storage_params = {key: params.get(key) for key in STORAGE_ENV}
     merge_conf_into_params(vcs, storage_params, env)
     return open_storage(store_uri(storage_params), local_store_root(vcs.vmn_root_path),
-                        area=SNAPSHOTS, clock=clock)
+                        area=SNAPSHOTS, clock=clock, env=env)
 
 
 def _restore_with_safety_net(vcs, params, metadata, patches):

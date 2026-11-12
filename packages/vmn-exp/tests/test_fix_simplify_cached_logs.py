@@ -27,7 +27,7 @@ def _host(tmp_path, name):
     return open_storage(
         s3_uri(BUCKET, "exp"),
         root=str(tmp_path / name),
-        area="runs", clock=RealClock(),
+        area="runs", clock=RealClock(), env=os.environ,
     )
 
 

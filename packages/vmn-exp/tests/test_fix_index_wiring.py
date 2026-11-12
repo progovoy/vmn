@@ -137,7 +137,7 @@ def test_workspace_index_folds_an_append_without_reloading_logs(app_layout, log_
 
     _bootstrap(app_layout)
     first = _create(app_layout, "--metrics", "loss=0.4")
-    index = WorkspaceIndex(app_layout.repo_path, db_dir=str(tmp_path / "idx"), processes=RealProcesses(), clock=RealClock())
+    index = WorkspaceIndex(app_layout.repo_path, db_dir=str(tmp_path / "idx"), processes=RealProcesses(), clock=RealClock(), env=os.environ)
     assert index.snapshot(app_layout.app_name).rows[0]["metrics"]["loss"] == 0.4
 
     log_reads.clear()
@@ -146,7 +146,7 @@ def test_workspace_index_folds_an_append_without_reloading_logs(app_layout, log_
     assert log_reads == []
 
     # A new server process over the same data dir starts warm.
-    restarted = WorkspaceIndex(app_layout.repo_path, db_dir=str(tmp_path / "idx"), processes=RealProcesses(), clock=RealClock())
+    restarted = WorkspaceIndex(app_layout.repo_path, db_dir=str(tmp_path / "idx"), processes=RealProcesses(), clock=RealClock(), env=os.environ)
     assert restarted.snapshot(app_layout.app_name).rows[0]["metrics"]["loss"] == 0.03
     assert log_reads == []
 

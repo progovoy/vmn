@@ -1,6 +1,7 @@
 """Searching an index file (vmn_exp.core.similar_corpus.file_scope): one app's
 runs of a file several apps share, documents another profile version filed
 refiled first, and a rebuilt file searched once its pointer flips."""
+import os
 import sqlite3
 
 import pytest
@@ -15,7 +16,7 @@ from vmn_exp.core.real_io import RealClock
 
 @pytest.fixture
 def storage(tmp_path):
-    return open_storage(root=str(tmp_path / "store"), area="runs", clock=RealClock())
+    return open_storage(root=str(tmp_path / "store"), area="runs", clock=RealClock(), env=os.environ)
 
 
 def _text(text):

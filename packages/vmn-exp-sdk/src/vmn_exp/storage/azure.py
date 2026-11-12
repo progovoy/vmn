@@ -13,7 +13,6 @@ in the URL).
 import functools
 import inspect
 import logging
-import os
 
 from vmn_exp.storage.object_client import BAD_RANGE, Body, ObjectClient, ObjectStoreError
 from vmn_exp.storage.registry import default_prefix, missing_extra
@@ -135,13 +134,13 @@ class AzureSnapshotStorage(S3SnapshotStorage):
 
     def __init__(self, container_name, prefix="vmn/snapshots", container=None,
                  if_not_modified=None, client_factory=None, options=None,
-                 supports_start_from=False):
+                 supports_start_from=False, *, env=None):
         """*client_factory* (an :class:`AzureObjectClient` builder, used
         instead of *container*) builds the client again in a forked child."""
         client = None if client_factory else AzureObjectClient(
             container, if_not_modified, supports_start_from=supports_start_from)
         super().__init__(container_name, prefix=prefix, client=client,
-                         client_factory=client_factory, options=options)
+                         client_factory=client_factory, options=options, env=env)
 
 
 def _sdk():
@@ -168,11 +167,11 @@ def takes_start_from(list_operation):
     return "start_from" in inspect.signature(list_operation).parameters
 
 
-def _container_client(container_cls, name, account_url):
-    conn = os.environ.get("AZURE_STORAGE_CONNECTION_STRING")
+def _container_client(container_cls, name, account_url, env):
+    conn = env.get("AZURE_STORAGE_CONNECTION_STRING")
     if conn:
         return container_cls.from_connection_string(conn, name)
-    account_url = account_url or os.environ.get("AZURE_STORAGE_ACCOUNT_URL")
+    account_url = account_url or env.get("AZURE_STORAGE_ACCOUNT_URL")
     if not account_url:
         raise ValueError(
             "Azure storage needs an account: set AZURE_STORAGE_CONNECTION_STRING, "
@@ -189,15 +188,15 @@ def _default_credential():
     return DefaultAzureCredential()
 
 
-def _default_adapter(name, account_url):
+def _default_adapter(name, account_url, env):
     """A client of its own: container client, credential and token cache."""
     container_cls, match = _sdk()
-    return AzureObjectClient(_container_client(container_cls, name, account_url),
+    return AzureObjectClient(_container_client(container_cls, name, account_url, env),
                              match.IfNotModified, supports_start_from=sdk_sends_start_from())
 
 
-def open_azure_store(uri, area):
+def open_azure_store(uri, area, env):
     factory = functools.partial(_default_adapter, uri.location,
-                                uri.options.get("account_url"))
+                                uri.options.get("account_url"), env)
     return AzureSnapshotStorage(uri.location, prefix=default_prefix(uri, area),
-                                client_factory=factory, options=uri.options)
+                                client_factory=factory, options=uri.options, env=env)

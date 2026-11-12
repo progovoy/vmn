@@ -1,6 +1,7 @@
 """`vmn-exp prune` outside a git checkout: the store comes from the store
 flags / ``VMN_EXPERIMENT_*`` variables, the app from the positional name —
 no ``--from-snapshot`` needed."""
+import os
 import pytest
 import yaml
 
@@ -20,7 +21,7 @@ def _finished():
 @pytest.fixture
 def store_root(tmp_path, monkeypatch):
     root = tmp_path / "exps"
-    storage = open_storage(None, str(root), area="runs", clock=RealClock())
+    storage = open_storage(None, str(root), area="runs", clock=RealClock(), env=os.environ)
     for i, verstr in enumerate(RUNS):
         storage.save(APP, verstr, {"verstr": verstr,
                                    "timestamp": f"2026-01-01T00:00:0{i}Z"}, {})
@@ -35,7 +36,7 @@ def store_root(tmp_path, monkeypatch):
 
 
 def _left(root):
-    storage = open_storage(None, str(root), area="runs", clock=RealClock())
+    storage = open_storage(None, str(root), area="runs", clock=RealClock(), env=os.environ)
     return [v for v in RUNS if storage.exists(APP, v)]
 
 

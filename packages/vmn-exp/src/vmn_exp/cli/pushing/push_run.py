@@ -71,12 +71,13 @@ def require_push_target(target):
         raise ValueError(f"The store {type(target).__name__} cannot be pushed to")
 
 
-def push_run(local, target, app_name, verstr, ledger=None, code=None):
+def push_run(local, target, app_name, verstr, ledger=None, code=None, *, env):
     """Push local run *verstr* of *app_name* from *local* (a
     ``LocalSnapshotStorage``) to *target* under the same name; returns an
     :class:`Outcome`. Pass one *ledger* (:class:`PushLedger`) and one *code*
-    (:class:`CodePusher`) for every run of a push; both default per call."""
-    ledger = ledger or PushLedger.for_target(local, app_name, target)
+    (:class:`CodePusher`) for every run of a push; both default per call (the
+    ledger under the state dir of the host whose environment is *env*)."""
+    ledger = ledger or PushLedger.for_target(local, app_name, target, env)
     code = code or CodePusher(local, target, app_name)
     meta = local.load_metadata(app_name, verstr)
     if meta is None:

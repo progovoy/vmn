@@ -31,7 +31,7 @@ def seeded(tmp_path_factory):
         root, runs=60, sweeps=2, inner_per_sweep=5, max_metric_keys=30,
         max_steps=500, max_params=20, rng_seed=7, workers=2,
     )
-    storage = open_storage(root=local_store_root(root), area="runs", clock=RealClock())
+    storage = open_storage(root=local_store_root(root), area="runs", clock=RealClock(), env=os.environ)
     rows = list_runs(APP, storage=storage, include_archived=True)
     return root, counts, storage, rows
 
@@ -146,7 +146,7 @@ def test_nan_and_inf_metrics_are_kept_somewhere(tmp_path):
     root = _root(tmp_path)
     seeder.seed(root, runs=400, sweeps=0, inner_per_sweep=0, max_metric_keys=10,
                 max_steps=50, max_params=5, workers=1)
-    storage = open_storage(root=local_store_root(root), area="runs", clock=RealClock())
+    storage = open_storage(root=local_store_root(root), area="runs", clock=RealClock(), env=os.environ)
     values = [v for r in list_runs(APP, storage=storage, include_archived=True)
               for v in r["metrics"].values()]
     assert any(isinstance(v, float) and not math.isfinite(v) for v in values)

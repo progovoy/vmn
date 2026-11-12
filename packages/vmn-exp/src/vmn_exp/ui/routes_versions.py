@@ -36,7 +36,7 @@ def register(app, prefix, ctx):
                     )
             else:
                 result, err = diff_reader.cached_experiment_diff(
-                    ws.path, app_name, v, to, schema=schema, clock=ctx.clock
+                    ws.path, app_name, v, to, schema=schema, clock=ctx.clock, env=ctx.env
                 )
         except diff_reader.DiffBusy:
             raise HTTPException(429, "Too many diffs in progress; retry shortly")

@@ -52,7 +52,7 @@ def _exported(app_layout, capfd, tmp_path):
 
 
 def _git_free_run(tree, tmp_path, meta_path=None):
-    storage = open_storage(root=str(tmp_path / "pod-store"), area="runs", clock=RealClock())
+    storage = open_storage(root=str(tmp_path / "pod-store"), area="runs", clock=RealClock(), env=os.environ)
     verstr, err = create_from_snapshot(storage, None, meta_path or tree)
     assert err is None
     app = yaml.safe_load(open(os.path.join(tree, "vmn_metadata.yml")))["app_name"]

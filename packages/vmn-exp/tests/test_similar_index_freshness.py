@@ -1,6 +1,7 @@
 """Plan 25 §2: a similar search over the persisted index is as fresh as a
 refresh — a run edited in place since the index was last saved is searched
 as it now is, not only runs created or removed since."""
+import os
 import pytest
 from fakes.clock import FakeClock
 from similar_seed import WRITER, seed, verstr
@@ -20,7 +21,7 @@ def root(tmp_path):
 def _fresh(root, monkeypatch):
     """A new process's storage over the same store and index."""
     monkeypatch.setattr(experiment_index, "_SHARED", {})
-    return open_storage(root=root, area="runs", clock=RealClock())
+    return open_storage(root=root, area="runs", clock=RealClock(), env=os.environ)
 
 
 def _found(storage, text):
@@ -29,7 +30,7 @@ def _found(storage, text):
 
 
 def test_a_search_sees_an_intent_edited_since_the_index_was_saved(root, monkeypatch):
-    storage = open_storage(root=root, area="runs", clock=RealClock())
+    storage = open_storage(root=root, area="runs", clock=RealClock(), env=os.environ)
     a = seed(storage, APP, verstr(1), intent={"text": "focal loss for imbalance"})
     seed(storage, APP, verstr(2), intent={"text": "label smoothing"})
     assert _found(storage, "focal loss") == [a]  # indexes the app

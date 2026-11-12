@@ -1,5 +1,6 @@
 """Plan 11 §5.2 / phase 2c: the ui reads one change journal per workspace and
 routes its entries by ``(area, app)`` to the watched indexes' ``hint``."""
+import os
 import time
 
 import pytest
@@ -140,9 +141,9 @@ def test_the_refresher_shows_a_new_run_through_the_journal(tmp_path):
     from vmn_exp.core.index import ExperimentIndex
 
     root = str(tmp_path / "store")
-    writer = open_storage(None, root, area="runs", clock=RealClock())
+    writer = open_storage(None, root, area="runs", clock=RealClock(), env=os.environ)
     _write(writer, "app", "1.0.0-dev.a")
-    reader = open_storage(None, root, area="runs", writer=False, clock=RealClock())
+    reader = open_storage(None, root, area="runs", writer=False, clock=RealClock(), env=os.environ)
     index = ExperimentIndex(reader, "app", full_sweep_sec=3600)
     journal = _journal(journal_list_fn(reader))
     refresher = Refresher(interval_sec=0.02, idle_sec=60, clock=time.monotonic)
