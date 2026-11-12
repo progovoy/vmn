@@ -1,9 +1,12 @@
 """Scale guard for leaderboard polls at 5k runs: once warm, a list request
 must not list every record's files, and the status/tree/filter/sort pipeline
 runs at most once per index generation. Counts calls instead of timing, so it
-cannot flake on a loaded box."""
+cannot flake on a loaded box. The refresher's warm-up of a new snapshot runs
+on its own thread, off the request path, and may still be running when the
+polls start: its work is not counted."""
 import json
 import os
+import threading
 import time
 
 import pytest
@@ -19,7 +22,12 @@ from vmn_exp.core.real_io import real_io
 APP = "app"
 RUNS = 5000
 REQUESTS = 20
+WARM_THREAD = "vmn-ui-warm"
 BASE = f"/api/v1/workspaces/ws/apps/{APP}/experiments"
+
+
+def _on_request_path():
+    return threading.current_thread().name != WARM_THREAD
 
 
 def _seed(root):
@@ -45,8 +53,9 @@ def listed(monkeypatch):
 
     def counted(self, app_name, keys=None):
         files = real(self, app_name, keys=keys)
-        counts["full"] += keys is None
-        counts["records"] += len(files)
+        if _on_request_path():
+            counts["full"] += keys is None
+            counts["records"] += len(files)
         return files
 
     monkeypatch.setattr(LocalSnapshotStorage, "list_files", counted)
@@ -59,11 +68,11 @@ def pipeline(monkeypatch):
     real_tree, real_sort = leaderboard_cache.annotate_rows, leaderboard_cache.sort_rows
 
     def tree(*a, **kw):
-        calls["annotate"] += 1
+        calls["annotate"] += _on_request_path()
         return real_tree(*a, **kw)
 
     def sort(*a, **kw):
-        calls["sort"] += 1
+        calls["sort"] += _on_request_path()
         return real_sort(*a, **kw)
 
     monkeypatch.setattr(leaderboard_cache, "annotate_rows", tree)
