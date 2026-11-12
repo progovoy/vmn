@@ -160,3 +160,32 @@ def test_fetch_all_rows_filters_by_query(server):
 
     assert sorted(by_name(rows)) == sorted(LIVE_NAMES)
     assert status_counts(rows) == {"running": EXPECTED["running"]}
+
+
+def _answers_indexing_first(answers):
+    """A client of a board answering ``indexing`` (no rows yet) until its
+    *answers*-th request, then every row of three in pages."""
+    import httpx
+    rows = [{"verstr": f"v{i}", "name": f"n{i}", "status": "succeeded"} for i in range(3)]
+    asked = []
+
+    def handle(request):
+        asked.append(request.url)
+        if len(asked) < answers:
+            return httpx.Response(200, json={"rows": [], "total": 0,
+                                             "indexing": {"loaded": 0, "total": None}})
+        offset, limit = int(request.url.params["offset"]), int(request.url.params["limit"])
+        return httpx.Response(200, json={"rows": rows[offset:offset + limit], "total": len(rows)})
+
+    return lambda base_url, token: httpx.Client(base_url="http://ui/api/v1",
+                                                transport=httpx.MockTransport(handle))
+
+
+def test_fetch_all_rows_waits_out_a_loading_index(monkeypatch):
+    """A cold index answers at once with no rows, saying ``indexing``: that is
+    not the whole board, so the fetch waits for the loaded one."""
+    monkeypatch.setattr(probe_mod, "_client", _answers_indexing_first(3))
+
+    rows = fetch_all_rows("http://ui", "ws", APP, page_size=2, poll_sec=0)
+
+    assert sorted(by_name(rows)) == ["n0", "n1", "n2"]

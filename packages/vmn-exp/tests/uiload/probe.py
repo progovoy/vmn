@@ -181,27 +181,43 @@ def freshness_lag(rows, now=None):
     return max(0.0, (now or time.time()) - max(stamps)) if stamps else None
 
 
-def fetch_all_rows(base_url, ws, app, token=None, page_size=MAX_PAGE, archived=False, query=None):
+def fetch_all_rows(base_url, ws, app, token=None, page_size=MAX_PAGE, archived=False, query=None,
+                   poll_sec=0.5, timeout=600):
     """Every row of the app's leaderboard (or those matching *query*), paged in
     storage order (new runs append at the end, so a concurrent writer can't
-    shift earlier pages); de-duplicated by verstr."""
-    rows, seen, offset = [], set(), 0
+    shift earlier pages); de-duplicated by verstr. A page saying ``indexing``
+    is of a board still loading, not the whole one: the fetch starts over
+    every *poll_sec* until the index has loaded (TimeoutError after *timeout*)."""
     params = {"limit": min(page_size, MAX_PAGE)}
     if archived:
         params["archived"] = 1
     if query:
         params["q"] = query
+    deadline = time.monotonic() + timeout
     with _client(base_url, token) as client:
         while True:
-            body = client.get(f"{app_path(ws, app)}/experiments",
-                              params=dict(params, offset=offset)).raise_for_status().json()
-            for row in body["rows"]:
-                if row["verstr"] not in seen:
-                    seen.add(row["verstr"])
-                    rows.append(row)
-            offset += len(body["rows"])
-            if not body["rows"] or offset >= body["total"]:
+            rows = _all_pages(client, f"{app_path(ws, app)}/experiments", params)
+            if rows is not None:
                 return rows
+            if time.monotonic() > deadline:
+                raise TimeoutError(f"index not loaded after {timeout}s")
+            time.sleep(poll_sec)
+
+
+def _all_pages(client, url, params):
+    """Every row, page by page; None as soon as a page says ``indexing``."""
+    rows, seen, offset = [], set(), 0
+    while True:
+        body = client.get(url, params=dict(params, offset=offset)).raise_for_status().json()
+        if "indexing" in body:
+            return None
+        for row in body["rows"]:
+            if row["verstr"] not in seen:
+                seen.add(row["verstr"])
+                rows.append(row)
+        offset += len(body["rows"])
+        if not body["rows"] or offset >= body["total"]:
+            return rows
 
 
 def status_counts(rows):
