@@ -22,6 +22,7 @@ from vmn_exp.cli.run import (  # noqa: F401
 from vmn_exp.cli.exp_parser.actions import MANAGE_ACTIONS
 from vmn_exp.cli.exp_parser.ownership import refuse_usage_errors
 from vmn_exp.cli.intent_arg import read_intent
+from vmn_exp.cli.snapshot_arg import from_snapshot_metadata
 from vmn_exp.core.storage_resolve import _get_experiment_storage, store_uri
 from vmn_exp.storage.store_marker import require_store
 from vmn_exp.gitmode.coldstart import cold_start_notice, init_tracking
@@ -146,13 +147,14 @@ def _new_app_guard_error(app_name, other_apps):
     )
 
 
-def _resolve_parent(storage, app_name, args):
-    """``--parent``, else the enclosing run's ``VMN_EXPERIMENT_ID``: ``(parent, err)``."""
+def _resolve_parent(storage, app_name, args, env):
+    """``--parent``, else the enclosing run's ``VMN_EXPERIMENT_ID`` in *env*:
+    ``(parent, err)``."""
     return resolve_parent(
         storage,
         app_name,
         getattr(args, "parent", None),
-        os.environ.get("VMN_EXPERIMENT_ID"),
+        env.get("VMN_EXPERIMENT_ID"),
     )
 
 
@@ -292,10 +294,7 @@ def handle_experiment(vmn_ctx, io):
     params = experiment_storage_params(vcs, args)
 
     # Auto-init for create/run (zero-setup cold start), unless from_snapshot mode.
-    from_snapshot = getattr(args, "from_snapshot", None) or os.environ.get(
-        "VMN_SNAPSHOT_METADATA"
-    )
-    if action in ("create", "run") and not from_snapshot:
+    if action in ("create", "run") and not from_snapshot_metadata(args, io.env):
         # A bad intent must fail before the cold start stamps a baseline.
         if read_intent(args)[1]:
             return 1
@@ -313,7 +312,8 @@ def handle_experiment(vmn_ctx, io):
         return experiment_manage(_app_name(vcs, args), storage, args)
     if action == "create":
         return experiment_create(vcs, params, storage, args,
-                                 repo_lock=getattr(vmn_ctx, "repo_lock", None), clock=io.clock)
+                                 repo_lock=getattr(vmn_ctx, "repo_lock", None), clock=io.clock,
+                                 env=io.env)
     elif action == "run":
         return experiment_run(
             vcs, params, storage, args, repo_lock=getattr(vmn_ctx, "repo_lock", None), io=io

@@ -92,7 +92,7 @@ OTHER_PROBES = {
     'drift': 1, 'dry_run': 4, 'dtype': 1, 'end_time': 1, 'evals_result_': 1, 'expect': 1,
     'experiment': 2,
     'experiment_dir': 2, 'file': 2, 'find_spec': 1, 'force': 2, 'fork_from': 1, 'fork_step': 1,
-    'from_journal': 1, 'from_snapshot': 4, 'frozen': 1, 'full_listing_due': 1, 'full_log': 2,
+    'from_journal': 1, 'from_snapshot': 2, 'frozen': 1, 'full_listing_due': 1, 'full_log': 2,
     'generation': 1, 'get_params': 1, 'getuid': 1, 'global_step': 1, 'heartbeat_interval': 1,
     'history': 1, 'hparams': 1, 'id': 1, 'include_deleted': 1, 'inputs': 4, 'intent': 1,
     'intent_file': 1, 'interval_sec': 1, 'is_world_process_zero': 1, 'item': 2, 'journal_at': 1,

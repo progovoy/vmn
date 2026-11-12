@@ -10,6 +10,7 @@ from vmn_exp.cli.define_metric_args import define_metric_entry
 from vmn_exp.cli.finish_args import apply_finish, finish_flags_error
 from vmn_exp.cli.intent_arg import append_intent, read_intent
 from vmn_exp.cli.run import _parse_metrics
+from vmn_exp.cli.snapshot_arg import from_snapshot_metadata
 from vmn_exp.core.app_conf import experiment_conf
 from vmn_exp.core.from_snapshot import (
     create_from_snapshot as _experiment_create_from_snapshot,
@@ -28,21 +29,20 @@ from version_stamp.api import VMN_LOGGER, measure_runtime_decorator
 
 
 @measure_runtime_decorator
-def experiment_create(vcs, params, storage, args, repo_lock=None, *, clock):
+def experiment_create(vcs, params, storage, args, repo_lock=None, *, clock, env):
     """Create a run; ``repo_lock`` is the per-repo lock the CLI entry point
     acquired, handed back once the run is written (see :func:`experiment_run`);
-    the similar-runs hint runs on *clock*."""
+    the similar-runs hint runs on *clock*; the snapshot and parent default to
+    *env*'s ``VMN_SNAPSHOT_METADATA`` and ``VMN_EXPERIMENT_ID``."""
     from vmn_exp.cli import experiment as _exp
 
     extra = {}
     if getattr(args, "file", None):
         extra.update(_exp._parse_notes_file(args.file))
 
-    from_snapshot = getattr(args, "from_snapshot", None) or os.environ.get(
-        "VMN_SNAPSHOT_METADATA"
-    )
+    from_snapshot = from_snapshot_metadata(args, env)
     app_name = _exp._app_name(vcs, args)
-    parent, err = _exp._resolve_parent(storage, app_name, args)
+    parent, err = _exp._resolve_parent(storage, app_name, args, env)
     if err is not None:
         return err
     source, err = fork.fork_source(storage, app_name, args)

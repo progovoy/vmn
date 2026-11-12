@@ -15,8 +15,8 @@ TIMEOUT_SEC = 30
 PENDING = ("authorization_pending", "slow_down")
 
 
-def credentials_path():
-    base = os.environ.get("XDG_CONFIG_HOME") or os.path.join(os.path.expanduser("~"), ".config")
+def credentials_path(env):
+    base = env.get("XDG_CONFIG_HOME") or os.path.join(os.path.expanduser("~"), ".config")
     return os.path.join(base, "vmn-exp", "credentials")
 
 
@@ -24,19 +24,19 @@ def _server_key(server):
     return server.rstrip("/")
 
 
-def _read_credentials():
+def _read_credentials(env):
     try:
-        with open(credentials_path()) as f:
+        with open(credentials_path(env)) as f:
             return json.load(f)
     except (OSError, ValueError):
         return {"servers": {}}
 
 
-def save_token(server, token, expires_at=0):
-    creds = _read_credentials()
+def save_token(server, token, expires_at=0, *, env):
+    creds = _read_credentials(env)
     creds.setdefault("servers", {})[_server_key(server)] = {
         "token": token, "expires_at": expires_at}
-    path = credentials_path()
+    path = credentials_path(env)
     os.makedirs(os.path.dirname(path), mode=0o700, exist_ok=True)
     tmp = f"{path}.{os.getpid()}.tmp"
     fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
@@ -45,8 +45,8 @@ def save_token(server, token, expires_at=0):
     os.replace(tmp, path)
 
 
-def load_token(server):
-    entry = _read_credentials().get("servers", {}).get(_server_key(server))
+def load_token(server, env):
+    entry = _read_credentials(env).get("servers", {}).get(_server_key(server))
     return entry["token"] if entry else None
 
 
@@ -80,7 +80,7 @@ def _poll(server, start, post_json, sleep):
     return None, "expired_token"
 
 
-def login(server, post_json=urllib_post_json, sleep=time.sleep, *, say):
+def login(server, post_json=urllib_post_json, sleep=time.sleep, *, say, env):
     server = _server_key(server)
     status, start = post_json(f"{server}/auth/device/start", {})
     if status != 200:
@@ -92,8 +92,8 @@ def login(server, post_json=urllib_post_json, sleep=time.sleep, *, say):
     if error:
         say(f"Login failed: {error}")
         return 1
-    save_token(server, body["token"], body.get("expires_at", 0))
-    say(f"Logged in to {server}; token saved in {credentials_path()}")
+    save_token(server, body["token"], body.get("expires_at", 0), env=env)
+    say(f"Logged in to {server}; token saved in {credentials_path(env)}")
     return 0
 
 
@@ -101,4 +101,4 @@ def run_login(argv, io):
     parser = argparse.ArgumentParser(prog="vmn-exp login", description=__doc__.split("\n")[0])
     parser.add_argument("--server", required=True, help="the vmn-exp server URL")
     args = parser.parse_args(argv)
-    return login(args.server, post_json=urllib_post_json, say=io.console.err)
+    return login(args.server, post_json=urllib_post_json, say=io.console.err, env=io.env)

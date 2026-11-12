@@ -152,8 +152,8 @@ def _execute(vcs, params, storage, args, source, repo_lock, io):
             cwd, err = _child_dir(workdir, source.invocation.cwd)
             if err:
                 return _refuse(source, err)
-            env = _capture_env(vcs, storage, args, source, io.clock.now())
-            verstr, err = _claim(vcs, storage, args, source, env)
+            captured = _capture_env(vcs, storage, args, source, io.clock.now())
+            verstr, err = _claim(vcs, storage, args, source, captured, io.env)
             if err is not None:
                 return err
         if repo_lock is not None:
@@ -192,11 +192,12 @@ def _child_dir(workdir, rel_cwd):
     return path, None
 
 
-def _claim(vcs, storage, args, source, env):
-    """``(new verstr, None)`` or ``(None, exit code)``."""
+def _claim(vcs, storage, args, source, captured, env):
+    """``(new verstr, None)`` or ``(None, exit code)``; *captured* is the
+    environment the rerun records, *env* the one it runs in."""
     import vmn_exp.cli.experiment as cli
 
-    parent, err = cli._resolve_parent(storage, source.app_name, args)
+    parent, err = cli._resolve_parent(storage, source.app_name, args, env)
     if err is not None:
         return None, err
     note = args.note or f"rerun of {source.verstr}"
@@ -207,7 +208,7 @@ def _claim(vcs, storage, args, source, env):
     verstr = create_run(
         storage, source.app_name, source.code_verstr, template, {}, note=note,
         create_data=_create_data(source, args), parent=parent,
-        name=args.run_name, env=env,
+        name=args.run_name, env=captured,
         features=rerun_features(vcs, source.log, source.metadata, source.patches),
     )
     cli._append_inputs(storage, source.app_name, verstr, args.inputs)

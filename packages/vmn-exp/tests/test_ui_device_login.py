@@ -88,7 +88,7 @@ def test_login_writes_a_0600_credentials_file_with_a_working_token(tmp_path, mon
     client, cp = _server(tmp_path, FakeDeviceIdP(pending_polls=2))
     prompts = []
     code = login_cli.login(SERVER, post_json=_transport(client),
-                           sleep=lambda s: None, say=prompts.append)
+                           sleep=lambda s: None, say=prompts.append, env=real_io().env)
     assert code == 0
     assert any("ABCD-EFGH" in p and "/activate" in p for p in prompts)
     path = tmp_path / "home" / ".config" / "vmn-exp" / "credentials"
@@ -97,7 +97,7 @@ def test_login_writes_a_0600_credentials_file_with_a_working_token(tmp_path, mon
     assert token.startswith("vmnx_")
     r = client.get("/api/v1/workspaces", headers={"Authorization": f"Bearer {token}"})
     assert r.status_code == 200
-    assert login_cli.load_token(SERVER) == token
+    assert login_cli.load_token(SERVER, real_io().env) == token
     logins = [e for e in AuditLog(cp, time.time, random=RealRandom()).entries() if e["action"] == "login"]
     assert logins and logins[-1]["actor"] == "oidc:u1"
 
@@ -106,11 +106,11 @@ def test_login_token_carries_groups_not_roles(tmp_path, monkeypatch):
     monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "xdg"))
     client, cp = _server(tmp_path, FakeDeviceIdP(pending_polls=0))
     assert login_cli.login(SERVER, post_json=_transport(client),
-                           sleep=lambda s: None, say=lambda m: None) == 0
+                           sleep=lambda s: None, say=lambda m: None, env=real_io().env) == 0
     from vmn_exp.ui.auth.authz import effective_role
     from vmn_exp.ui.auth.tokens import TokenService
 
-    token = login_cli.load_token(SERVER)
+    token = login_cli.load_token(SERVER, real_io().env)
     principal = TokenService(cp, time.time, random=RealRandom()).verify(token)
     assert principal.roles == {} and principal.groups == ("ml-team",)
     assert principal.id.startswith("token:")
@@ -146,7 +146,7 @@ auth:
     client, cp = _server(tmp_path, FakeDeviceIdP(pending_polls=0),
                          login_token_ttl_sec=oidc.login_token_ttl_sec)
     assert login_cli.login(SERVER, post_json=_transport(client),
-                           sleep=lambda s: None, say=lambda m: None) == 0
+                           sleep=lambda s: None, say=lambda m: None, env=real_io().env) == 0
     (record,) = TokenService(cp, time.time, random=RealRandom()).list()
     assert record.expires_at - record.created_at == 7 * 24 * 3600
 
@@ -170,19 +170,19 @@ def test_login_fails_cleanly_when_the_idp_denies(tmp_path, monkeypatch):
     client, _ = _server(tmp_path, Denying())
     msgs = []
     code = login_cli.login(SERVER, post_json=_transport(client),
-                           sleep=lambda s: None, say=msgs.append)
+                           sleep=lambda s: None, say=msgs.append, env=real_io().env)
     assert code == 1 and any("access_denied" in m for m in msgs)
     assert not (tmp_path / "home" / ".config" / "vmn-exp" / "credentials").exists()
 
 
 def test_login_keeps_other_servers_tokens(tmp_path, monkeypatch):
     monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path))
-    login_cli.save_token("https://other", "vmnx_a_b")
+    login_cli.save_token("https://other", "vmnx_a_b", env=real_io().env)
     client, _ = _server(tmp_path, FakeDeviceIdP(pending_polls=0))
     login_cli.login(SERVER, post_json=_transport(client), sleep=lambda s: None,
-                    say=lambda m: None)
-    assert login_cli.load_token("https://other") == "vmnx_a_b"
-    assert login_cli.load_token(SERVER).startswith("vmnx_")
+                    say=lambda m: None, env=real_io().env)
+    assert login_cli.load_token("https://other", real_io().env) == "vmnx_a_b"
+    assert login_cli.load_token(SERVER, real_io().env).startswith("vmnx_")
 
 
 def test_vmn_exp_login_dispatches_to_the_login_command(monkeypatch):

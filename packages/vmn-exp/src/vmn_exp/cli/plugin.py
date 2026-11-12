@@ -29,6 +29,7 @@ from version_stamp.api import (
     register_snapshot_store_opener,
 )
 from vmn_exp.cli.exp_parser.actions import EXPERIMENT_ACTIONS  # noqa: F401  (main.py, tests)
+from vmn_exp.cli.snapshot_arg import from_snapshot_metadata
 from vmn_exp.core.real_io import real_io
 
 
@@ -111,10 +112,9 @@ def _exp_run_without_repo(args):
         from vmn_exp.importers.cli import import_mlflow_run_without_repo
         return import_mlflow_run_without_repo(args, real_io())
 
-    from_snapshot = getattr(args, "from_snapshot", None) or os.environ.get(
-        "VMN_SNAPSHOT_METADATA"
-    )
-    if not is_experiment or not (from_snapshot or _store_only_outside_checkout(action)):
+    io = real_io()
+    if not is_experiment or not (from_snapshot_metadata(args, io.env)
+                                 or _store_only_outside_checkout(action)):
         return None
 
     from vmn_exp.cli.experiment import (
@@ -135,9 +135,8 @@ def _exp_run_without_repo(args):
         experiment_storage_params,
     )
 
-    io = real_io()
     dispatch = {
-        "create": functools.partial(experiment_create, clock=io.clock),
+        "create": functools.partial(experiment_create, clock=io.clock, env=io.env),
         "run": functools.partial(experiment_run, io=io),
         "add": functools.partial(experiment_add, io=io),
         "list": functools.partial(experiment_list, console=io.console, clock=io.clock),

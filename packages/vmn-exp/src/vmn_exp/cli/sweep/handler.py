@@ -25,7 +25,7 @@ def handle_sweep(vmn_ctx, io):
     storage = _get_experiment_storage(vcs, params, clock=io.clock)
     try:
         if args.action == "create":
-            return sweep_create(vcs, storage, args)
+            return sweep_create(vcs, storage, args, io.env)
         sweep, spec = resolve_sweep(storage, vcs.name, args.ref)
         if args.action == "status":
             return sweep_status(storage, vcs.name, sweep, spec, args, io.clock)
@@ -38,7 +38,7 @@ def handle_sweep(vmn_ctx, io):
         return 1
 
 
-def sweep_create(vcs, storage, args):
+def sweep_create(vcs, storage, args, env):
     """The sweep's outer run, its normalized spec in the metadata."""
     if not args.file:
         raise SpecError("sweep create needs the spec: -f sweep.yml")
@@ -46,7 +46,7 @@ def sweep_create(vcs, storage, args):
         spec = load_spec(args.file)
     except OSError as exc:
         raise SpecError(f"cannot read {args.file}: {exc}")
-    parent, err = _resolve_parent(storage, vcs.name, args)
+    parent, err = _resolve_parent(storage, vcs.name, args, env)
     if err is not None:
         return err
     verstr, err = _experiment_create_core(

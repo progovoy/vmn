@@ -192,7 +192,7 @@ def _create_experiment(vcs, storage, args, extra_create_data=None, *, env):
     extra.update(extra_create_data or {})
 
     app_name = cli._app_name(vcs, args)
-    parent, err = cli._resolve_parent(storage, app_name, args)
+    parent, err = cli._resolve_parent(storage, app_name, args, env)
     if err is not None:
         return app_name, None, err
     source, err = fork.fork_source(storage, app_name, args)
