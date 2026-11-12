@@ -17,6 +17,7 @@ from fastapi import HTTPException, Request
 from vmn_exp.core.log import filter_archived
 from vmn_exp.core.query import QueryError
 from vmn_exp.core.query_extra import reads_off_row
+from vmn_exp.core.status import MIN_STALE_SEC
 from vmn_exp.ui.auth.authz import allowed, require
 from vmn_exp.ui.auth.principal import VIEWER
 from vmn_exp.ui.readers import experiments as exp_reader
@@ -36,10 +37,10 @@ def viewable(request, names):
     return [name for name in names if allowed(principal, name, VIEWER, mappings)]
 
 
-def _python_search(scopes, text, limit, archived, now):
+def _python_search(scopes, text, limit, archived, now, stale_sec):
     found = []
     for workspace, app, snapshot in scopes:
-        rows = filter_archived(search_rows(snapshot, now), archived)
+        rows = filter_archived(search_rows(snapshot, now, stale_sec), archived)
         matched = exp_reader.apply_filters(rows, query=text, snapshot=snapshot, now=now)
         found.extend((workspace, app, row) for row in matched[: limit - len(found)])
         if len(found) >= limit:
@@ -65,9 +66,10 @@ def _sql_search(sql, scopes, names, text, limit, archived, now):
     return sql.search(names, text, limit, archived, now)
 
 
-def register(app, api_prefix, scopes_of, sql=None, *, now):
+def register(app, api_prefix, scopes_of, sql=None, *, now, stale_sec=MIN_STALE_SEC):
     """*scopes_of(names)* yields ``(workspace, app, snapshot)`` of those
-    workspaces in order, *now()* the time statuses and ``ago()`` read; *sql*
+    workspaces in order, *now()* the time statuses and ``ago()`` read (on the
+    stuck floor *stale_sec*); *sql*
     is a :class:`~vmn_exp.ui.search_pg.PgRowSearch`."""
 
     @app.get(f"{api_prefix}/search", dependencies=[require(VIEWER)])
@@ -76,7 +78,7 @@ def register(app, api_prefix, scopes_of, sql=None, *, now):
         names = sorted(viewable(request, [ws.name for ws in app.state.manager.list()]))
         try:
             if sql is None or reads_snapshot_fields(q):
-                found = _python_search(scopes_of(names), q, limit + 1, archived, now())
+                found = _python_search(scopes_of(names), q, limit + 1, archived, now(), stale_sec)
             else:
                 found = _sql_search(sql, scopes_of(names), names, q, limit + 1, archived, now())
         except QueryError as exc:

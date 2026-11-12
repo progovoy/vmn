@@ -166,7 +166,7 @@ def build_app(
         from vmn_exp.ui.search_rows_writer import SearchRowsWriter
 
         search_sql = PgRowSearch(search_dsn)
-        search_rows = SearchRowsWriter(search_sql, deps.status_clock.now)
+        search_rows = SearchRowsWriter(search_sql, deps.status_clock.now, stale_sec)
     upkeep = app.state.store_upkeep = deps.upkeep
     source = ExperimentSource(manager.data_dir, use_index=use_index, refresher=refresher,
                               cache_dsn=cache_dsn, search_rows=search_rows,
@@ -345,7 +345,7 @@ def build_app(
     def _search_scopes(ws_names):
         return ((ws, name, snap) for ws, name, snap, _ in ctx.app_scopes(ws_names))
 
-    routes_search.register(app, API_PREFIX, _search_scopes, search_sql, now=leaderboards.now)
+    routes_search.register(app, API_PREFIX, _search_scopes, search_sql, now=leaderboards.now, stale_sec=stale_sec)
     routes_similar.register(app, API_PREFIX, ctx.app_inputs, ctx.app_scopes, ctx.segment,
                             _similar_weights, source.similar.scope, deps.io.clock)
     startup_warmup.install(app, manager, ctx.list_apps, ctx.app_inputs, leaderboards,

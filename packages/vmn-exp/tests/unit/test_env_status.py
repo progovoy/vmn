@@ -1,6 +1,7 @@
 """The stuck floor, the run cadences, the local experiment dir, offline mode
 and the alert config read the Env they are given (plan 44 G12 stage C); the
 stuck floor reaches status derivation as a value the roots resolve from it."""
+import json
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 
@@ -22,6 +23,7 @@ from vmn_exp.core.alerts.config import load_alert_config
 from vmn_exp.core.ports import IO
 from vmn_exp.storage.local import LocalSnapshotStorage
 from vmn_exp.ui.app_deps import real_deps
+from vmn_exp.ui.search_rows_writer import SearchRowsWriter
 from vmn_exp.ui.server import build_app
 from vmn_exp.ui.workspaces import WorkspaceManager
 
@@ -166,3 +168,49 @@ def test_an_elected_index_answers_its_current_indexs_floor():
     elected._follower = SimpleNamespace(min_stale_sec=600.0)
     elected.leading = False
     assert elected.min_stale_sec == 600.0
+
+
+def _search_statuses_after_silence(tmp_path, env):
+    init_stamp_logger()
+    clock = FakeClock(start=LATER)
+    _live_store(tmp_path, clock)
+    manager = WorkspaceManager(str(tmp_path / "data"))
+    manager.add_store("st", f"file://{tmp_path / 'store'}")
+    deps = real_deps(_io(env, clock), control_plane=None, background_refresh=False,
+                     read_only=False, keep_warm=None)
+    client = TestClient(build_app(manager, deps))
+    clock.advance(SILENT_SEC)
+    results = client.get("/api/v1/search", params={"q": ""}).json()["results"]
+    return {result["row"]["status"] for result in results}
+
+
+def test_a_search_row_turns_stuck_at_the_given_envs_floor(tmp_path):
+    assert _search_statuses_after_silence(tmp_path / "default", FakeEnv()) == {status.STUCK}
+    assert _search_statuses_after_silence(tmp_path / "wide", WIDE) == {status.RUNNING}
+
+
+class _LeadingIndex:
+    leading = True
+
+
+class _Snapshot:
+    generation = 1
+    rows = [{"verstr": "v1"}]
+    run_states = {"v1": _running_state(LATER)}
+    run_state_observed_at = {}
+
+    def summarized(self, schema):
+        return self
+
+
+def test_the_search_rows_writer_writes_statuses_on_its_floor():
+    written = []
+    sql = SimpleNamespace(write=lambda workspace, app, entries, removed=None: written.extend(entries))
+    later = LATER + timedelta(seconds=SILENT_SEC)
+    writer = SearchRowsWriter(sql, lambda: later, min_stale_sec=600)
+    index = _LeadingIndex()
+    writer.note(index, "ws", APP, dict)
+
+    writer.refreshed(index, _Snapshot())
+
+    assert [json.loads(data)["status"] for _, _, data in written] == [status.RUNNING]

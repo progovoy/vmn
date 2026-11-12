@@ -242,7 +242,7 @@ def test_the_search_rows_writer_writes_the_generation_it_was_given(monkeypatch):
     second = index.change(10)
     written, real = [], search_rows_writer.search_rows
     monkeypatch.setattr(search_rows_writer, "search_rows",
-                        lambda snap, now: written.append(snap.generation) or real(snap, now))
+                        lambda snap, now, *floor: written.append(snap.generation) or real(snap, now, *floor))
     writer = search_rows_writer.SearchRowsWriter(types.SimpleNamespace(write=lambda *a: None),
                                                  now=RealClock().now)
     leader = _Leader()
