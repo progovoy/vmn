@@ -22,6 +22,8 @@ MODULE = "vmn_exp.core.index"
 # Patched by tests, read by no function of core/index.py: its callers reach
 # it as a module attribute from other modules (ui/index.py, ui/experiment_source.py).
 NOT_READ_INSIDE = {"direct_rows"}
+# Calls that take a module and a name but only read it.
+READS = ("getattr", "hasattr")
 PUBLIC_SURFACE = [
     "adopt", "check_vmx", "close", "drift", "follower", "freshness", "full_listing_due",
     "full_sweep_sec", "hint", "journal_at", "journaled", "last_reconcile_at", "overflowed",
@@ -93,9 +95,13 @@ def _patched_in(tree):
                 rest = first.value[len(MODULE) + 1:]
                 if "." not in rest:
                     found.add(rest)
-        elif func in ("setattr", "object") and _dotted(first) in aliases and len(node.args) > 1:
-            name = node.args[1]
-            if isinstance(name, ast.Constant) and isinstance(name.value, str):
+        if func in READS:
+            continue
+        # setattr(module, "name", ...), patch.object(...), or a test's own
+        # helper that patches what it is handed: f(monkeypatch, module, "name").
+        for target, name in zip(node.args, node.args[1:]):
+            if (_dotted(target) in aliases and isinstance(name, ast.Constant)
+                    and isinstance(name.value, str)):
                 found.add(name.value)
     return found
 
