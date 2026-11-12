@@ -1,0 +1,80 @@
+"""bench_timing: a timing benchmark's step is held to its budget as it would
+run on an uncontended box (its wall time over how much slower than its CPU
+time a busy loop runs now), measured again only while over budget, the
+fastest attempt kept."""
+import pytest
+from bench_timing import contention, fastest, fastest_each
+
+QUIET = lambda: 1.0  # noqa: E731
+
+
+def _measures(*seconds):
+    taken = list(seconds)
+    calls = []
+
+    def measure():
+        calls.append(None)
+        return taken.pop(0)
+
+    return measure, calls
+
+
+def test_a_step_within_budget_is_measured_once():
+    measure, calls = _measures(0.4, 9.0)
+    assert fastest(measure, budget=1.0, contention=QUIET) == 0.4
+    assert len(calls) == 1
+
+
+def test_a_slow_attempt_is_measured_again_until_one_fits():
+    measure, calls = _measures(2.1, 0.7, 9.0)
+    assert fastest(measure, budget=1.0, contention=QUIET) == 0.7
+    assert len(calls) == 2
+
+
+def test_a_step_slow_on_every_attempt_answers_its_fastest():
+    measure, calls = _measures(2.1, 1.8, 2.4)
+    assert fastest(measure, budget=1.0, attempts=3, contention=QUIET) == 1.8
+    assert len(calls) == 3
+
+
+def test_steps_with_their_own_budgets_keep_each_ones_fastest():
+    attempts = [{"a": 0.2, "b": 3.0}, {"a": 0.5, "b": 0.9}, {"a": 9.0, "b": 9.0}]
+    calls = []
+
+    def measure():
+        calls.append(None)
+        return attempts.pop(0)
+
+    assert fastest_each(measure, {"a": 1.0, "b": 1.0}, contention=QUIET) == {"a": 0.2, "b": 0.9}
+    assert len(calls) == 2
+
+
+def test_a_step_slowed_by_other_processes_is_held_to_its_uncontended_time():
+    measure, calls = _measures(2.4)
+    shared = iter([2.0, 4.0])  # the CPUs given to this process: half, then a quarter
+    assert fastest(measure, budget=1.0, contention=lambda: next(shared)) == pytest.approx(0.8)
+    assert len(calls) == 1
+
+
+class _Clocks:
+    """A wall clock running *slowdown* times faster than the thread's CPU clock."""
+
+    def __init__(self, slowdown):
+        self.slowdown, self.cpu_sec = slowdown, 0.0
+
+    def cpu(self):
+        self.cpu_sec += 0.001
+        return self.cpu_sec
+
+    def wall(self):
+        return self.cpu_sec * self.slowdown
+
+
+def test_contention_is_a_busy_loops_wall_time_over_its_cpu_time():
+    clocks = _Clocks(slowdown=3.0)
+    assert round(contention(wall=clocks.wall, cpu=clocks.cpu, spin_sec=0.01), 6) == 3.0
+
+
+def test_contention_is_never_below_one():
+    clocks = _Clocks(slowdown=0.5)
+    assert contention(wall=clocks.wall, cpu=clocks.cpu, spin_sec=0.01) == 1.0

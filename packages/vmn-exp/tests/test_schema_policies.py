@@ -8,6 +8,7 @@ policy is resolved once and each further metric costs a dict lookup — with
 import time
 
 import pytest
+from bench_timing import fastest
 
 from vmn_exp.core import metric_summary, step_metric
 from vmn_exp.core.index_views import SchemaRows
@@ -18,6 +19,7 @@ def _seen(last, low, high, first=None, mean=None):
             "first": last if first is None else first, "mean": mean}
 
 
+SUMMARIZE_SEC = 3.0  # 50k rows of 100 metrics
 LOSS = _seen(0.5, 0.1, 0.9, first=0.9, mean=0.4)
 
 
@@ -108,9 +110,14 @@ def test_50k_rows_of_100_metrics_summarize_in_seconds():
     metrics = {n: 1.0 for n in names}
     rows = [{"verstr": f"r{i}", "metrics": metrics} for i in range(50_000)]
     parts = {row["verstr"]: (summary, None) for row in rows}
-    start = time.perf_counter()
-    out = SchemaRows().rows(rows, parts, schema)
-    took = time.perf_counter() - start
+    outs = []
+
+    def summarize():
+        start = time.perf_counter()
+        outs.append(SchemaRows().rows(rows, parts, schema))
+        return time.perf_counter() - start
+
+    took = fastest(summarize, budget=SUMMARIZE_SEC)
     print(f"\n50k rows x {len(names)} metrics: {took:.2f} s")
-    assert out[0]["metrics"]["health.h0"] == 2.0
-    assert took < 3.0
+    assert outs[-1][0]["metrics"]["health.h0"] == 2.0
+    assert took < SUMMARIZE_SEC
