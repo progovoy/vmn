@@ -11,8 +11,6 @@ follower, so the store's journal is listed once per tick, not twice. The
 state (with the journal cursor) persists in a :class:`CacheStore`'s kv, so a
 restart resumes instead of listing again. Rebuildable from storage at any time.
 """
-import time
-
 from vmn_exp.core.journal_reader import JournalReader
 from vmn_exp.core.traced_lock import TracedLock
 from vmn_exp.reports import comments
