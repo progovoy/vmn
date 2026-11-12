@@ -171,8 +171,7 @@ def build_app(
     source = ExperimentSource(manager.data_dir, use_index=use_index, refresher=refresher,
                               cache_dsn=cache_dsn, search_rows=search_rows,
                               store_upkeep=upkeep, clock=deps.io.clock, env=deps.io.env,
-                              processes=deps.io.processes, index_clock=deps.status_clock,
-                              min_stale_sec=stale_sec)
+                              processes=deps.io.processes, index_clock=deps.status_clock, min_stale_sec=stale_sec)
     # Looked up at call time, so a test's patch of this module or of
     # storage_access/storage.open still applies.
     ctx = ServerContext(

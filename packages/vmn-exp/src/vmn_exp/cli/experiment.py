@@ -377,8 +377,7 @@ def handle_experiment(vmn_ctx, io):
 def experiment_rewind(vcs, params, storage, args, io):
     from vmn_exp.cli.rewind import experiment_rewind as rewind
 
-    return rewind(storage, _app_name(vcs, args), args, io.clock, get_writer_id(io.env, io.host),
-                  min_stale_sec(io.env))
+    return rewind(storage, _app_name(vcs, args), args, io.clock, get_writer_id(io.env, io.host), min_stale_sec(io.env))
 
 
 def experiment_similar(vcs, params, storage, args, clock):

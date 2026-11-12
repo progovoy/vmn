@@ -94,8 +94,7 @@ def _open_journal(ws, storage, cache_path, clock, index_clock=None):
 
 class ExperimentSource:
     def __init__(self, data_dir, use_index=True, refresher=None, cache_dsn=None,
-                 search_rows=None, store_upkeep=None, *, clock, env, processes, index_clock=None,
-                 min_stale_sec=MIN_STALE_SEC):
+                 search_rows=None, store_upkeep=None, *, clock, env, processes, index_clock=None, min_stale_sec=MIN_STALE_SEC):
         """*index_clock*, *min_stale_sec*: the indexes' and their caches' (see
         :class:`~vmn_exp.core.index.ExperimentIndex`; None: their modules'
         own clocks). *env*: the host's, which git workspaces' stores read."""
