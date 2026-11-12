@@ -99,6 +99,10 @@ class ElectedIndex:
     def published(self):
         return self._current().published
 
+    @property
+    def clock(self):
+        return self._current().clock
+
     def snapshot(self):
         return self._current().snapshot()
 

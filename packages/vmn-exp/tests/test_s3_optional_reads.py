@@ -12,6 +12,7 @@ import boto3  # noqa: E402
 from vmn_exp.storage import s3_stats  # noqa: E402
 from vmn_exp.storage.s3 import S3SnapshotStorage  # noqa: E402
 from vmn_exp.ui.readers import experiments as exp_reader  # noqa: E402
+from vmn_exp.core.real_io import RealClock
 
 APP, V = "app", "1.0.0-dev.a"
 BUCKET = "vmn-bucket"
@@ -77,7 +78,7 @@ def test_a_polled_detail_of_a_run_without_env_misses_env_once(storage, calls):
     calls.clear()
 
     for _ in range(3):
-        detail, err = exp_reader.get_experiment_from_storage(storage, APP, V)
+        detail, err = exp_reader.get_experiment_from_storage(storage, APP, V, now=RealClock().now())
         assert err is None and detail["env"] is None
 
     assert len([c for c in calls if c.key.endswith("env.yml")]) <= 1
@@ -86,7 +87,7 @@ def test_a_polled_detail_of_a_run_without_env_misses_env_once(storage, calls):
 def test_the_detail_of_a_run_with_env_serves_the_env_file(storage):
     _run(storage, env={"python": "3.12", "packages": {"numpy": "2.0"}})
 
-    detail, err = exp_reader.get_experiment_from_storage(storage, APP, V)
+    detail, err = exp_reader.get_experiment_from_storage(storage, APP, V, now=RealClock().now())
 
     assert err is None
     assert detail["env"] == {"python": "3.12", "packages": {"numpy": "2.0"}}

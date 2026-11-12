@@ -54,14 +54,14 @@ _PATCH_DERIVED = ("features_version", "source", "changed", "commits", "truncated
 _RESTATED = ("features_version", "source")
 
 
-def experiment_similar_backfill(storage, app_name, args):
+def experiment_similar_backfill(storage, app_name, args, clock):
     dry_run = bool(getattr(args, "dry_run", False))
     all_apps = bool(getattr(args, "all_apps", False))
     counts = Counter()
     for app in storage.list_apps() if all_apps else [app_name]:
         if all_apps:
             print(f"{app}:")
-        for verstr, status, detail in backfill_app(storage, app, dry_run):
+        for verstr, status, detail in backfill_app(storage, app, dry_run, clock=clock):
             print(f"{verstr}  {status}" + (f" ({detail})" if detail else ""))
             counts[status] += 1
     summary = ", ".join(f"{s} {counts[s]}" for s in (BACKFILLED, PARTIAL, SKIPPED, FAILED))
@@ -69,20 +69,20 @@ def experiment_similar_backfill(storage, app_name, args):
     return 1 if counts[FAILED] else 0
 
 
-def backfill_app(storage, app_name, dry_run=False, clock=None):
+def backfill_app(storage, app_name, dry_run=False, *, clock):
     """``(verstr, status, detail)`` per run of *app_name*, in storage order;
     *dry_run* derives every entry and appends none. *clock* (a
-    :class:`~vmn_exp.core.ports.Clock`): the index's (None: its modules')."""
+    :class:`~vmn_exp.core.ports.Clock`): the index's and the statuses'."""
     snap = experiment_index.indexed_snapshot(storage, app_name, wait=True, clock=clock)
     code = _CodeFeatures(storage, app_name)
     appended = []
     try:
-        yield from _backfill_rows(storage, app_name, snap, code, dry_run, appended)
+        yield from _backfill_rows(storage, app_name, snap, code, dry_run, appended, clock.now())
     finally:
         _refile(storage, app_name, appended, clock)
 
 
-def _refile(storage, app_name, verstrs, clock=None):
+def _refile(storage, app_name, verstrs, clock):
     """Refresh *verstrs* into the app's index: their documents are refiled."""
     if not verstrs:
         return
@@ -95,11 +95,11 @@ def _refile(storage, app_name, verstrs, clock=None):
         VMN_LOGGER.debug("Refreshing the backfilled runs failed", exc_info=True)
 
 
-def _backfill_rows(storage, app_name, snap, code, dry_run, appended):
+def _backfill_rows(storage, app_name, snap, code, dry_run, appended, now):
     for row in snap.rows:
         verstr = row["verstr"]
         try:
-            reason = _skip_reason(snap, row)
+            reason = _skip_reason(snap, row, now)
             if reason:
                 yield verstr, SKIPPED, reason
                 continue
@@ -116,7 +116,7 @@ def _backfill_rows(storage, app_name, snap, code, dry_run, appended):
         yield verstr, status, detail
 
 
-def _skip_reason(snap, row, now=None):
+def _skip_reason(snap, row, now):
     verstr = row["verstr"]
     if is_current(snap.features_of(verstr)):
         return "up to date"

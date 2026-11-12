@@ -7,6 +7,7 @@ from vmn_exp.core.index_io_process import _Helper
 from vmn_exp.core.index_pending import PendingSave
 from vmn_exp.core.index_store import SqliteStore
 from vmn_exp.snapshot import LocalSnapshotStorage
+from vmn_exp.core.real_io import RealClock
 
 APP = "app"
 FINISHED = "state: finished\nexit_code: 0\n"
@@ -41,7 +42,7 @@ def _storage(tmp_path, runs=5):
 
 def test_the_io_helper_saves_a_cold_load_in_chunks(tmp_path, saves):
     st, db = _storage(tmp_path), str(tmp_path / "idx.sqlite")
-    helper = _Helper(st.io_process_args(), APP, db)
+    helper = _Helper(st.io_process_args(), APP, db, clock=RealClock())
     work = [(key, names, None) for key, names in st.list_files(APP).items()]
 
     helper.refresh(work, set())

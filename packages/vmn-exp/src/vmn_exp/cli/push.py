@@ -40,7 +40,7 @@ _NO_REMOTE = (
 )
 
 
-def experiment_push(vcs, params, app_name, args):
+def experiment_push(vcs, params, app_name, args, clock):
     try:
         local, target = _stores(vcs, params)
         verstrs = _select(local, app_name, getattr(args, "version", None))
@@ -57,7 +57,8 @@ def experiment_push(vcs, params, app_name, args):
             adopt_failed = _adopt(local, target, app_name, verstrs, ledger)
         code = CodePusher(local, target, app_name)
         registered = registered_runs(local)
-        outcomes = [push_or_rename(local, target, app_name, v, ledger, code, registered)
+        outcomes = [push_or_rename(local, target, app_name, v, ledger, code, registered,
+                                   now=clock.now())
                     for v in verstrs]
     failed = _report(outcomes, args.json, args.dry_run)
     return 1 if failed or adopt_failed else 0

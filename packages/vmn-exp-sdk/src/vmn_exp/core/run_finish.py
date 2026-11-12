@@ -67,7 +67,7 @@ class FinishRefusedError(RunRefusedError):
 
 
 def finish_run(storage, app_name, verstr, exit_code, error=None, end_reason=None,
-               force=False, *, random, now=None):
+               force=False, *, random, now):
     """Write *verstr*'s final run state; False when there is no such record.
 
     *error* — a message or an exception — becomes the state's ``error`` and an
@@ -139,7 +139,7 @@ def checked_force(force):
     raise ValueError(f"force must be False, 'live' or True, got {force!r}")
 
 
-def _refuse_unfinishable(prior, observed_at, verstr, overridden, now=None):
+def _refuse_unfinishable(prior, observed_at, verstr, overridden, now):
     if overridden == _FORCE_OVERRIDES[True]:
         return  # nothing left to refuse: the prior state is not even read
     status = derive_status(prior, now=now, observed_at=observed_at)

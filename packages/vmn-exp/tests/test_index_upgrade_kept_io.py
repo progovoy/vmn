@@ -13,6 +13,7 @@ from test_index_upgrade_in_place import _as_records_18
 from vmn_exp.core import index_store_reads
 from vmn_exp.core.index import ExperimentIndex
 from vmn_exp.core.index_io_process import ProcessIO
+from vmn_exp.core.real_io import RealClock
 
 
 @pytest.fixture
@@ -107,7 +108,7 @@ def test_the_helper_reads_the_kept_rows_once(live_store, clock, tmp_path, monkey
     db = str(tmp_path / "idx.sqlite")
     index, want = upgraded(live_store, db, True, lambda db: _as_records_18(db, ()), clock)
     index.close()
-    helper = _Helper(live_store.st.io_process_args(), APP, db)
+    helper = _Helper(live_store.st.io_process_args(), APP, db, clock=RealClock())
 
     kept = helper.kept()
     helper.derive()

@@ -17,7 +17,7 @@ ORIGINS = ("parent", "forked_from", "rerun_of")
 _GLOB = frozenset("*?[")
 
 
-def status_of(snapshot, verstr, now=None):
+def status_of(snapshot, verstr, now):
     return derive_status(
         snapshot.run_states.get(verstr), now=now,
         observed_at=snapshot.run_state_observed_at.get(verstr),
@@ -28,8 +28,8 @@ def run_ref(row):
     return {"verstr": row["verstr"], "idx": row.get("idx"), "name": row.get("name")}
 
 
-def _with_status(snapshot, row):
-    return dict(run_ref(row), status=status_of(snapshot, row["verstr"]))
+def _with_status(snapshot, row, now):
+    return dict(run_ref(row), status=status_of(snapshot, row["verstr"], now))
 
 
 def _command(snapshot, verstr):
@@ -85,7 +85,7 @@ def best_run(ordered, metric, verstr):
     )
 
 
-def baselines(snapshot, verstr, has_patch, schema, ordered_by):
+def baselines(snapshot, verstr, has_patch, schema, ordered_by, now):
     """K3's ``{base?, parent?, forked_from?, rerun_of?, previous?, best?}``,
     each ``{verstr, idx, name, status}``, ``best`` also naming the ``metric``
     it is best on (plan 32 F7); *ordered_by(metric)* is the app's rows best
@@ -97,7 +97,7 @@ def baselines(snapshot, verstr, has_patch, schema, ordered_by):
     found["previous"] = previous_run(snapshot, row)
     metric = primary_goal(schema)
     found["best"] = best_run(ordered_by(metric), metric, verstr) if metric else None
-    out = {k: _with_status(snapshot, r) for k, r in found.items() if r is not None}
+    out = {k: _with_status(snapshot, r, now) for k, r in found.items() if r is not None}
     if "best" in out:
         out["best"]["metric"] = metric
     return out

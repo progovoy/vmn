@@ -23,7 +23,6 @@ Each save bumps the scope generation (see
 import json
 import logging
 import sqlite3
-import time
 
 from vmn_exp.core.cache_store import FULL_LOAD, CacheStore  # noqa: F401
 from vmn_exp.core.index_derive import Rederive
@@ -35,10 +34,10 @@ from vmn_exp.core.index_store_reads import LeanReads
 from vmn_exp.core.index_vmx_check import list_chunk
 from vmn_exp.core.index_store_schema import SCHEMA_VERSION, ensure_schema  # noqa: F401
 from vmn_exp.core.similar_filing import file_records as file_similar
+from vmn_exp.core.real_io import real_io
 from vmn_exp.core.sqlite_conn import connect, in_chunks, write_tx
 
 TOMBSTONE_TTL_SEC = 600
-_now = time.time
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -56,18 +55,17 @@ def _connect(path):
 class SqliteStore(LeanReads, KeyValues, Rederive):
     """A :class:`CacheStore` in one SQLite file; a no-op when *path* is None.
     *clock* (a :class:`~vmn_exp.core.ports.Clock`) stamps tombstones and
-    times the reconnect backoff (None: the modules' own clocks, read at call
-    time)."""
+    times the reconnect backoff (None: ``real_io().clock``)."""
 
     def __init__(self, path, *, clock=None):
-        self._clock = clock
-        self._db = StoreConnection(path or None, _connect, clock.monotonic if clock else None)
+        self._clock = clock = clock or real_io().clock
+        self._db = StoreConnection(path or None, _connect, clock.monotonic)
         self._db.get()
         self._later, self._unnumbered = set(), set()  # apps (see number_later)
 
     def wall(self):
         """Epoch seconds now on the store's clock."""
-        return self._clock.now().timestamp() if self._clock else _now()
+        return self._clock.now().timestamp()
 
     def number_later(self, app_name, later):
         """While *later*, a save that would renumber *app_name*'s rows (one
@@ -246,7 +244,7 @@ class SqliteStore(LeanReads, KeyValues, Rederive):
         leans = leans_of(changed)
         if not write_lean(conn, app_name, seq, changed, removed, states, leans,
                           defer=app_name in self._later,
-                          now=self._clock.now() if self._clock else None):
+                          now=self._clock.now()):
             self._unnumbered.add(app_name)
         file_similar(conn, app_name, changed, removed, states, leans)
         conn.executemany(

@@ -598,9 +598,9 @@ def _parsed(text):
     return parser.parse(), tuple(parser.agos)
 
 
-def pin_ago(text, now=None):
+def pin_ago(text, now):
     """*text* with each ``ago("<duration>")`` replaced by the quoted UTC ISO
-    time that long before *now* (default the clock); *text* itself when it
+    time that long before *now*; *text* itself when it
     has none. Raises :class:`QueryError` (offsets in *text*) when it has one
     and does not compile."""
     if not text or AGO not in text:
@@ -624,7 +624,7 @@ def parse_query(text, now=None):
     ``ago()`` calls are pinned to *now* (:func:`pin_ago`)."""
     if not text or not text.strip():
         raise QueryError("empty query")
-    return _parsed(pin_ago(text, now))[0]
+    return _parsed(text if now is None else pin_ago(text, now))[0]  # None: a syntax check
 
 
 @functools.lru_cache(maxsize=256)
@@ -652,7 +652,7 @@ def compile_query(text, now=None):
     exception is not cached — a bad query re-raises from a fresh parse. A
     query with ``ago()`` is cached by its text pinned to *now* (:func:`pin_ago`).
     """
-    return _compiled(pin_ago(text, now))
+    return _compiled(text if now is None else pin_ago(text, now))  # None: a syntax check
 
 
 @functools.lru_cache(maxsize=256)

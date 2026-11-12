@@ -16,10 +16,9 @@ listings' changes, the records a refresh touches (the ones the listing shows
 unchanged are never sent) and what came back. Responses stream in chunks, so
 a cold load of 100k records never sits in one buffer.
 
-The helper exits when its stdin closes (the server died). A call that finds
-it dead or failing raises :class:`IOProcessError`, failing that refresh; the
-next call starts a new helper, whose listings then report everything again.
-"""
+The helper exits when its stdin closes (the server died). A call that finds it
+dead or failing raises :class:`IOProcessError`, failing that refresh; the next
+call starts a new helper, whose listings then report everything again."""
 import logging
 import os
 import pickle
@@ -33,6 +32,7 @@ from vmn_exp.core.index_first_rows import kept_parts
 from vmn_exp.core.index_record import listed_unchanged
 from vmn_exp.core.index_store import decode_records
 from vmn_exp.core.index_workers import _can_spawn
+from vmn_exp.core.real_io import real_io
 
 _LOGGER = logging.getLogger(__name__)
 _PACKAGE_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -249,7 +249,7 @@ def _changed_results(results, sent):
 
 
 class _Helper:
-    def __init__(self, args, app_name, cache_path, clock=None):  # clock: its index's
+    def __init__(self, args, app_name, cache_path, clock):  # clock: its index's
         from vmn_exp.core.index import ExperimentIndex
         from vmn_exp.core.index_listing import ListingWatch
         from vmn_exp.storage.local import LocalSnapshotStorage
@@ -303,8 +303,8 @@ def _answer(out, result):
 
 
 def main():
-    """Helper entry point: ``(op, args)`` requests on stdin, answers on stdout."""
-    inp = sys.stdin.buffer
+    """The helper's interpreter's entry point, so it builds the real IO: stdin -> stdout."""
+    inp, clock = sys.stdin.buffer, real_io().clock
     # Answers go to a private copy of stdout; anything else printed goes to stderr.
     out = os.fdopen(os.dup(1), "wb")
     os.dup2(2, 1)
@@ -317,7 +317,7 @@ def main():
             return
         try:
             if op == "setup":
-                helper, result = _Helper(*args), None
+                helper, result = _Helper(*args, clock=clock), None
             else:
                 result = _handle(helper, op, args)
             _answer(out, result)

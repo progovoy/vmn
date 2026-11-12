@@ -232,9 +232,9 @@ class ExperimentSource:
             cache_path = self._indexes[ws.name].db_path if ws.name in self._indexes else None
         health = SqliteHealth(cache_path) if cache_path else None
         # Inline refreshes check on every request, background ones per tick.
-        cache = WorkspaceCache(ws.name, cache_path, health, clock=self._clock.monotonic,
-                               journal_of=lambda: self._journals.get(ws.name),
-                               check_sec=getattr(self.refresher, "interval_sec", 0))
+        cache = WorkspaceCache(ws.name, cache_path, health, journal_of=lambda: self._journals.get(
+            ws.name), check_sec=getattr(self.refresher, "interval_sec", 0),
+            clock=self._clock.monotonic, index_clock=self._index_clock)
         if cache_path:
             cache.on_swapped(lambda: self._reopen(ws.name, cache_path))
         return cache

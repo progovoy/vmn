@@ -15,6 +15,7 @@ from vmn_exp.cli.prune import experiment_prune
 from vmn_exp.storage.local import LocalSnapshotStorage
 from vmn_exp.core import status as st
 from version_stamp.core.logging import init_stamp_logger
+from vmn_exp.core.real_io import RealClock
 
 NOW = datetime.datetime(2026, 9, 21, 12, 0, 0, tzinfo=datetime.timezone.utc)
 
@@ -187,7 +188,7 @@ def test_cli_list_without_a_store_time_uses_the_heartbeat(
 
 def _prune(app_layout):
     args = SimpleNamespace(keep=0, older_than=None, force=False)
-    return experiment_prune(None, {}, _storage(app_layout), args, app_layout.app_name)
+    return experiment_prune(None, {}, _storage(app_layout), args, app_layout.app_name, clock=RealClock())
 
 
 def test_prune_calls_a_run_with_a_fresh_store_write_running(app_layout, capfd):

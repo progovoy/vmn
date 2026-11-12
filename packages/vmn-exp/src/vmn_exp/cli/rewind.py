@@ -20,7 +20,7 @@ def _ref(args):
     return "latest" if getattr(args, "latest", False) else None
 
 
-def experiment_rewind(storage, app_name, args):
+def experiment_rewind(storage, app_name, args, clock):
     ref, step = _ref(args), getattr(args, "step", None)
     if ref is None or step is None:
         VMN_LOGGER.error("exp rewind needs a run (-v or --latest) and --step N")
@@ -29,7 +29,7 @@ def experiment_rewind(storage, app_name, args):
         verstr = resolve_run(storage, app_name, ref, "rewind")
         hidden = count_hidden(storage.load_merged_log(app_name, verstr), step)
         rewind_run(storage, app_name, verstr, step,
-                   load_run_state(storage, app_name, verstr) or {})
+                   load_run_state(storage, app_name, verstr) or {}, clock.now())
     except (ValueError, RuntimeError) as exc:
         VMN_LOGGER.error(str(exc))
         return 1

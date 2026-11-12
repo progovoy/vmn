@@ -35,7 +35,7 @@ def utf8_safe(value):
     return copy.deepcopy(value)
 
 
-def item_payload(item, rows, with_features=True, now=None):
+def item_payload(item, rows, with_features=True, *, now):
     """A :func:`~vmn_exp.core.similar.similar_runs_multi` item as its JSON
     item, its facts read from *rows* (:mod:`vmn_exp.core.similar_rows`), its
     status as of *now*; copies only. Without *with_features* it has no

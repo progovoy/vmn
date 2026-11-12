@@ -12,7 +12,7 @@ from vmn_exp.core.status import load_run_state, run_state_observed_at, status_fi
 from vmn_exp.storage.s3_base import parallel_map
 
 
-def read_run_states(storage, app_name, refs, now=None):
+def read_run_states(storage, app_name, refs, now):
     """``{ref: entry or None}`` for *refs* of *app_name* in *storage*, their
     statuses as of *now*."""
     verstrs = _resolve_refs(storage, app_name, refs)
@@ -22,7 +22,7 @@ def read_run_states(storage, app_name, refs, now=None):
     return {ref: entries.get(verstr) for ref, verstr in verstrs.items()}
 
 
-def run_state_entry(storage, app_name, verstr, now=None):
+def run_state_entry(storage, app_name, verstr, now):
     """Run *verstr*'s ``run_state.yml`` fields, its derived status fields, the
     raw ``run_state`` (None before the run started), its store write time
     ``observed_at`` and ``verstr`` — or None when there is no such run."""
@@ -33,7 +33,7 @@ def run_state_entry(storage, app_name, verstr, now=None):
     return dict(fields, run_state=state, observed_at=observed, verstr=verstr)
 
 
-def read_run_state(storage, app_name, verstr, now=None):
+def read_run_state(storage, app_name, verstr, now):
     """``(run_state, observed_at, fields)`` of run *verstr* — *fields* its
     ``run_state.yml`` plus status fields derived at *now* — or None when
     there is no such run."""

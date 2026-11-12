@@ -22,7 +22,7 @@ def test_a_verstr_list_filters_only_the_named_runs(monkeypatch):
     sizes = []
     real = leaderboard_cache.filtered
     monkeypatch.setattr(leaderboard_cache, "filtered",
-                        lambda s, rows, f: sizes.append(len(rows)) or real(s, rows, f))
+                        lambda s, rows, f, *a: sizes.append(len(rows)) or real(s, rows, f, *a))
 
     page = cache.page(snap, SCHEMA, query=_in(named + ["0.0.1-dev.gone"]), limit=50)
 

@@ -17,7 +17,7 @@ def _rows(*verstrs):
 
 def _hits(search, org):
     with org_context(org):
-        return [row["verstr"] for (_, _, row) in search.search(["ws"], "", 10)]
+        return [row["verstr"] for (_, _, row) in search.search(["ws"], "", 10, False, None)]
 
 
 def test_search_rows_are_isolated_per_org(pg_rls_dsn):

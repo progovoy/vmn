@@ -77,9 +77,9 @@ def test_run_detail_reports_whether_the_metrics_are_compacted(storage):
     from vmn_exp.core.metric_compact import compact_record
     from vmn_exp.ui.readers.experiment_detail import experiment_detail
 
-    detail, _ = experiment_detail(storage, APP, V, edges=lambda s, a: {})
+    detail, _ = experiment_detail(storage, APP, V, edges=lambda s, a: {}, now=RealClock().now())
     assert detail["compacted"] is None
     _log(storage, "w", 0, 5)
-    assert experiment_detail(storage, APP, V, edges=lambda s, a: {})[0]["compacted"] is False
+    assert experiment_detail(storage, APP, V, edges=lambda s, a: {}, now=RealClock().now())[0]["compacted"] is False
     compact_record(storage, APP, V)
-    assert experiment_detail(storage, APP, V, edges=lambda s, a: {})[0]["compacted"] is True
+    assert experiment_detail(storage, APP, V, edges=lambda s, a: {}, now=RealClock().now())[0]["compacted"] is True

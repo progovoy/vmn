@@ -124,6 +124,33 @@ def test_only_entry_points_and_listed_modules_call_real_io():
     )
 
 
+def test_no_clock_alias_remains_in_core_or_cli():
+    aliased = sorted(module for module, counts in _actual_io().items()
+                     if counts.get("clock_alias") and module not in REAL_IO)
+    assert not aliased, f"a module-level clock alias; take a Clock parameter instead: {aliased}"
+
+
+# Plan 44 G11: these resolve an omitted clock to real_io().clock, so production
+# code must hand them its own (LeaderboardCache takes it as a ``now`` callable).
+LIST_2 = {"ExperimentIndex": "clock", "SqliteStore": "clock", "LeaderboardCache": "now",
+          "shared_index": "clock", "indexed_snapshot": "clock", "indexed_status_rows": "clock"}
+
+
+def _called_name(call):
+    return getattr(call.func, "id", None) or getattr(call.func, "attr", None)
+
+
+def test_production_code_passes_a_clock_to_every_list_2_name():
+    missing = [
+        f"{module}:{node.lineno} {_called_name(node)}("
+        for module, path in _module_paths().items()
+        for node in ast.walk(ast.parse(path.read_text()))
+        if isinstance(node, ast.Call) and _called_name(node) in LIST_2
+        and LIST_2[_called_name(node)] not in {k.arg for k in node.keywords}
+    ]
+    assert not missing, "pass the caller's clock:\n  " + "\n  ".join(missing)
+
+
 def _regen():
     lines = [
         f"# AUTO-GENERATED (KNOWN_IO) by: {REGEN}",

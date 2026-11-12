@@ -9,6 +9,7 @@ from version_stamp.core.logging import init_stamp_logger
 from vmn_exp.ui.readers import experiments as exp_reader
 from vmn_exp.storage.areas import local_store_root
 from vmn_exp.core.real_io import real_io
+from vmn_exp.core.real_io import RealClock
 
 
 @pytest.fixture(autouse=True)
@@ -61,7 +62,7 @@ def test_experiment_detail_includes_structured_artifacts(tmp_path):
     )
 
     result, err = exp_reader.get_experiment_from_storage(
-        storage, "myapp", "1.0.0-dev.aaa.bbb"
+        storage, "myapp", "1.0.0-dev.aaa.bbb", now=RealClock().now()
     )
 
     assert err is None
@@ -86,7 +87,7 @@ def test_experiment_detail_no_artifacts(tmp_path):
     _save_exp(storage, "myapp", "1.0.0-dev.aaa.bbb")
 
     result, err = exp_reader.get_experiment_from_storage(
-        storage, "myapp", "1.0.0-dev.aaa.bbb"
+        storage, "myapp", "1.0.0-dev.aaa.bbb", now=RealClock().now()
     )
 
     assert err is None
@@ -101,7 +102,7 @@ def test_experiment_from_storage_includes_structured_artifacts(tmp_path):
     _create_artifact(storage, "myapp", "1.0.0-dev.aaa.bbb", "weights.bin", "w" * 50)
 
     result, err = exp_reader.get_experiment_from_storage(
-        storage, "myapp", "1.0.0-dev.aaa.bbb"
+        storage, "myapp", "1.0.0-dev.aaa.bbb", now=RealClock().now()
     )
 
     assert err is None

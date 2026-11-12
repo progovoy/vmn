@@ -62,7 +62,7 @@ def test_writes_the_missing_child_markers(storage):
     for kid in kids[:2]:
         storage.unmark_child(APP, outer, kid)
 
-    counts = AppUpkeep(storage, APP, time.monotonic).run(_snap(storage))
+    counts = AppUpkeep(storage, APP, time.monotonic, now=RealClock().now).run(_snap(storage))
 
     assert counts["marked"] == 2
     assert storage.list_children(APP, outer) == sorted(kids)
@@ -71,7 +71,7 @@ def test_writes_the_missing_child_markers(storage):
 def test_a_parent_is_listed_once_then_new_children_are_marked_directly(storage, monkeypatch):
     outer = _run(storage, points=False)
     _run(storage, parent=outer, points=False)
-    upkeep = AppUpkeep(storage, APP, time.monotonic)
+    upkeep = AppUpkeep(storage, APP, time.monotonic, now=RealClock().now)
     upkeep.run(_snap(storage))
     listed = []
     real = storage.list_children
@@ -95,7 +95,7 @@ def test_many_new_children_of_a_listed_parent_are_listed_again_not_put(storage, 
     monkeypatch.setattr(store_upkeep, "RELIST_OVER", 2)
     outer = _run(storage, points=False)
     _run(storage, parent=outer, points=False)
-    upkeep = AppUpkeep(storage, APP, time.monotonic)
+    upkeep = AppUpkeep(storage, APP, time.monotonic, now=RealClock().now)
     upkeep.run(_snap(storage))
     for _ in range(3):
         _run(storage, parent=outer, points=False)  # each writes its own marker
@@ -107,7 +107,7 @@ def test_many_new_children_of_a_listed_parent_are_listed_again_not_put(storage, 
 def test_compacts_dead_runs_once_and_leaves_live_ones(storage, monkeypatch):
     failed = _run(storage, exit_code=1)
     live = _run(storage, exit_code=None)
-    upkeep = AppUpkeep(storage, APP, time.monotonic)
+    upkeep = AppUpkeep(storage, APP, time.monotonic, now=RealClock().now)
 
     assert upkeep.run(_snap(storage))["compacted"] == 1
     assert _compacted(storage, failed) and not _compacted(storage, live)
@@ -129,7 +129,7 @@ def test_a_failing_compaction_is_not_retried_every_pass(storage, monkeypatch):
         raise OSError("denied")
 
     monkeypatch.setattr(store_upkeep, "compact_record", boom)
-    upkeep = AppUpkeep(storage, APP, time.monotonic)
+    upkeep = AppUpkeep(storage, APP, time.monotonic, now=RealClock().now)
     assert upkeep.run(_snap(storage))["failed"] == 1
     upkeep.run(_snap(storage))
     assert len(calls) == 1
@@ -139,7 +139,7 @@ def test_compaction_stops_at_the_pass_budget(storage):
     for _ in range(3):
         _run(storage, exit_code=1)
     ticks = iter([0, 0, 100, 100, 100, 100, 100])
-    upkeep = AppUpkeep(storage, APP, clock=lambda: next(ticks))
+    upkeep = AppUpkeep(storage, APP, clock=lambda: next(ticks), now=RealClock().now)
 
     assert upkeep.run(_snap(storage), budget_sec=10)["compacted"] == 1
     assert upkeep.run(_snap(storage), budget_sec=1000)["compacted"] == 2
@@ -153,7 +153,7 @@ def test_store_upkeep_works_off_the_refresh_thread(storage):
     outer = _run(storage, points=False)
     kid = _run(storage, parent=outer, points=False)
     storage.unmark_child(APP, outer, kid)
-    upkeep = StoreUpkeep(interval_sec=0, clock=time.monotonic)
+    upkeep = StoreUpkeep(interval_sec=0, clock=time.monotonic, now=RealClock().now)
     index = _Index()
     try:
         upkeep.note(index, storage, APP)
@@ -168,7 +168,7 @@ def test_an_index_this_replica_does_not_lead_is_left_alone(storage):
     outer = _run(storage, points=False)
     kid = _run(storage, parent=outer, points=False)
     storage.unmark_child(APP, outer, kid)
-    upkeep = StoreUpkeep(interval_sec=0, clock=time.monotonic)
+    upkeep = StoreUpkeep(interval_sec=0, clock=time.monotonic, now=RealClock().now)
     index = _Index()
     index.leading = False
     try:

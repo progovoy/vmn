@@ -39,9 +39,7 @@ class SnapshotRows:
     def facts(self, row):
         return snapshot_facts(self.snapshot, row)
 
-    def status_of(self, verstr, now=None):
-        if now is None:  # the snapshot's own default (a stand-in may take no now)
-            return self.snapshot.status_of(verstr)
+    def status_of(self, verstr, now):
         return self.snapshot.status_of(verstr, now)
 
     def parents_among(self, verstrs):
@@ -139,7 +137,7 @@ class StoreRows:
         return (sides.get("features"), sides.get("intents"), sides.get("hypotheses"), command,
                 sides.get(NOTE))
 
-    def status_of(self, verstr, now=None):
+    def status_of(self, verstr, now):
         return run_status(self._state(verstr), now) or "created"
 
     def parents_among(self, verstrs):

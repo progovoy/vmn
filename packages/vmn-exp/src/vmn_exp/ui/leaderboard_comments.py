@@ -37,7 +37,7 @@ def joined_groups(payload, counts):
 
 def groups_by_comments(cache, snapshot, schema, group, counts, query=None, **params):
     """:meth:`LeaderboardCache.groups` for a *query* reading ``comments``."""
-    extra = {"comments": counts.get, **lean_extra(snapshot)}
+    extra = {"comments": counts.get, **lean_extra(snapshot, now=cache.now())}
     return cache.groups(snapshot, schema, group,
                         rows_filter=lambda rows: filter_rows(rows, query, extra=extra), **params)
 
@@ -52,7 +52,7 @@ def page_by_comments(cache, snapshot, schema, counts, sort=None, last=None, offs
     pager = cache.pager(snapshot, schema, last, f, cursor, ordered=(None, f._replace(query=None)))
     ordered = cache.ordered(snapshot, schema, sort, status, order, archived, scope, top,
                             top_query=top_query, job_agg=job_agg)
-    extra = {"comments": counts.get, **lean_extra(snapshot)}
+    extra = {"comments": counts.get, **lean_extra(snapshot, now=cache.now())}
     rows = filter_rows(ordered, query, extra=extra)
     if last:
         newest = set(sorted(row["idx"] for row in rows)[-int(last):])

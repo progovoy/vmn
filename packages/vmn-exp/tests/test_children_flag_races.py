@@ -15,6 +15,7 @@ from vmn_exp.core.writer import create_run
 from vmn_exp.storage.cached import CachedSnapshotStorage
 from vmn_exp.storage.local import LocalSnapshotStorage
 from vmn_exp.ui.store_upkeep import AppUpkeep
+from vmn_exp.core.real_io import RealClock
 
 APP = "my_app"
 CODE = "0.0.1-dev.abc.def"
@@ -179,7 +180,7 @@ def test_a_failed_remote_drop_still_protects_the_parent(cached, s3, monkeypatch)
 
     args = SimpleNamespace(version=[outer], keep=None, older_than=None, force=False,
                            dry_run=False, query=None, protect_tag=None)
-    assert prune_mod.experiment_prune(None, {}, cached, args, APP) == 0
+    assert prune_mod.experiment_prune(None, {}, cached, args, APP, clock=RealClock()) == 0
 
     assert cached.exists(APP, outer) and cached.exists(APP, kid)
 

@@ -41,7 +41,7 @@ from vmn_exp.snapshot import _resolve_verstr
 LOG_TAIL = 200
 
 
-_DETAIL_STATUS_KEYS = tuple(status_fields(None)) + (
+_DETAIL_STATUS_KEYS = tuple(status_fields(None, now=None)) + (  # no run state reads now
     "parent",
     "children",
     "kind",
@@ -93,8 +93,7 @@ def status_detail(
     read_run_state=load_run_state,
     read_observed_at=run_state_observed_at,
     read_child_row=None,
-    job_status=None,
-    now=None,
+    job_status=None, *, now,
 ):
     """Status payload with the run's place in the tree, statuses as of *now*.
 
@@ -156,7 +155,7 @@ def status_detail(
 
 
 def _job_detail(storage, app_name, verstr, metadata, log, job, read_run_state,
-                read_observed_at, now=None):
+                read_observed_at, now):
     own_state = read_run_state(storage, app_name, verstr)
     detail = status_fields(own_state, now=now,
                            observed_at=read_observed_at(storage, app_name, verstr))
@@ -239,9 +238,9 @@ def experiment_detail(
     schema=None,
     step_range=None,
     last_good=None,
-    job_status=None,
+    job_status=None, *, now,
 ):
-    """``(detail, error)``; the ref supports @N / prefix / 'latest'.
+    """``(detail, error)``; the ref supports @N / prefix / 'latest'; statuses at *now*.
 
     ``log`` is the tail unless *include_log*; ``log_tail`` / ``log_total`` and
     ``series_total`` let a client page the log and label thinned charts.
@@ -326,6 +325,7 @@ def experiment_detail(
             read_observed_at=states.read_observed_at,
             read_child_row=read_child_row,
             job_status=job_status,
+            now=now,
         ),
         "patches": patch_presence(storage, app_name, verstr, metadata),
         "env": detail_env(storage, app_name, verstr, env_read.result(), metadata),

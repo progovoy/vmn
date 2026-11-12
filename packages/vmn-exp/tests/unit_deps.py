@@ -1,7 +1,7 @@
 """``fake_deps(clock)``: what a test hands ``build_app`` so the server derives
 run status and runs its indexes on *clock* (a FakeClock), instead of
-patching the modules' clocks (plan 44 G11). Everything else is what
-``create_app`` builds on the real IO."""
+the real clock ``real_deps`` gives them (plan 44 G11). Everything else is
+what ``create_app`` builds on the real IO."""
 from vmn_exp.core.real_io import real_io
 from vmn_exp.ui.app_deps import ServerDeps, real_deps
 from vmn_exp.ui.store_upkeep import StoreUpkeep

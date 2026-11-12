@@ -8,6 +8,7 @@ from vmn_exp.cli import backfill_children
 from vmn_exp.core.writer import create_run
 from vmn_exp.storage.cached import CachedSnapshotStorage
 from vmn_exp.storage.local import LocalSnapshotStorage
+from vmn_exp.core.real_io import RealClock
 
 APP = "my_app"
 CODE = "0.0.1-dev.abc.def"
@@ -152,7 +153,7 @@ def test_a_renamed_pushed_child_marks_its_parent_on_the_remote(tmp_path, s3):
 
     ledger = PushLedger.for_target(local, PUSH_APP, s3)
     outcome = push_or_rename(local, s3, PUSH_APP, X, ledger,
-                             CodePusher(local, s3, PUSH_APP))
+                             CodePusher(local, s3, PUSH_APP), now=RealClock().now())
 
     assert outcome.verstr != X
     assert s3.list_children(PUSH_APP, outer) == [outcome.verstr]

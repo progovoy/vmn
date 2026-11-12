@@ -8,6 +8,7 @@ from vmn_exp.cli.experiment import experiment_compare, experiment_show
 from vmn_exp.cli.views import split_params
 from vmn_exp.core.real_io import RealConsole
 from vmn_exp.storage.local import LocalSnapshotStorage
+from vmn_exp.core.real_io import RealClock
 
 APP = "app"
 
@@ -39,7 +40,7 @@ def _args(*versions):
 
 
 def _show(storage, capsys, v):
-    assert experiment_show(None, None, storage, _args(v), RealConsole()) == 0
+    assert experiment_show(None, None, storage, _args(v), RealConsole(), clock=RealClock()) == 0
     return capsys.readouterr().out
 
 

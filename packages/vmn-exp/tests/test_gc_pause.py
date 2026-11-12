@@ -99,7 +99,7 @@ def test_a_leaderboard_base_builds_with_collection_paused(tmp_path, monkeypatch)
     seen = []
     real = leaderboard_cache.annotate_rows
     monkeypatch.setattr(leaderboard_cache, "annotate_rows",
-                        lambda *a: seen.append(gc.isenabled()) or real(*a))
+                        lambda *a, **kw: seen.append(gc.isenabled()) or real(*a, **kw))
 
     LeaderboardCache().page(snap, {}, sort="idx", limit=50)
 

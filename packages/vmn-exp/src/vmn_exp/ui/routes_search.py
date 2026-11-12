@@ -36,11 +36,11 @@ def viewable(request, names):
     return [name for name in names if allowed(principal, name, VIEWER, mappings)]
 
 
-def _python_search(scopes, text, limit, archived):
+def _python_search(scopes, text, limit, archived, now):
     found = []
     for workspace, app, snapshot in scopes:
-        rows = filter_archived(search_rows(snapshot), archived)
-        matched = exp_reader.apply_filters(rows, query=text, snapshot=snapshot)
+        rows = filter_archived(search_rows(snapshot, now), archived)
+        matched = exp_reader.apply_filters(rows, query=text, snapshot=snapshot, now=now)
         found.extend((workspace, app, row) for row in matched[: limit - len(found)])
         if len(found) >= limit:
             break
@@ -57,17 +57,18 @@ def reads_snapshot_fields(text):
         return False
 
 
-def _sql_search(sql, scopes, names, text, limit, archived):
+def _sql_search(sql, scopes, names, text, limit, archived, now):
     # Taking each app's snapshot refreshes it (inline) or keeps it watched
     # (background): those refreshes write the rows read here.
     for _ in scopes:
         pass
-    return sql.search(names, text, limit, archived)
+    return sql.search(names, text, limit, archived, now)
 
 
-def register(app, api_prefix, scopes_of, sql=None):
+def register(app, api_prefix, scopes_of, sql=None, *, now):
     """*scopes_of(names)* yields ``(workspace, app, snapshot)`` of those
-    workspaces in order; *sql* is a :class:`~vmn_exp.ui.search_pg.PgRowSearch`."""
+    workspaces in order, *now()* the time statuses and ``ago()`` read; *sql*
+    is a :class:`~vmn_exp.ui.search_pg.PgRowSearch`."""
 
     @app.get(f"{api_prefix}/search", dependencies=[require(VIEWER)])
     def search(request: Request, q: str = "", limit: int = DEFAULT_LIMIT, archived: bool = False):
@@ -75,9 +76,9 @@ def register(app, api_prefix, scopes_of, sql=None):
         names = sorted(viewable(request, [ws.name for ws in app.state.manager.list()]))
         try:
             if sql is None or reads_snapshot_fields(q):
-                found = _python_search(scopes_of(names), q, limit + 1, archived)
+                found = _python_search(scopes_of(names), q, limit + 1, archived, now())
             else:
-                found = _sql_search(sql, scopes_of(names), names, q, limit + 1, archived)
+                found = _sql_search(sql, scopes_of(names), names, q, limit + 1, archived, now())
         except QueryError as exc:
             raise HTTPException(400, str(exc))
         results = [

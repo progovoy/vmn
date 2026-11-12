@@ -143,5 +143,5 @@ def test_vmn_exp_prune_trims_old_journal_partitions(tmp_path):
     old = _key(int(time.time() * 1000) - 3 * DAY_MS)
     sink_for(LocalSnapshotStorage(str(tmp_path), "runs")).put(old)
     args = SimpleNamespace(keep=0, older_than=None, force=False)
-    assert experiment_prune(None, {}, storage, args, APP) == 0
+    assert experiment_prune(None, {}, storage, args, APP, clock=RealClock()) == 0
     assert not (tmp_path / old.rpartition("/")[0]).exists()

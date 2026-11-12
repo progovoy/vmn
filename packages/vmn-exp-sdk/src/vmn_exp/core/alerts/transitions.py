@@ -7,7 +7,6 @@ proof of life (:func:`~vmn_exp.core.status.last_alive_at`, what its stuck
 status is derived from), so a run that recovers and gets stuck again alerts again. An alert
 no sink accepted is not recorded, and the next watch retries it.
 """
-import datetime
 
 import yaml
 
@@ -31,10 +30,6 @@ def __getattr__(name):
     if name == "experiment_index":
         return _experiment_index()
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
-
-
-def _now(now=None):
-    return now or datetime.datetime.now(datetime.timezone.utc)
 
 
 def load_sent(storage, app_name, verstr):
@@ -76,7 +71,7 @@ def _transition_time(status, run_state, observed_at=None, now=None):
 
 
 def _stuck_text(run_state, since, now):
-    age = int((_now(now) - since).total_seconds()) if since else None
+    age = int((now - since).total_seconds()) if since else None
     lead = (f"no heartbeat since start ({age}s ago)" if run_state.get("heartbeat") is None
             else f"no heartbeat for {age}s")
     return f"{lead} (host {run_state.get('host')}, pid {run_state.get('pid')})"
@@ -121,7 +116,7 @@ def alert_transition(storage, app_name, verstr, run_state, status, alerter,
     return True
 
 
-def alert_if_failed(storage, app_name, verstr, run_state, alerter, run_name=None, now=None):
+def alert_if_failed(storage, app_name, verstr, run_state, alerter, run_name=None, *, now):
     """The run just finished: alert when it failed and ``failed`` is opted in."""
     if not run_state or not alerter.wants(FAILED):
         return False
@@ -131,7 +126,7 @@ def alert_if_failed(storage, app_name, verstr, run_state, alerter, run_name=None
                             now)
 
 
-def watch_app(storage, app_name, alerter, within_sec, now=None, clock=None):
+def watch_app(storage, app_name, alerter, within_sec, now=None, *, clock):
     """Alert every run of *app_name* that went failed/stuck in the last
     *within_sec* seconds and has not alerted it yet. ``[(verstr, status)]``.
 
@@ -141,7 +136,7 @@ def watch_app(storage, app_name, alerter, within_sec, now=None, clock=None):
     wanted = {s for s in (FAILED, STUCK) if alerter.wants(s)}
     if not wanted:
         return []
-    now = _now(now or (clock.now() if clock else None))
+    now = now or clock.now()
     snap = _experiment_index().indexed_snapshot(storage, app_name, wait=True, clock=clock)
     fired = []
     for verstr, run_state, status in _candidates(snap, wanted, within_sec, now):

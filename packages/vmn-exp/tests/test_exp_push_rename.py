@@ -28,6 +28,7 @@ from vmn_exp.cli.pushing.push_rename import SKIPPED, push_or_rename
 from vmn_exp.cli.pushing.push_run import FAILED, NEW, UP_TO_DATE, UPDATE, push_run
 from vmn_exp.core.status import RUN_STATE_FILE
 from vmn_exp.core.writer import own_stream
+from vmn_exp.core.real_io import RealClock
 
 FOREIGN = "2025-05-05T00:00:00Z"
 CHILD = X + ".2"
@@ -51,7 +52,7 @@ def _foreign(target, verstr=X):
 def _push(local, target, verstr=X, **kw):
     ledger = PushLedger.for_target(local, APP, target)
     return push_or_rename(local, target, APP, verstr, ledger,
-                          CodePusher(local, target, APP), **kw)
+                          CodePusher(local, target, APP), now=RealClock().now(), **kw)
 
 
 def test_collision_renames_both_sides(local, target, tmp_path):

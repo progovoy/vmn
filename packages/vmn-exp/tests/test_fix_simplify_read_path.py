@@ -140,7 +140,8 @@ def test_one_leaderboard_pipeline_filters_orders_and_pages():
     from vmn_exp.ui.readers.experiments import leaderboard
 
     rows = [_row(0, 0.3), _row(1, 0.1), _row(2, 0.2)]
-    page = leaderboard(rows, {}, {}, sort="loss", order="asc", offset=1, limit=1)
+    page = leaderboard(rows, {}, {}, sort="loss", order="asc", offset=1, limit=1,
+                       now=RealClock().now())
 
     assert page["total"] == 3
     assert [r["metrics"]["loss"] for r in page["rows"]] == [0.2]

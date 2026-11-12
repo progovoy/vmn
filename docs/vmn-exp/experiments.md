@@ -292,7 +292,8 @@ from `$VMN_EXP_MIN_STALE_SEC`. To tolerate writer clock skew, a run is `stuck`
 only when **both** the heartbeat timestamp and the store's write time of
 `run_state.yml` (file mtime, S3 `LastModified`) are stale; a future-dated
 heartbeat is ignored. When the store time is unknown the heartbeat alone
-decides. (`vmn_exp.core.status.derive_status(state, observed_at=...)`.)
+decides. (`vmn_exp.core.status.derive_status(state, now, observed_at=...)`, *now* an
+aware UTC datetime.)
 
 The status fields' `duration_sec` is the recorded duration of a finished run,
 and the elapsed time of a `running` one. A run that stopped without a

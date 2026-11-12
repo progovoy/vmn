@@ -60,7 +60,7 @@ def _job(tmp_path, action, body):
     job, err = build_store_action(action, APP, body)
     assert err is None
     touched = []
-    job.run(storage, lambda app, verstr: touched.append((app, verstr)))
+    job.run(storage, lambda app, verstr: touched.append((app, verstr)), RealClock().now())
     return storage, touched
 
 
@@ -108,7 +108,7 @@ def test_rewind_matches_the_cli(tmp_path):
     storage, touched = _job(tmp_path, "exp_rewind", {"verstr": V, "step": 2})
     _, cli = _cli_store(tmp_path)
     args = SimpleNamespace(version=[V], latest=False, step=2)
-    assert experiment_rewind(cli, APP, args) == 0
+    assert experiment_rewind(cli, APP, args, RealClock()) == 0
     assert _run_state(storage) == _run_state(cli)
     assert touched == [(APP, V)]
 
@@ -123,7 +123,7 @@ def test_model_register_alias_deprecate_match_the_cli(tmp_path):
     ]:
         job, err = build_store_action(action, APP, body)
         assert err is None, err
-        job.run(storage, lambda *_: None)
+        job.run(storage, lambda *_: None, RealClock().now())
     cli_uri, cli = _cli_store(tmp_path)
     _model_cli(cli_uri, "register", "m", "-v", V, "--app", APP, "--artifact", "model.bin",
                "--alias", "prod")
@@ -155,7 +155,7 @@ def test_failed_action_marks_the_job_failed(tmp_path):
     _, storage = _store(tmp_path, "job")
     job, _ = build_store_action("exp_tag", APP, {"verstr": "0.0.9-dev.x.y", "set": {"k": "v"}})
     runner = JobRunner(processes=RealProcesses(), random=RealRandom(), start_thread=start_daemon)
-    submitted, err = runner.submit_call("ws", job.command, lambda: job.run(storage, lambda *_: None))
+    submitted, err = runner.submit_call("ws", job.command, lambda: job.run(storage, lambda *_: None, RealClock().now()))
     assert err is None
     done = _wait(runner, submitted["id"])
     assert done["status"] == "failed" and "not found" in done["log"]

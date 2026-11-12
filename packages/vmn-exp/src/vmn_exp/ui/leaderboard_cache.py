@@ -37,10 +37,10 @@ import json
 import os
 from collections import namedtuple
 
-import vmn_exp.core.status as experiment_status
 from vmn_exp.core.gc_pause import freeze_long_lived, gc_paused
 from vmn_exp.core.log import primary_metric
 from vmn_exp.core.query import parse_query
+from vmn_exp.core.real_io import real_io
 from vmn_exp.core.status import status_fields, with_queue_sec
 from vmn_exp.core.traced_lock import TracedLock
 from vmn_exp.core.tree import annotate_rows
@@ -104,7 +104,7 @@ BASE_APPS = 8
 _NONCE = os.urandom(8).hex()
 
 
-def _status(snapshot, row, now=None):
+def _status(snapshot, row, now):
     """*row*'s status fields at *now*, judged with the store's write time too."""
     verstr = row["verstr"]
     return with_queue_sec(row, status_fields(
@@ -113,7 +113,7 @@ def _status(snapshot, row, now=None):
     ))
 
 
-def _restated(snapshot, row, now=None):
+def _restated(snapshot, row, now):
     """A copy of *row* with its status fields as of *now*."""
     return signed({**row, **_status(snapshot, row, now)}, snapshot.notes_of(row["verstr"]))
 
@@ -122,8 +122,7 @@ class _Base:
     """One snapshot's rows with their status and tree fields; *now_of()*
     is the time a build or a time bucket's re-derivation reads, once."""
 
-    def __init__(self, snapshot, token, bucket, rows, position, patch, tree, siblings,
-                 now_of=experiment_status.now_from):
+    def __init__(self, snapshot, token, bucket, rows, position, patch, tree, siblings, now_of):
         self.now_of = now_of
         self.snapshot = snapshot
         self.siblings = siblings  # the duration_ratio medians (sibling_durations)
@@ -147,7 +146,7 @@ class _Base:
         self.built_bucket = bucket
 
     @classmethod
-    def build(cls, snapshot, token, bucket, split=None, now_of=experiment_status.now_from):
+    def build(cls, snapshot, token, bucket, split, now_of):
         """From scratch: O(N) — a copy of every row, so with collection
         paused (see :mod:`~vmn_exp.core.gc_pause`). *split*: the field
         ``duration_ratio`` compares siblings by (none: the parent alone)."""
@@ -156,7 +155,7 @@ class _Base:
             live = [i for i, row in enumerate(snapshot.rows)
                     if is_live(snapshot, row["verstr"], now)]
             rows = [signed(row, snapshot.notes_of(row["verstr"])) for row in
-                    annotate_rows(snapshot.rows, states, snapshot.run_state_observed_at, now)]
+                    annotate_rows(snapshot.rows, states, snapshot.run_state_observed_at, now=now)]
             siblings = SiblingDurations.stamping(rows, split)
             position = {row["verstr"]: i for i, row in enumerate(rows)}
             patch = LivePatch.of_rows(rows, live, position)
@@ -164,7 +163,7 @@ class _Base:
                        now_of)
 
     @classmethod
-    def derived(cls, prev, snapshot, token, bucket, delta=None, now_of=experiment_status.now_from):
+    def derived(cls, prev, snapshot, token, bucket, delta=None, *, now_of):
         """From *prev*'s base, re-deriving only what changed (*delta*:
         ``(storage indexes, verstrs gone)``, else found), its ratios against
         siblings by *prev*'s split; None when the delta is large, a verstr
@@ -224,7 +223,7 @@ class _Base:
         while stop and (count < 1 or len(out) < count):
             start = max(0, stop - chunk)
             window = [patched.get(i, self.rows[i]) for i in at[start:stop]]
-            out = filtered(self.snapshot, window, f) + out
+            out = filtered(self.snapshot, window, f, self.now_of()) + out
             stop, chunk = start, chunk * 2
         return out
 
@@ -266,7 +265,7 @@ class _Static:
         elif at is None:
             at = range(len(base.rows))
         rows = [base.rows[i] for i in at if i not in changed]
-        kept = filtered(base.snapshot, rows, f)
+        kept = filtered(base.snapshot, rows, f, base.now_of())
         ordered = sort_rows(kept, schema, sort=f.sort, order=f.order)
         with_metric = _carrying(f.sort or primary_metric(schema), kept)
         return cls(base.token, ordered, kept, with_metric)
@@ -277,7 +276,7 @@ class _Static:
         bisection. None when whether any row carries the sort metric flips —
         the order changes shape then — or a left row is missing."""
         left = left_filtered(self.sorted, left, f)
-        joined = filtered(base.snapshot, joined, f)
+        joined = filtered(base.snapshot, joined, f, base.now_of())
         sort, order = f.sort, f.order
         metric = sort or primary_metric(schema)
         with_metric = self.with_metric - _carrying(metric, left) + _carrying(metric, joined)
@@ -323,9 +322,8 @@ class LeaderboardCache(SetAnswers):
         settings): what the board warm-up sorts by, job rollups read
         their progress names from and ``duration_ratio`` its split by.
         *now()* is the aware UTC time statuses are derived at, read once
-        per build or time bucket (None: :func:`~vmn_exp.core.status._now`,
-        read at call time)."""
-        self._clock_now = now
+        per build or time bucket (None: ``real_io().clock.now``)."""
+        self._clock_now = now or real_io().clock.now
         self.conf_of = conf_of
         self.max_page = max_page
         self.bucket_sec = bucket_sec
@@ -375,7 +373,7 @@ class LeaderboardCache(SetAnswers):
 
     def now(self):
         """The time statuses are derived at now."""
-        return experiment_status.now_from(self._clock_now)
+        return self._clock_now()
 
     def _bucket(self):
         return int(self.now().timestamp() // self.bucket_sec)
@@ -457,9 +455,8 @@ class LeaderboardCache(SetAnswers):
             return static.sorted
         return merged.get(
             (base.token, bucket, schema_key, None) + f,
-            lambda: static.merged(
-                base, filtered(base.snapshot, base.changed_at(bucket), f), schema, f.sort, f.order,
-            ),
+            lambda: static.merged(base, filtered(base.snapshot, base.changed_at(bucket), f,
+                                                 base.now_of()), schema, f.sort, f.order),
         )
 
     def _orders_for(self, f):

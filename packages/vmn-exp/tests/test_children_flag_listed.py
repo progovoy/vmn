@@ -17,6 +17,7 @@ from vmn_exp.storage import children_flag, s3_stats
 from vmn_exp.storage.base import NO_FILE
 from vmn_exp.storage.files import CHILDREN_COMPLETE_FILE
 from vmn_exp.ui.store_upkeep import AppUpkeep
+from vmn_exp.core.real_io import RealClock
 
 APP = "my_app"
 CODE = "0.0.1-dev.abc.def"
@@ -116,13 +117,13 @@ def test_a_write_of_the_flag_is_seen_without_a_read(s3, calls):
 def test_a_restarted_upkeep_skips_a_flagged_app_without_reading_the_flag(s3, calls):
     outer = _run(s3)
     _run(s3, parent=outer)
-    AppUpkeep(s3, APP, time.monotonic).run(_snap(s3))
+    AppUpkeep(s3, APP, time.monotonic, now=RealClock().now).run(_snap(s3))
     assert s3.children_complete(APP)
 
     restarted = _restarted()
     snapshot = _snap(restarted)
     calls.clear()
-    AppUpkeep(restarted, APP, time.monotonic).run(snapshot)
+    AppUpkeep(restarted, APP, time.monotonic, now=RealClock().now).run(snapshot)
 
     assert _reads(calls) == []
 
@@ -135,7 +136,7 @@ def test_upkeep_reflags_a_listed_drop_without_reading_the_flag(s3, calls):
     restarted = _restarted()
     snapshot = _snap(restarted)
     calls.clear()
-    AppUpkeep(restarted, APP, time.monotonic).run(snapshot)
+    AppUpkeep(restarted, APP, time.monotonic, now=RealClock().now).run(snapshot)
 
     assert _flag_reads(calls) == []
     assert s3.children_complete(APP)
@@ -160,7 +161,7 @@ def test_upkeep_does_not_flag_over_a_drop_during_its_check(s3, monkeypatch):
         return names
 
     monkeypatch.setattr(restarted, "list_verstrs", listing)
-    AppUpkeep(restarted, APP, time.monotonic).run(snapshot)
+    AppUpkeep(restarted, APP, time.monotonic, now=RealClock().now).run(snapshot)
 
     assert not s3.children_complete(APP)
 
@@ -168,7 +169,7 @@ def test_upkeep_does_not_flag_over_a_drop_during_its_check(s3, monkeypatch):
 def _prune(storage, version):
     args = SimpleNamespace(version=[version], keep=None, older_than=None, force=False,
                            dry_run=False, query=None, protect_tag=None)
-    return prune_mod.experiment_prune(None, {}, storage, args, APP)
+    return prune_mod.experiment_prune(None, {}, storage, args, APP, clock=RealClock())
 
 
 def test_prune_does_not_trust_a_flag_seen_before_a_drop(s3, monkeypatch):

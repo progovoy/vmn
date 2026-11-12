@@ -14,28 +14,22 @@ least :data:`COST_MULTIPLE` times the last publish's cost — passed: a
 constant cost per record however big the store, with the first chunk
 published at once and the board moving every few seconds while it is small.
 """
-import time
 
 from vmn_exp.core.index_snapshot import IndexSnapshot
 
 PUBLISH_FRACTION = 0.05
 PUBLISH_EVERY_SEC = 10.0
 COST_MULTIPLE = 20
-_monotonic = time.monotonic
 
 
 class BulkPublish:
     """The changes a bulk load has not published yet, and when it should."""
 
-    def __init__(self, monotonic=None):
-        """*monotonic*: the clock publishes are timed on (None: this module's
-        ``_monotonic``, read at call time)."""
-        self._clock = monotonic
+    def __init__(self, monotonic):
+        """*monotonic*: the clock publishes are timed on."""
+        self._monotonic = monotonic
         self.new, self.touched, self.resort, self.removed = [], set(), False, False
         self._published_at, self._cost = self._monotonic(), 0.0
-
-    def _monotonic(self):
-        return (self._clock or _monotonic)()
 
     def add(self, new, removed, redescribed, touched):
         self.new += new

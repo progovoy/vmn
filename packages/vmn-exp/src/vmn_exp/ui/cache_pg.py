@@ -15,9 +15,9 @@ TRUNCATEs the cache tables, never the control-plane ones.
 import json
 import logging
 
-from vmn_exp.core import index_store
 from vmn_exp.core.cache_store import FULL_LOAD
-from vmn_exp.core.index_store import _state_of, _without_state
+from vmn_exp.core.index_store import TOMBSTONE_TTL_SEC, _state_of, _without_state
+from vmn_exp.core.real_io import real_io
 from vmn_exp.core.index_store_schema import (
     RECORDS_VERSION,
     SCHEMA_VERSION,
@@ -77,14 +77,14 @@ def _ensure_cache_version(conn):
 class PostgresStore(DefaultOrg):
     def __init__(self, dsn, org_id=0, *, clock=None):
         """*clock* (a :class:`~vmn_exp.core.ports.Clock`) stamps tombstones
-        (None: :mod:`~vmn_exp.core.index_store`'s ``_now``, read at call time)."""
-        self._clock = clock
+        (None: ``real_io().clock``, as :class:`~vmn_exp.core.index_store.SqliteStore`'s)."""
+        self._clock = clock or real_io().clock
         self._dsn = dsn
         self._default_org = org_id
         self._version_checked = False
 
     def _wall(self):
-        return self._clock.now().timestamp() if self._clock else index_store._now()
+        return self._clock.now().timestamp()
 
     def _run(self, op, default, what):
         try:
@@ -283,7 +283,7 @@ def _forget(conn, key, seq, removed, wall):
 
 
 def _trim_tombstones(conn, key, wall):
-    cutoff = key + (wall - index_store.TOMBSTONE_TTL_SEC,)
+    cutoff = key + (wall - TOMBSTONE_TTL_SEC,)
     (newest,) = conn.execute(
         f"SELECT MAX(seq) FROM vmn_tombstones WHERE {_SCOPE} AND ts < %s", cutoff
     ).fetchone()

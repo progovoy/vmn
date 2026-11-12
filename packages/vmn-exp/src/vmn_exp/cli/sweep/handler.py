@@ -28,7 +28,7 @@ def handle_sweep(vmn_ctx, io):
             return sweep_create(vcs, storage, args)
         sweep, spec = resolve_sweep(storage, vcs.name, args.ref)
         if args.action == "status":
-            return sweep_status(storage, vcs.name, sweep, spec, args)
+            return sweep_status(storage, vcs.name, sweep, spec, args, io.clock)
         from vmn_exp.cli.sweep.agent import run_agent
 
         return run_agent(vcs, storage, args, sweep, spec, getattr(vmn_ctx, "repo_lock", None),
@@ -76,8 +76,8 @@ def resolve_sweep(storage, app_name, ref):
     return verstr, parse_spec(meta["sweep"])
 
 
-def sweep_status(storage, app_name, sweep, spec, args):
-    summary = summarize(spec, trial_rows(storage, app_name, sweep, spec),
+def sweep_status(storage, app_name, sweep, spec, args, clock):
+    summary = summarize(spec, trial_rows(storage, app_name, sweep, spec, clock=clock),
                         claimed_trials(storage, app_name, sweep))
     summary["sweep"] = sweep
     if args.json:

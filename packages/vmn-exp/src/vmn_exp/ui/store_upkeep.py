@@ -35,7 +35,7 @@ from collections import defaultdict
 from vmn_exp.core.activity import activity
 from vmn_exp.core.log_compact import compact_record_logs
 from vmn_exp.core.metric_compact import compact_record
-from vmn_exp.core.status import FAILED, STUCK, derive_status, now_from
+from vmn_exp.core.status import FAILED, STUCK, derive_status
 from vmn_exp.core.traced_lock import TracedLock
 from vmn_exp.ui.upkeep_flag import flag_marked_app
 
@@ -51,9 +51,9 @@ _LOGGER = logging.getLogger(__name__)
 
 class AppUpkeep:
     """One app's upkeep state across passes; *now()* the aware UTC time a
-    pass judges the dead runs at (None: :func:`~vmn_exp.core.status._now`)."""
+    pass judges the dead runs at."""
 
-    def __init__(self, storage, app_name, clock, now=None):
+    def __init__(self, storage, app_name, clock, now):
         self._storage, self._app, self._clock = storage, app_name, clock
         self._now = now
         self._listed = set()  # parents whose markers were listed
@@ -147,7 +147,7 @@ class AppUpkeep:
 
     def _dead(self, snapshot):
         """The failed/stuck runs not compacted yet, newest first."""
-        observed, now = snapshot.run_state_observed_at, now_from(self._now)
+        observed, now = snapshot.run_state_observed_at, self._now()
         dead = [row for row in snapshot.rows if row["verstr"] not in self._compacted
                 and derive_status(snapshot.run_states.get(row["verstr"]), now=now,
                                   observed_at=observed.get(row["verstr"])) in DEAD]
@@ -159,7 +159,7 @@ class StoreUpkeep:
     """Runs :class:`AppUpkeep` passes for the noted indexes on one thread."""
 
     def __init__(self, interval_sec=UPKEEP_INTERVAL_SEC, budget_sec=PASS_BUDGET_SEC, *, clock,
-                 now=None):
+                 now):
         """Passes are spaced on *clock* (monotonic seconds), which each
         :class:`AppUpkeep` budgets its compaction on too, and judge dead
         runs at *now()* (see :class:`AppUpkeep`)."""

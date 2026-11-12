@@ -15,6 +15,7 @@ from vmn_exp.storage import fanout
 from vmn_exp.storage.s3_base import S3_WORKERS
 from vmn_exp.ui.readers import experiment_detail
 from vmn_exp.ui.readers.parsed_logs import ParsedLogs
+from vmn_exp.core.real_io import RealClock
 
 APP, V, S = "app", "1.0.0-dev.a", "w~o1"
 T0 = 1_767_225_600_000_000
@@ -68,7 +69,7 @@ def test_a_cold_detail_reads_its_segments_as_wide_as_the_request_lane(s3):
 
     with fanout.serving_request():
         detail, err = experiment_detail.experiment_detail(
-            s3, APP, V, edges=lambda storage, app: {V: None})
+            s3, APP, V, edges=lambda storage, app: {V: None}, now=RealClock().now())
 
     assert err is None
     assert detail["log_total"] == 2 * SEGMENTS

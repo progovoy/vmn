@@ -12,6 +12,7 @@ from vmn_exp.ui.leaderboard_warm import BoardWarmer
 from vmn_exp.ui.refresher import Refresher
 from vmn_exp.ui.report_index import ReportIndexes
 from vmn_exp.ui.store_upkeep import StoreUpkeep
+from vmn_exp.core.real_io import RealClock
 
 
 def _unique(prefix):
@@ -109,7 +110,7 @@ def test_a_report_index_refresh_is_recorded_per_workspace(monkeypatch):
 def test_a_store_upkeep_pass_is_recorded_per_app():
     app = _unique("app")
     index = _Index(app)
-    upkeep = StoreUpkeep(interval_sec=0, clock=time.monotonic)
+    upkeep = StoreUpkeep(interval_sec=0, clock=time.monotonic, now=RealClock().now)
     upkeep.note(index, None, app)
     upkeep._apps[index] = types.SimpleNamespace(
         run=lambda snapshot, budget: {"marked": 0, "compacted": 0, "failed": 0})

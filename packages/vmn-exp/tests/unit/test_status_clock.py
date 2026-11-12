@@ -3,6 +3,7 @@ running run turns stuck once the given ``now`` passes its stale window,
 durations run to it, and a writer clock ahead of it proves nothing."""
 from datetime import timedelta
 
+import pytest
 from fakes.clock import FakeClock
 from vmn_exp.core.status import (
     RUNNING,
@@ -55,3 +56,13 @@ def test_last_alive_at_ignores_a_writer_time_after_the_given_now():
     assert last_alive_at(state, clock.now() + timedelta(seconds=50), observed) == observed
     assert (last_alive_at(state, clock.now() + timedelta(seconds=200), observed)
             == observed + timedelta(seconds=100))
+
+
+def test_derive_status_without_now_is_a_type_error():
+    state = _running(FakeClock().now())
+    with pytest.raises(TypeError):
+        derive_status(state)
+    with pytest.raises(TypeError):
+        status_fields(state)
+    with pytest.raises(TypeError):
+        last_alive_at(state)

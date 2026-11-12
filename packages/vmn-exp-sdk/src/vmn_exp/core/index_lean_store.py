@@ -50,7 +50,7 @@ def is_run(record):
     return record.get("meta") is not None and record.get("fold") is not None
 
 
-def run_status(record, now=None):
+def run_status(record, now):
     """*record*'s derived status at *now*, or None when its run state cannot say."""
     try:
         return derive_status(record.get("run_state"), now=now,
@@ -65,8 +65,8 @@ def leans_of(records):
             for key, record in records.items() if is_run(record)}
 
 
-def write_lean(conn, app, seq, changed, removed, states, leans, renumber=True, defer=False,
-               now=None):
+def write_lean(conn, app, seq, changed, removed, states, leans, renumber=True, defer=False, *,
+               now):
     """Bring *app*'s lean tables in line with a save of *changed* records
     (*leans* their runs' :func:`leans_of`), *removed* keys and the run states
     of *states* (see :meth:`~vmn_exp.core.index_store.SqliteStore.save`);
@@ -109,7 +109,7 @@ def _delete(conn, app, keys):
     conn.executemany("DELETE FROM exp_sides WHERE app = ? AND key = ?", gone)
 
 
-def _upsert(conn, app, seq, runs, leans, now=None):
+def _upsert(conn, app, seq, runs, leans, now):
     rows, sides = [], []
     for key, record in runs.items():
         meta = record["meta"]

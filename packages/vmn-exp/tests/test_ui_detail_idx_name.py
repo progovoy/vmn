@@ -85,7 +85,7 @@ def test_without_a_child_row_reader_idx_is_null(tmp_path):
 
     storage = open_storage(f"file://{tmp_path}/store", area=RUNS, clock=RealClock())
     storage.save(APP, RUNS_[0][0], {"verstr": RUNS_[0][0], "name": "first"}, {})
-    detail, err = experiment_detail(storage, APP, RUNS_[0][0], include_series=False)
+    detail, err = experiment_detail(storage, APP, RUNS_[0][0], include_series=False, now=RealClock().now())
     assert err is None
     assert detail["idx"] is None
     assert detail["name"] == "first"

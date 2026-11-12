@@ -34,7 +34,8 @@ def _training(n=1, dates=DATES, trials=4, own=True, start=100):
 
 def _rolled(specs, agg, schema=SCHEMA, job=1):
     snap = snapshot(specs)
-    return LeaderboardCache().job_aggregates.rolled(snap, schema, agg)[v(job)], annotated(snap)
+    cache = LeaderboardCache()
+    return cache.job_aggregates.rolled(snap, schema, agg)[v(job)], annotated(snap, cache.now())
 
 
 def _want(rows, agg, schema=SCHEMA, job=1):

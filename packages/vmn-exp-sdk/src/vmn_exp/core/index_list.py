@@ -69,7 +69,7 @@ def _narrow(clause, where, params):
 
 
 def list_view(storage, app_name, query=None, archived=False, last=None, schema=None,
-              clock=None):
+              *, clock):
     """``(rows, declared schema, app has runs)`` — *rows* the annotated runs
     *query* and the archived filter keep (the *last* ones without a query),
     in storage order, as a full listing builds them — or None when the
@@ -87,13 +87,13 @@ def list_view(storage, app_name, query=None, archived=False, last=None, schema=N
         return None
     total, keep, found, declared = parts
     snap = _snapshot(app_name, found).summarized(schema)
-    rows = [row for row in _matching(storage, app_name, snap, query, True, _now_of(clock))[0]
+    rows = [row for row in _matching(storage, app_name, snap, query, True, clock.now())[0]
             if row["verstr"] in keep]
     return filter_archived(rows, archived), runs_declared_schema(*declared), total > 0
 
 
 def snapshot_listing(storage, app_name, query=None, schema=None, with_create_note=False,
-                     clock=None):
+                     *, clock):
     """``(rows, declared schema, app has runs, loading)`` — the annotated
     runs *query* keeps, in storage order — from an up-to-date snapshot of the
     app, whose ``loading`` it is (None when whole): what a listing
@@ -101,23 +101,20 @@ def snapshot_listing(storage, app_name, query=None, schema=None, with_create_not
     see :func:`list_view`."""
     snap = experiment_index.indexed_snapshot(storage, app_name, wait=True, schema=schema,
                                              clock=clock)
-    rows, tree = _matching(storage, app_name, snap, query, with_create_note, _now_of(clock))
+    rows, tree = _matching(storage, app_name, snap, query, with_create_note, clock.now())
     return rows, snap.declared_schema(), bool(tree), snap.loading
 
 
-def _now_of(clock):
-    return clock.now() if clock else None
 
-
-def _matching(storage, app_name, snap, query, with_create_note, now=None):
+def _matching(storage, app_name, snap, query, with_create_note, now):
     """``(rows *query* keeps, all rows)`` of *snap*, annotated: status and
     tree fields span every run, so depth, tree_status and the query see the
     whole tree whatever subset is kept. A kept outer run adds ``lost_below``
     (plan 34 §3), the query's count."""
     tree = annotate_rows(row_copies(snap, with_create_note), snap.run_states,
-                         snap.run_state_observed_at, now)
+                         snap.run_state_observed_at, now=now)
     extra = store_extra(storage, app_name, snap, tree)
-    kept = filter_rows(tree, query, extra=extra)
+    kept = filter_rows(tree, query, extra=extra, now=now)
     for row in kept:
         if row["children"]:
             row[LOST_BELOW] = extra[LOST_BELOW](row["verstr"])

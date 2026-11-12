@@ -49,8 +49,8 @@ class GroupSpec:
         """``row -> group key`` for the rows of *snapshot*."""
         return key_of(self.group, snapshot)
 
-    def filtered(self, snapshot, rows):
-        return filtered(snapshot, rows, self.flat)
+    def filtered(self, snapshot, rows, now):
+        return filtered(snapshot, rows, self.flat, now)
 
     def carrying(self, rows):
         return sum(1 for row in rows if self.metric in row["metrics"])

@@ -12,6 +12,7 @@ from vmn_exp.core.log import experiment_row
 from vmn_exp.core.query import QueryError
 from vmn_exp.ui import leaderboard_cache as lb
 from vmn_exp.ui.readers import experiments as exp_reader
+from vmn_exp.core.real_io import RealClock
 
 APP = "app"
 NOW = datetime.datetime.now(datetime.timezone.utc)
@@ -61,7 +62,8 @@ def _counting(monkeypatch, name, module=lb, calls=None):
 
 def _reference(snap, schema, **params):
     rows = copy.deepcopy(list(snap.rows))
-    return exp_reader.leaderboard(rows, dict(snap.run_states), schema, **params)
+    return exp_reader.leaderboard(rows, dict(snap.run_states), schema, now=RealClock().now(),
+                                  **params)
 
 
 def _strip_time(result):

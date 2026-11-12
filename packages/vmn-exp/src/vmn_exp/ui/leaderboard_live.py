@@ -39,7 +39,7 @@ from vmn_exp.core.values import is_finite_number
 from vmn_exp.ui.leaderboard_tree import parent_in
 
 
-def is_live(snapshot, verstr, now=None):
+def is_live(snapshot, verstr, now):
     """Whether time alone can change *verstr*'s status: only a ``running`` run
     at *now* (judged with the store's write time too) can turn ``stuck``; a
     stuck one stays stuck until a write, which makes a new snapshot."""

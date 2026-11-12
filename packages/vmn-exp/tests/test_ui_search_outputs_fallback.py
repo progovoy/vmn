@@ -11,6 +11,7 @@ from vmn_exp.core.index import direct_snapshot  # noqa: E402
 from vmn_exp.core.writer import append_to_log, create_log_entry, flush_log  # noqa: E402
 from vmn_exp.snapshot import LocalSnapshotStorage  # noqa: E402
 from vmn_exp.ui import routes_search  # noqa: E402
+from vmn_exp.core.real_io import RealClock
 
 APP = "app"
 V = "0.0.1-dev.abc.r1"
@@ -23,7 +24,7 @@ class FakeSql:
     def sync(self, workspace, app, generation, rows_of):
         pass
 
-    def search(self, workspaces, text, limit, archived=False):
+    def search(self, workspaces, text, limit, archived=False, now=None):
         self.searched.append(text)
         return []
 
@@ -47,7 +48,8 @@ def client(tmp_path):
     app = FastAPI()
     app.state.manager = _Manager()
     sql = FakeSql()
-    routes_search.register(app, "/api", lambda names: iter([("ws", APP, snap)]), sql)
+    routes_search.register(app, "/api", lambda names: iter([("ws", APP, snap)]), sql,
+                           now=RealClock().now)
     return TestClient(app), sql
 
 

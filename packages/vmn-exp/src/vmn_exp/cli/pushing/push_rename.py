@@ -32,7 +32,7 @@ _FRESH, _OURS = "fresh", "ours"
 _MAX_CLAIM_ATTEMPTS = 20
 
 
-def local_status(local, app_name, verstr, now=None):
+def local_status(local, app_name, verstr, now):
     """The derived status of a local run at *now*."""
     state = load_run_state(local, app_name, verstr)
     observed_at = run_state_observed_at(local, app_name, verstr)
@@ -40,7 +40,7 @@ def local_status(local, app_name, verstr, now=None):
 
 
 def push_or_rename(local, target, app_name, verstr, ledger, code,
-                   registered=frozenset()):
+                   registered=frozenset(), *, now):
     """:func:`push_run`, renaming the run on a collision. *registered* holds
     the ``(app, verstr)`` pairs local model versions reference. A renamed
     run's :class:`Outcome` carries ``renamed_from``; a refused rename is
@@ -49,7 +49,7 @@ def push_or_rename(local, target, app_name, verstr, ledger, code,
     if outcome.status != COLLISION:
         return outcome
     meta = local.load_metadata(app_name, verstr)
-    refusal = rename_refusal(local, app_name, verstr, meta, registered)
+    refusal = rename_refusal(local, app_name, verstr, meta, registered, now)
     if refusal:
         return Outcome(verstr, SKIPPED, refusal)
     try:
@@ -64,13 +64,13 @@ def push_or_rename(local, target, app_name, verstr, ledger, code,
     return outcome
 
 
-def rename_refusal(local, app_name, verstr, meta, registered):
+def rename_refusal(local, app_name, verstr, meta, registered, now):
     """Why run *verstr* must keep its name, or None."""
     if meta.get("sweep"):
         return "sweep outer run collides"
     if (app_name, verstr) in registered:
         return "registered model run collides: rename refused"
-    status = local_status(local, app_name, verstr)
+    status = local_status(local, app_name, verstr, now)
     if status in (RUNNING, STUCK):
         return f"{status} run collides: finish the run first"
     return None

@@ -35,7 +35,7 @@ def search(pg_dsn):
 
 
 def _search_hits(search):
-    return [row for (_, _, row) in search.search(["ws"], "", 10)]
+    return [row for (_, _, row) in search.search(["ws"], "", 10, False, None)]
 
 
 def test_control_plane_request_killed_mid_flight_raises_and_the_next_succeeds(

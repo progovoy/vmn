@@ -115,4 +115,5 @@ class RunRecords:
         from vmn_exp.core.similar_search import find
 
         self._log_buffer.flush()
-        return find(self._storage, self.app_name, self.id, self._exp_conf, top=top)
+        return find(self._storage, self.app_name, self.id, self._exp_conf, top=top,
+                    clock=self._clock)

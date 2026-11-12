@@ -20,13 +20,11 @@ reported phase and progress have not changed (None between refreshes): a
 long refresh that keeps moving is not stuck.
 """
 import bisect
-import time
 
 FULL_LISTING, JOURNAL, LISTING, LOADING_NEW, MIGRATING, IDLE = (
     "full_listing", "journal", "listing", "loading_new", "migrating", "idle")
 PERSIST_EVERY_SEC = 60
 _FORMAT = "1"
-_wall = time.time
 
 
 def listing_progress(keys, at):
@@ -40,19 +38,15 @@ class Freshness:
     """One index's ``as_of`` (persisted in ``store()``'s key-value table) and
     refresh phase."""
 
-    def __init__(self, store, app_name, wall=None):
-        """*wall*: epoch seconds now (None: this module's ``_wall``, read at
-        call time)."""
+    def __init__(self, store, app_name, wall):
+        """*wall*: epoch seconds now."""
         self._store, self._scope = store, f"as_of:{app_name}"
-        self._clock = wall
+        self._wall = wall
         self._as_of = self._persisted_at = self._read_at = self._started = None
         self.phase = IDLE
         self._keys, self._position, self._sorted = None, None, False  # a full listing's
         self._new, self._read = 0, 0  # new records to read, read
         self._moved = (None, None)  # ((phase, progress) last reported, wall time it changed)
-
-    def _wall(self):
-        return (self._clock or _wall)()
 
     @property
     def as_of(self):

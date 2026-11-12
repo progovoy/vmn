@@ -17,7 +17,7 @@ from vmn_exp.cli.migrate_records import (
     METADATA, classify, local_records, object_records, v2_prefix,
 )
 from vmn_exp.cli.migrate_tree import LocalTree, ObjectTree
-from vmn_exp.core.status import RUN_STATE_FILE, RUNNING, STUCK, derive_status
+from vmn_exp.core.status import RUN_STATE_FILE, ended_status
 from vmn_exp.storage import areas
 from vmn_exp.storage.store_marker import MARKER, LAYOUT, forget_checked, new_marker
 
@@ -85,11 +85,14 @@ def _key(root, name):
     return f"{root}/{name}" if root else name
 
 
-def _is_live(tree, record, now=None):
+def _is_live(tree, record):
+    """Whether *record* is a run that started and has not ended (running or
+    stuck alike, so no clock decides it)."""
     if record.area != areas.RUNS or RUN_STATE_FILE not in record.names:
         return False
     state = yaml.safe_load(tree.read(f"{record.src}/{RUN_STATE_FILE}") or b"")
-    return isinstance(state, dict) and derive_status(state, now=now) in (RUNNING, STUCK)
+    return (isinstance(state, dict) and state.get("state") == "running"
+            and ended_status(state) is None)
 
 
 def _migrate(tree, root, records, dry_run, skip_live):

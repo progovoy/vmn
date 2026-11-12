@@ -12,7 +12,7 @@ from vmn_exp.core.query import compile_query
 _PREVIEW_CAP = 20
 
 
-def query_candidates(storage, app_name, metas, query_text, schema=None):
+def query_candidates(storage, app_name, metas, query_text, schema, clock):
     """Return the subset of *metas* whose full rows match *query_text*;
     *schema* (the app's metrics schema) sets which value ``metrics.x`` is.
 
@@ -20,7 +20,7 @@ def query_candidates(storage, app_name, metas, query_text, schema=None):
     empty or syntactically invalid query.  Callers must catch it.
     """
     compile_query(query_text)  # raises QueryError on bad input, an empty one too
-    rows = snapshot_listing(storage, app_name, query_text, schema)[0]
+    rows = snapshot_listing(storage, app_name, query_text, schema, clock=clock)[0]
     matching = {row["verstr"] for row in rows}
     return [m for m in metas if m["verstr"] in matching]
 

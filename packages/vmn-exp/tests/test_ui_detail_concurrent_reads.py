@@ -11,6 +11,7 @@ import detail_fixture as fx
 
 from vmn_exp.storage.local import LocalSnapshotStorage
 from vmn_exp.ui.readers.experiment_detail import experiment_detail
+from vmn_exp.core.real_io import RealClock
 
 GOLDEN = os.path.join(os.path.dirname(__file__), "golden", "run_detail.json")
 LATENCY = 0.03
@@ -63,7 +64,7 @@ def _golden():
 @pytest.mark.parametrize("verstr", fx.VERSTRS)
 def test_the_payload_matches_the_sequential_readers(root, verstr):
     storage = LocalSnapshotStorage(root, area="runs")
-    detail, err = experiment_detail(storage, fx.APP, verstr, edges=fx.edges)
+    detail, err = experiment_detail(storage, fx.APP, verstr, edges=fx.edges, now=RealClock().now())
 
     assert err is None
     assert json.loads(fx.canonical(detail)) == _golden()[verstr]
@@ -73,7 +74,7 @@ def test_the_payload_matches_the_sequential_readers(root, verstr):
 def test_independent_reads_overlap_and_the_payload_is_unchanged(root, verstr):
     storage = _SlowStore(root, "runs")
     started = time.monotonic()
-    detail, err = experiment_detail(storage, fx.APP, verstr, edges=fx.edges)
+    detail, err = experiment_detail(storage, fx.APP, verstr, edges=fx.edges, now=RealClock().now())
     elapsed = time.monotonic() - started
 
     assert err is None

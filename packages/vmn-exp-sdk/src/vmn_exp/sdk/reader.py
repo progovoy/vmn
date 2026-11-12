@@ -40,6 +40,7 @@ from vmn_exp.core.log import load_log as _load_log
 from vmn_exp.core.importance import param_importance as _param_importance
 from vmn_exp.core.media import media_index
 from vmn_exp.core.ranges import ranges_view
+from vmn_exp.core.real_io import real_io
 from vmn_exp.core.metric_schema import effective_schema
 from vmn_exp.core.index_rows import row_copies
 from vmn_exp.core.query import filter_rows
@@ -101,7 +102,7 @@ def _metrics_schema(storage, root_path, app_name):
 
 
 def _rows_and_declared(app_name, storage, use_index=True, schema=None, incomplete=None,
-                       clock=None):
+                       *, clock):
     """``(rows, declared schema, extra)``: every run of an app,
     status-annotated, in storage order (oldest first); the goals/hidden flags
     the runs declare (:mod:`vmn_exp.core.metric_schema`) and what a query
@@ -114,20 +115,20 @@ def _rows_and_declared(app_name, storage, use_index=True, schema=None, incomplet
     *incomplete* ``"warn"`` warns it at the public reader's caller
     (:func:`~vmn_exp.sdk.reader_select.check_loading`).
     Asking about a single run goes through :func:`_subtree_row` instead.
-    *clock* (a :class:`~vmn_exp.core.ports.Clock`): the index's and the
-    statuses' (None: the modules' own clocks).
+    *clock* (a :class:`~vmn_exp.core.ports.Clock`): the index's and the statuses'.
     """
+    now = clock.now()
     if use_index:
         snap = experiment_index.indexed_snapshot(storage, app_name, wait=True, schema=schema,
                                                  clock=clock)
-        extra = store_extra(storage, app_name, snap)
+        extra = store_extra(storage, app_name, snap, now=now)
     else:
         snap = experiment_index.direct_snapshot(
             storage, app_name, schema, read_log=_load_log, read_run_state=load_run_state)
-        extra = rows_extra(snap)
+        extra = rows_extra(snap, now=now)
     check_loading(snap.loading, incomplete, stacklevel=3)
     rows = annotate_rows(row_copies(snap, False), snap.run_states, snap.run_state_observed_at,
-                         clock.now() if clock else None)
+                         now=now)
     return rows, snap.declared_schema(), extra
 
 
@@ -176,20 +177,18 @@ def list_runs(
         clock: the :class:`~vmn_exp.core.ports.Clock` statuses derive on.
     """
     app_name, storage, root_path = _resolve(app_name, storage)
-    schema = _metrics_schema(storage, root_path, app_name)
+    schema, clock = _metrics_schema(storage, root_path, app_name), clock or real_io().clock
     rows, declared, extra = _rows_and_declared(app_name, storage, use_index, schema, incomplete,
-                                               clock)
+                                               clock=clock)
     rows = filter_archived(rows, include_archived)
-    rows = filter_rows(filter_by_status(rows, status), query, extra, clock and clock.now())
+    rows = filter_rows(filter_by_status(rows, status), query, extra, clock.now())
     # Summaries follow the conf schema only; direction also what runs declare.
     return select(rows, effective_schema(schema, declared), last=last, sort=sort,
                   descending=descending, limit=limit)
 
 
-def param_importance(
-    app_name=None, metric=None, *, storage=None, query=None, status=None,
-    include_archived=False, incomplete=None,
-):
+def param_importance(app_name=None, metric=None, *, storage=None, query=None, status=None,
+                     include_archived=False, incomplete=None):
     """Which params drive *metric*: ``[{param, importance, correlation,
     spearman, kind, n}]`` over the runs :func:`list_runs` would return for
     the same *query*/*status*, most important first (see
@@ -200,9 +199,10 @@ def param_importance(
     *incomplete* is ``"warn"`` (as in :func:`list_runs`).
     """
     app_name, storage, _ = _resolve(app_name, storage)
-    rows, _, extra = _rows_and_declared(app_name, storage, incomplete=incomplete)
+    clock = real_io().clock
+    rows, _, extra = _rows_and_declared(app_name, storage, incomplete=incomplete, clock=clock)
     rows = filter_archived(rows, include_archived)
-    matching = filter_rows(filter_by_status(rows, status), query, extra=extra)
+    matching = filter_rows(filter_by_status(rows, status), query, extra=extra, now=clock.now())
     return _param_importance(matching, metric, universe=rows)
 
 
@@ -256,7 +256,8 @@ def get_run(app_name=None, ref="latest", *, storage=None, x=None, clock=None):
     if err:
         raise ValueError(err)
 
-    target, status = _subtree_row(app_name, storage, verstr, snapshot, clock and clock.now())
+    target, status = _subtree_row(app_name, storage, verstr, snapshot,
+                                  (clock or real_io().clock).now())
     if target is None:
         raise ValueError(f"Experiment '{verstr}' not found for {app_name}")
 
@@ -292,7 +293,7 @@ def get_run_state(app_name=None, verstr=None, *, storage=None):
     listing. *verstr* must be the exact name. Raises ValueError when no such
     run exists."""
     app_name, storage, _ = _resolve(app_name, storage)
-    read = read_run_state(storage, app_name, verstr) if verstr else None
+    read = read_run_state(storage, app_name, verstr, real_io().clock.now()) if verstr else None
     if read is None:
         raise ValueError(f"Experiment '{verstr}' not found for {app_name}")
     return read[2]
@@ -306,7 +307,7 @@ def get_run_states(app_name=None, refs=(), *, storage=None):
     never touch the index or list the app (``latest`` / ``@N`` resolve through
     it once per call; prefixes are not resolved)."""
     app_name, storage, _ = _resolve(app_name, storage)
-    return read_run_states(storage, app_name, list(refs))
+    return read_run_states(storage, app_name, list(refs), real_io().clock.now())
 
 
 def get_lineage(app_name=None, ref="latest", *, depth=1, storage=None, limit=DEFAULT_LIMIT):
@@ -328,9 +329,8 @@ def get_lineage(app_name=None, ref="latest", *, depth=1, storage=None, limit=DEF
     if err:
         raise ValueError(err)
     try:
-        return run_lineage(
-            storage, app_name, verstr, app_indexes(storage), depth=depth, limit=limit
-        )
+        return run_lineage(storage, app_name, verstr, app_indexes(storage, real_io().clock),
+                           depth=depth, limit=limit)
     except KeyError as e:
         raise ValueError(e.args[0]) from None
 
@@ -355,7 +355,7 @@ def similar_runs(app_name=None, ref="latest", *, storage=None, top=10, query=Non
     exp_conf = read_experiment_conf(app_name, root_path) if root_path else {}
     return _find_similar(
         storage, app_name, ref, exp_conf, top=top, query=query, context=context,
-        text_only=text_only, all_apps=all_apps,
+        text_only=text_only, all_apps=all_apps, clock=real_io().clock,
         schema_of=lambda app: _metrics_schema(storage, root_path, app),
     )
 

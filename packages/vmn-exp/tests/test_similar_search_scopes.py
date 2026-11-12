@@ -6,6 +6,7 @@ from similar_fixtures import FakeSnapshot, changed, run
 from vmn_exp.core.similar_corpus import snapshot_scope
 from vmn_exp.core.similar_items import item_payload
 from vmn_exp.core.similar_search import search
+from vmn_exp.core.real_io import RealClock
 
 SYMS = ["train.py::train_step"]
 TARGET = {"row": None, "features": changed(["train.py"], SYMS)}
@@ -34,4 +35,5 @@ def test_an_item_without_features_leaves_them_out():
     assert "features" in found
     item = {"verstr": "a", "row": scope.rows.snapshot.rows[0], "app": "app", "score": 1.0,
             "reasons": [], "signals": {}, "group_size": 1}
-    assert "features" not in item_payload(item, scope.rows, with_features=False)
+    assert "features" not in item_payload(item, scope.rows, with_features=False,
+                                          now=RealClock().now())

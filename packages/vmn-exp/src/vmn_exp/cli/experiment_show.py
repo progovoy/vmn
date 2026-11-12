@@ -41,7 +41,7 @@ from vmn_exp.core.tree import subtree_status
 from version_stamp.api import VMN_LOGGER, measure_runtime_decorator, relative_timestamp
 
 
-def _subtree(storage, app_name, verstr, metadata, snapshot=None, now=None):
+def _subtree(storage, app_name, verstr, metadata, snapshot=None, *, now):
     """``(run_state, tree fields, observed_at)`` of *verstr*: the parent/child
     links come from the experiment index (point reads once it is persisted),
     and run state (with its store write time) is read for the run's subtree
@@ -63,9 +63,9 @@ def _subtree(storage, app_name, verstr, metadata, snapshot=None, now=None):
     return run_state, tree, observed_at(verstr)
 
 
-def _print_status_block(storage, app_name, verstr, metadata, out, snapshot=None, now=None):
+def _print_status_block(storage, app_name, verstr, metadata, out, snapshot=None, *, now):
     """Derived run status (as of *now*), runner identity and the experiment's nesting."""
-    run_state, tree, observed_at = _subtree(storage, app_name, verstr, metadata, snapshot, now)
+    run_state, tree, observed_at = _subtree(storage, app_name, verstr, metadata, snapshot, now=now)
     fields = status_fields(run_state, now=now, observed_at=observed_at)
     out(f"  Status:    {fields['status']}")
     if fields["exit_code"] is not None:
@@ -105,7 +105,7 @@ def _split_fold_params(fold, metrics):
     return split_params(metrics, fold_values(fold, "params"), logged_params(fold))
 
 
-def experiment_show(vcs, params, storage, args, console):
+def experiment_show(vcs, params, storage, args, console, clock):
     from vmn_exp.cli import experiment as _exp
 
     app_name = _exp._app_name(vcs, args)
@@ -127,7 +127,8 @@ def experiment_show(vcs, params, storage, args, console):
     schema = metrics_schema(vcs, storage, app_name)
     if getattr(args, "json", False):
         return _print_show_json(
-            storage, app_name, verstr, metadata, patches, log, args, snapshot, schema, out
+            storage, app_name, verstr, metadata, patches, log, args, snapshot, schema, out,
+            clock.now(),
         )
 
     out(f"Experiment: {verstr}")
@@ -142,7 +143,7 @@ def experiment_show(vcs, params, storage, args, console):
     if env_summary:
         out(f"  Env:       {format_env_oneliner(env_summary)}")
     _print_output_log(storage, app_name, verstr, out)
-    _print_status_block(storage, app_name, verstr, metadata, out, snapshot)
+    _print_status_block(storage, app_name, verstr, metadata, out, snapshot, now=clock.now())
     fork.print_lineage(metadata, log, out)
 
     for line in patch_stat_lines(metadata, patches):
@@ -187,14 +188,14 @@ SHOW_LOG_TAIL = 50
 
 
 def _print_show_json(
-    storage, app_name, verstr, metadata, patches, log, args, snapshot, schema, out
+    storage, app_name, verstr, metadata, patches, log, args, snapshot, schema, out, now
 ):
-    run_state, tree, observed_at = _subtree(storage, app_name, verstr, metadata, snapshot)
+    run_state, tree, observed_at = _subtree(storage, app_name, verstr, metadata, snapshot, now=now)
     idx = storage_index(storage, app_name, verstr, snapshot)
     tail = None if getattr(args, "full_log", False) else SHOW_LOG_TAIL
     payload = show_payload(
         idx, metadata, patches, log, run_state, tree, tail,
-        observed_at=observed_at, schema=schema,
+        observed_at=observed_at, schema=schema, now=now,
     )
     if getattr(args, "patch", False):
         payload["patch"] = patch_payload(

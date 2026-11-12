@@ -61,19 +61,20 @@ def _child_of(row, parent):
     return row.get("parent") == parent and row["verstr"] != parent
 
 
-def filtered(snapshot, rows, f):
-    """*rows* of *snapshot* passing the filters *f* (``sort``/``order`` unused)."""
+def filtered(snapshot, rows, f, now=None):
+    """*rows* of *snapshot* passing the filters *f* (``sort``/``order`` unused);
+    a ``*_below`` query counts the statuses at *now* (the board's)."""
     rows = visible(rows, f.archived)
     if f.top:
         rows = [row for row in rows if is_top(row, f.top)]
         if f.top_query:
-            rows = apply_filters(rows, None, f.top_query, snapshot)
+            rows = apply_filters(rows, None, f.top_query, snapshot, now)
     if f.scope is not None:
         edges = snapshot.edges
         rows = [row for row in rows if f.scope in ancestors(row["verstr"], edges)]
     if f.children_of is not None:
         rows = [row for row in rows if _child_of(row, f.children_of)]
-    return apply_filters(rows, f.status, f.query, snapshot)
+    return apply_filters(rows, f.status, f.query, snapshot, now)
 
 
 def _reads_off_row(query):

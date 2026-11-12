@@ -72,13 +72,13 @@ def test_show_json_goes_to_out_and_warnings_to_err(storage, capsys):
     v = seed(storage, APP, verstr(1))
     console = FakeConsole()
     assert experiment.experiment_show(None, None, storage, _show_args(v, json=True),
-                                      console) == 0
+                                      console, FakeClock()) == 0
     assert json.loads(console.stdout)["verstr"] == v
     assert console.stderr == ""
 
     console = FakeConsole()
     assert experiment.experiment_show(None, None, storage, _show_args(v, patch=True),
-                                      console) == 0
+                                      console, FakeClock()) == 0
     assert console.stdout.startswith(f"Experiment: {v}\n")
     assert "Status:" in console.stdout
     assert console.stderr.count("\n") == 1 and v in console.stderr

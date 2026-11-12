@@ -10,6 +10,7 @@ import pytest
 from vmn_exp.core import index_sweep
 from vmn_exp.core.index_listing import METADATA_FILE
 from vmn_exp.core.index_sweep import Sweep
+from vmn_exp.core.real_io import RealClock
 
 APP = "app"
 N = 40_000
@@ -72,7 +73,7 @@ def setup(request):
     """``(sweep, watch, records, now)`` after the first (full) listing."""
     records = {_key(i): _finished() for i in range(N)}
     watch = Watch(records)
-    sweep = Sweep(None, APP, full_sweep_sec=3600, watch=watch)
+    sweep = Sweep(None, APP, full_sweep_sec=3600, watch=watch, clock=RealClock())
     sweep.journaled = request.param == "journaled"
     now = 1000.0
     sweep.listing(records, now)
@@ -118,7 +119,7 @@ def test_every_record_still_comes_round(setup):
 def test_a_small_store_still_completes_a_round_within_full_sweep_sec():
     records = {_key(i): _finished() for i in range(1000)}
     watch = Watch(records)
-    sweep = Sweep(None, APP, full_sweep_sec=300, watch=watch)
+    sweep = Sweep(None, APP, full_sweep_sec=300, watch=watch, clock=RealClock())
     sweep.journaled = True
     now = 1000.0
     sweep.listing(records, now)
@@ -165,7 +166,7 @@ def _sweep(size, full_sweep_sec, journaled):
     """``(sweep, watch, records, now)`` over *size* finished records, listed once."""
     records = dict.fromkeys(map(_key, range(size)), _finished())
     watch = Watch(records)
-    sweep = Sweep(None, APP, full_sweep_sec=full_sweep_sec, watch=watch)
+    sweep = Sweep(None, APP, full_sweep_sec=full_sweep_sec, watch=watch, clock=RealClock())
     sweep.journaled = journaled
     now = 1000.0
     sweep.listing(records, now)

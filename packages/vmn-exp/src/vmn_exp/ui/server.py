@@ -45,9 +45,7 @@ from vmn_exp.ui.thread_limiters import install_default_limiter
 from vmn_exp.ui.workspaces import workspace_storage
 
 from vmn_exp.ui import (
-    api_errors,
-    diag,
-    control_plane_sweep,
+    api_errors, diag, control_plane_sweep,
     routes_actions,
     routes_admin,
     routes_baseline,
@@ -170,11 +168,12 @@ def build_app(
         from vmn_exp.ui.search_rows_writer import SearchRowsWriter
 
         search_sql = PgRowSearch(search_dsn)
-        search_rows = SearchRowsWriter(search_sql)
+        search_rows = SearchRowsWriter(search_sql, deps.status_clock.now)
     upkeep = app.state.store_upkeep = deps.upkeep
     source = ExperimentSource(manager.data_dir, use_index=use_index, refresher=refresher,
                               cache_dsn=cache_dsn, search_rows=search_rows,
-                              store_upkeep=upkeep, clock=deps.io.clock, processes=deps.io.processes, index_clock=deps.status_clock)
+                              store_upkeep=upkeep, clock=deps.io.clock, processes=deps.io.processes,
+                              index_clock=deps.status_clock)
     # Looked up at call time, so a test's patch of this module or of
     # storage_access/storage.open still applies.
     ctx = ServerContext(
@@ -184,14 +183,14 @@ def build_app(
         probe_store=lambda uri: storage_access.probe_store(uri, random=deps.io.random),
         app_exists=lambda *args: app_exists(*args), clock=deps.io.clock,
     )
-    leaderboards = LeaderboardCache(conf_of=ctx.board_conf, now=deps.status_clock and deps.status_clock.now)
+    leaderboards = LeaderboardCache(conf_of=ctx.board_conf, now=deps.status_clock.now)
     if refresher.background:  # requests after a refresh pay no base or search build
         refresher.on_refresh = leaderboards.warm
     job_views = JobViews(leaderboards)
     report_indexes = ReportIndexes(
         os.path.join(manager.data_dir, "index") if use_index else None, refresher.background,
         journal_of=source.journal_of, clock=wall_seconds(deps.io.clock),
-    )
+        index_clock=deps.status_clock)
 
     for router in chain.routers():
         app.include_router(router)
@@ -308,7 +307,7 @@ def build_app(
         return partial(source.snapshot, ws, app_name, ctx.exp_storage_for(ws))
 
     routes_events.register(app, API_PREFIX, _events_reader, refresher.background, ctx.segment,
-                           deps.io.clock.monotonic, deps.event_sleep)
+                           deps.io.clock.monotonic, deps.event_sleep, leaderboards.now)
     forget_git = routes_shell.register(
         app, API_PREFIX, ctx.git_workspace, ctx.status_snapshot, ctx.app_tags, leaderboards,
         freshness, attention_entries, ctx.status_schema, views, experiment_ui,
@@ -320,15 +319,16 @@ def build_app(
     registries, model_lists = (RegistrySnapshots(refresher.background, read, listings,
                                                  clock=deps.io.clock.monotonic)
                                for read in (RegistrySnapshot.read, ModelListing.read))
-    routes_lineage.register(app, API_PREFIX, _lineage_inputs, ctx.segment, registries.get)
+    routes_lineage.register(app, API_PREFIX, _lineage_inputs, ctx.segment, registries.get,
+                            leaderboards.now)
     routes_lineage.register_version_lineage(app, API_PREFIX, _workspace_lineage_inputs,
-                                            registries.get)
+                                            registries.get, leaderboards.now)
     routes_job.register(app, API_PREFIX, leaderboard_inputs, job_views, ctx.segment, split_by)
     routes_baseline.register(app, API_PREFIX, leaderboard_inputs, BaselineViews(job_views),
                              ctx.segment, attention_entries)
     routes_sweep.register(app, API_PREFIX, _lineage_inputs, ctx.segment,
                           lambda ws_name, app_tag, verstr: job_views.job_summary(
-                              *leaderboard_inputs(ws_name, app_tag), verstr))
+                              *leaderboard_inputs(ws_name, app_tag), verstr), leaderboards.now)
     routes_run_code.register(app, API_PREFIX, _series_storage, leaderboard_inputs,
                              leaderboards, ctx.segment)
     routes_models.register(app, API_PREFIX, ctx.ws_storage, model_lists)
@@ -345,9 +345,9 @@ def build_app(
     def _search_scopes(ws_names):
         return ((ws, name, snap) for ws, name, snap, _ in ctx.app_scopes(ws_names))
 
-    routes_search.register(app, API_PREFIX, _search_scopes, search_sql)
+    routes_search.register(app, API_PREFIX, _search_scopes, search_sql, now=leaderboards.now)
     routes_similar.register(app, API_PREFIX, ctx.app_inputs, ctx.app_scopes, ctx.segment,
-                            _similar_weights, source.similar.scope)
+                            _similar_weights, source.similar.scope, deps.io.clock)
     startup_warmup.install(app, manager, ctx.list_apps, ctx.app_inputs, leaderboards,
                            refresher.background)
     diag.install_app(app, API_PREFIX, refresher)

@@ -88,8 +88,7 @@ def app_scope(storage, app_name, schema=None, with_snapshot=False, clock=None):
         scope = file_scope(app_name, path, schema)
         if scope is not None:
             return scope
-    snapshot = (app_snapshot(storage, app_name, schema) if clock is None
-                else app_snapshot(storage, app_name, schema, clock))
+    snapshot = app_snapshot(storage, app_name, schema, clock)
     scope = file_scope(app_name, path, schema, snapshot) if path else None
     return scope or snapshot_scope(app_name, snapshot, schema)
 
@@ -151,7 +150,7 @@ def text_target(context):
 
 def search(storage, app_name, source, target, *, schema=None, top=DEFAULT_TOP, query=None,
            all_apps=False, schema_of=None, weights=None, include_archived=False, deadline=None,
-           with_features=True, clock=None):
+           with_features=True, clock):
     """The *top* runs most like *target*: :func:`item_payload` items, best first.
 
     *source* is *app_name*'s :class:`~vmn_exp.core.similar_corpus.Scope`
@@ -171,16 +170,16 @@ def search(storage, app_name, source, target, *, schema=None, top=DEFAULT_TOP, q
     query = _query(query)
     if all_apps:
         scopes += _other_scopes(storage, app_name, schema_of, bool(query), clock)
-    keep = candidate_filter(scopes, query, include_archived, clock.now() if clock else None)
+    keep = candidate_filter(scopes, query, include_archived, clock.now())
     items = similar_runs_multi(scopes, target, top=top, rows_filter=keep, weights=weights,
-                               deadline=deadline, monotonic=clock.monotonic if clock else None)
+                               deadline=deadline, monotonic=clock.monotonic)
     rows_of = {scope.label: scope.rows for scope in scopes}
     for label, rows in rows_of.items():
         prefetch = getattr(rows, "prefetch", None)  # facts read for all shown at once
         if prefetch is not None:
             prefetch([item["row"] for item in items if item["app"] == label])
-    now = clock.now() if clock else None
-    return [item_payload(item, rows_of[item["app"]], with_features, now) for item in items]
+    now = clock.now()
+    return [item_payload(item, rows_of[item["app"]], with_features, now=now) for item in items]
 
 
 def _query(query):
@@ -188,7 +187,7 @@ def _query(query):
     return (query or "").strip() or None
 
 
-def _other_scopes(storage, app_name, schema_of, with_snapshot, clock=None):
+def _other_scopes(storage, app_name, schema_of, with_snapshot, clock):
     """The other apps' scopes, in app order; their indexes are brought up to
     date side by side."""
     # Lazily: the thread pool's module stays off the SDK reader's import path.
@@ -201,7 +200,7 @@ def _other_scopes(storage, app_name, schema_of, with_snapshot, clock=None):
                         list(zip(apps, schemas)))
 
 
-def candidate_filter(scopes, query, include_archived, now=None):
+def candidate_filter(scopes, query, include_archived, now):
     """A ``rows_filter(label, row)`` keeping archived rows only with
     *include_archived* and, with a *query*, the rows it matches — over
     status- and tree-annotated snapshot rows, like ``list --query`` (each
@@ -224,15 +223,15 @@ def candidate_filter(scopes, query, include_archived, now=None):
     return keep
 
 
-def _matching(scope, snap, rows, query, now=None):
+def _matching(scope, snap, rows, query, now):
     """*rows* of *snap* matching *query*, its ``similar()`` searching *scope*."""
-    annotated = annotate_rows(list(rows), snap.run_states, snap.run_state_observed_at, now)
-    return filter_rows(annotated, query, extra=lean_extra(snap, lambda _: scope))
+    annotated = annotate_rows(list(rows), snap.run_states, snap.run_state_observed_at, now=now)
+    return filter_rows(annotated, query, extra=lean_extra(snap, lambda _: scope, now), now=now)
 
 
 def find(storage, app_name, ref="latest", exp_conf=None, *, top=DEFAULT_TOP, query=None,
          context=None, text_only=False, all_apps=False, schema_of=None, target=None,
-         include_archived=False, clock=None):
+         include_archived=False, clock):
     """:func:`search` for run *ref* of *app_name* (the latest when None),
     or — *ref* None with *text_only* — for the *context* text alone, or for
     a ready *target* (the CLI's working tree), under the app's

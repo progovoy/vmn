@@ -6,6 +6,7 @@ from collections.abc import Mapping
 from vmn_exp.core import status as st
 from vmn_exp.core.tree import annotate_tree, subtree_status
 from vmn_exp.ui.readers import experiment_detail
+from vmn_exp.core.real_io import RealClock
 
 DEPTH = 5000
 
@@ -86,7 +87,7 @@ def test_status_detail_does_not_rescan_an_unchanged_edges_mapping():
     for _ in range(3):
         status = experiment_detail.status_detail(
             None, "app", "r5", {"parent": "root"}, [], provider,
-            read_run_state=lambda s, a, v: None,
+            read_run_state=lambda s, a, v: None, now=RealClock().now(),
         )
     assert status["parent"] == "root" and status["kind"] == "inner"
     assert _CountingEdges.scans <= 1

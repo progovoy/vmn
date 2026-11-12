@@ -17,7 +17,6 @@ from the live rows instead, and are shown only while they count any.
 """
 from collections import Counter, namedtuple
 
-import vmn_exp.core.status as experiment_status
 from vmn_exp.core.query import QueryError, pin_ago
 from vmn_exp.ui.attention_built_in import built_in_count, built_in_rows, is_built_in, shown
 from vmn_exp.ui.job_rollup_cache import minute
@@ -33,21 +32,20 @@ def queries_of(entries):
     return tuple(AttentionQuery(e["key"], e["query"], e["level"]) for e in entries)
 
 
-def pinned(query, now=None):
-    """*query* with its ``ago()`` pinned to *now*'s minute (None:
-    :func:`~vmn_exp.core.status._now`'s)."""
-    now = (now or experiment_status._now()).replace(second=0, microsecond=0)
+def pinned(query, now):
+    """*query* with its ``ago()`` pinned to *now*'s minute."""
+    now = now.replace(second=0, microsecond=0)
     return pin_ago(query, now=now)
 
 
-def attention_key(entries, now=None):
+def attention_key(entries, now):
     """*entries* as the caches key them: each query pinned (as given when it
     does not compile) to *now*, so an ``ago()`` one moves with the minute."""
     return [(e["key"], e["label"], e["level"], _pinned_or_raw(e["query"], now))
             for e in entries]
 
 
-def _pinned_or_raw(query, now=None):
+def _pinned_or_raw(query, now):
     try:
         return pinned(query, now)
     except QueryError:
@@ -97,7 +95,7 @@ def with_attention(summary, counts, queries):
     return dict(summary, **extra)
 
 
-def pinned_texts(queries, now=None):
+def pinned_texts(queries, now):
     """Each of *queries*' text pinned to *now* (as given when it does not
     compile)."""
     return tuple(_pinned_or_raw(q.query, now) for q in queries)

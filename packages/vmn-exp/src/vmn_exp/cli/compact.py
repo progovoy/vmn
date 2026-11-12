@@ -17,12 +17,12 @@ FINISHED = (SUCCEEDED, FAILED)
 DEAD = (FAILED, STUCK)
 
 
-def runs_with_status(storage, app_name, statuses, clock=None):
+def runs_with_status(storage, app_name, statuses, clock):
     """The verstrs of *app_name*'s runs whose derived status is in *statuses*;
     *clock* (a :class:`~vmn_exp.core.ports.Clock`): the index's and the
-    statuses' (None: the modules' own)."""
+    statuses'."""
     snap = experiment_index.indexed_snapshot(storage, app_name, wait=True, clock=clock)
-    now = clock.now() if clock else None
+    now = clock.now()
     return sorted(v for v, state in snap.run_states.items()
                   if derive_status(state, now=now,
                                    observed_at=snap.run_state_observed_at.get(v))
@@ -47,8 +47,8 @@ def compact_runs(storage, app_name, verstrs):
     return failed
 
 
-def _named_runs(storage, app_name, refs):
-    live = set(runs_with_status(storage, app_name, (RUNNING,)))
+def _named_runs(storage, app_name, refs, clock):
+    live = set(runs_with_status(storage, app_name, (RUNNING,), clock))
     verstrs = [resolve_run(storage, app_name, ref, "compact") for ref in refs]
     running = [v for v in verstrs if v in live]
     if running:
@@ -56,14 +56,14 @@ def _named_runs(storage, app_name, refs):
     return verstrs
 
 
-def experiment_compact(storage, app_name, args):
+def experiment_compact(storage, app_name, args, clock):
     refs = getattr(args, "version", None) or []
     if bool(refs) == bool(getattr(args, "all_finished", False)):
         VMN_LOGGER.error("exp compact needs run refs (-v) or --all-finished, not both")
         return 1
     try:
-        verstrs = (_named_runs(storage, app_name, refs) if refs
-                   else runs_with_status(storage, app_name, FINISHED))
+        verstrs = (_named_runs(storage, app_name, refs, clock) if refs
+                   else runs_with_status(storage, app_name, FINISHED, clock))
     except ValueError as exc:
         VMN_LOGGER.error(str(exc))
         return 1

@@ -11,6 +11,7 @@ from vmn_exp.core.similar_profile import objective_names
 from vmn_exp.snapshot import LocalSnapshotStorage
 from vmn_exp.ui.leaderboard_facets import Facets
 from vmn_exp.ui.readers.experiment_detail import experiment_detail
+from vmn_exp.core.real_io import RealClock
 
 LOG = [
     {"timestamp": "2026-01-01T00:00:01Z", "type": "params", "params": {"acc": 3, "lr": 0.01}},
@@ -39,7 +40,7 @@ def test_the_run_detail_names_the_params_also_logged_as_metrics(tmp_path):
     _log_params(storage, "myapp", verstr, {"acc": 3, "lr": 0.01})
     _log_metrics(storage, "myapp", verstr, {"acc": 0.9}, ts="2025-01-01T00:00:01Z")
 
-    detail, err = experiment_detail(storage, "myapp", verstr)
+    detail, err = experiment_detail(storage, "myapp", verstr, now=RealClock().now())
 
     assert err is None
     assert detail["logged_params"] == ["acc"]

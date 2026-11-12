@@ -66,7 +66,7 @@ def board_extra(cache, snapshot, schema):
     :data:`~vmn_exp.core.query.BELOW_FIELDS` read from *cache*'s job rollups
     (on the first read)."""
     summaries = once(lambda: cache.job_rollups(snapshot, schema))
-    extra = dict(lean_extra(snapshot) or {})
+    extra = dict(lean_extra(snapshot, now=cache.now()) or {})
     extra.update({field: _counter(summaries, states) for field, states in BELOW.items()})
     extra.update(failed_below=_failed(summaries), failed_pct=_failed_pct(summaries),
                  lost_below=_lost(summaries))

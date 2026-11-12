@@ -128,7 +128,7 @@ def apply_filters(rows, status=None, query=None, snapshot=None, now=None):
     documents a query may read (:func:`~vmn_exp.core.query_extra.lean_extra`).
     An ``ago()`` in *query* compares with the time that long before *now*.
     """
-    return filter_rows(filter_by_status(rows, status), query, extra=lean_extra(snapshot),
+    return filter_rows(filter_by_status(rows, status), query, extra=lean_extra(snapshot, now=now),
                        now=now)
 
 
@@ -171,7 +171,7 @@ def leaderboard(
     order=None,
     observed_at=None,
     split=None,
-    now=None,
+    *, now,
 ):
     """The one list pipeline: derive status (and ``duration_ratio`` against
     siblings sharing a value of *split*), filter, then order and page.

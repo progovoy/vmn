@@ -26,11 +26,11 @@ def _spec_of(storage, app_name, verstr):
         return None
 
 
-def register(app, prefix, sweep_inputs, segment, job_of):
+def register(app, prefix, sweep_inputs, segment, job_of, now):
     """Add the route; *sweep_inputs(ws_name, app_tag)* →
     ``(app_name, snapshot_for(app_name), storage)``, *segment(verstr)* returns
     a URL verstr or raises a 400, *job_of(ws_name, app_tag, verstr)* the
-    job's compact rollup (None without trials)."""
+    job's compact rollup (None without trials), *now()* the time trials' statuses are at."""
 
     @app.get(f"{prefix}/workspaces/{{ws_name}}/apps/{{app_tag}}/experiments/{{verstr}}/sweep", dependencies=[require(VIEWER)])
     def experiment_sweep(request: Request, ws_name: str, app_tag: str, verstr: str):
@@ -39,7 +39,7 @@ def register(app, prefix, sweep_inputs, segment, job_of):
         spec = _spec_of(storage, app_name, verstr)
         if spec is None:
             raise HTTPException(404, f"{verstr} is not a sweep of {app_name}")
-        trials = snapshot_trials(spec, verstr, snapshot_for(app_name))
+        trials = snapshot_trials(spec, verstr, snapshot_for(app_name), now())
         payload = sweep_view(spec, verstr, trials, claimed_trials(storage, app_name, verstr))
         payload["trials_total"] = len(payload["trials"])
         payload["trials"] = payload["trials"][:MAX_TRIALS]

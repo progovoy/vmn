@@ -32,7 +32,6 @@ seeks), the hint says its results are incomplete.
 """
 import os
 import sys
-import time
 
 from version_stamp.api import VMN_LOGGER
 from vmn_exp.cli.similar_output import hint_lines
@@ -55,16 +54,13 @@ BEHIND_NOTE = ("similar runs: the search is still filing runs — results incomp
                " (`vmn-exp similar` files them)")
 # Set in an enclosing run's children (VMN_EXPERIMENT_ID) and in sweep trials.
 INNER_RUN_ENVS = ("VMN_EXPERIMENT_ID", "VMN_SWEEP_TRIAL")
-# The search's clock (time.monotonic): the deadline handed to it is read off this.
-_clock = time.monotonic
 
 
-def print_hint(storage, app_name, verstr, args, exp_conf, command=None, clock=None):
+def print_hint(storage, app_name, verstr, args, exp_conf, command=None, *, clock):
     """Print the hint for the new run *verstr* (running *command*, an argv),
     when wanted and found within :data:`BUDGET_SEC` on *clock*'s monotonic
-    time (a :class:`~vmn_exp.core.ports.Clock`, also the search's; None:
-    this module's ``_clock``, read at call time)."""
-    monotonic = clock.monotonic if clock else (lambda: _clock())
+    time (a :class:`~vmn_exp.core.ports.Clock`, also the search's)."""
+    monotonic = clock.monotonic
     deadline = monotonic() + BUDGET_SEC
     try:
         if not _wanted(args, exp_conf):

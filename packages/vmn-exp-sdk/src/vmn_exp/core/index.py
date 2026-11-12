@@ -53,7 +53,6 @@ Storage is duck-typed (``list_files``, ``load_file``, and optionally
 import bisect
 import logging
 import threading
-import time
 from contextlib import nullcontext
 from dataclasses import replace
 
@@ -96,6 +95,7 @@ from vmn_exp.core.index_views import lean_row
 from vmn_exp.core.index_workers import load_new_records
 from vmn_exp.core.log import load_log
 from vmn_exp.core.ports import wall_seconds
+from vmn_exp.core.real_io import real_io
 from vmn_exp.core.status import load_run_state, observed_at_by_verstr
 from vmn_exp.core.traced_lock import TracedLock
 
@@ -121,7 +121,6 @@ _BISECT_NEW = 64  # new records past which the order is merged, not inserted int
 MIGRATING_PUBLISH_SEC = 1.0
 # A record a refresh could not read is read again this long after (doubling).
 RETRY_UNREADABLE_SEC = 60.0
-_monotonic = time.monotonic
 
 
 def _listed_at(work_item):
@@ -135,14 +134,13 @@ class ExperimentIndex:
     """Incrementally maintained rows for one app of one storage backend.
 
     *clock* (a :class:`~vmn_exp.core.ports.Clock`) times its refreshes,
-    sweeps, freshness and store; None reads the modules' own clocks
-    (``_monotonic`` here) at call time."""
+    sweeps, freshness and store (None: ``real_io().clock``)."""
 
     def __init__(
         self, storage, app_name, cache_path=None, full_sweep_sec=DEFAULT_FULL_SWEEP_SEC,
         cache_store=None, *, clock=None,
     ):
-        self._clock = clock
+        self.clock = self._clock = clock = clock or real_io().clock
         self._storage = storage
         self.app_name = app_name
         self._cache_path = cache_path
@@ -150,7 +148,7 @@ class ExperimentIndex:
         self._unsaved = PendingSave()  # what a failed save left to persist
         self._freshness = index_freshness.Freshness(
             lambda: self._io or self._store, app_name,
-            wall=wall_seconds(clock) if clock else None)
+            wall_seconds(clock))
         self._sweep = Sweep(storage, app_name, full_sweep_sec, clock=clock)
         self._baseline = ListingBaseline(self._store, app_name)
         self._mark = JournalMark(self._store, app_name)
@@ -160,7 +158,7 @@ class ExperimentIndex:
         self._stamps = None  # their timestamps, for bisecting new keys in
         self._reorder = ((), False)  # (new keys, whether one was re-described)
         self._rows = RowCache()
-        self._bulk = BulkPublish(clock.monotonic if clock else None)
+        self._bulk = BulkPublish(clock.monotonic)
         self._snapshot = None
         self._placeholder = None  # (expected, the empty snapshot saying so)
         self._first_rows = None  # a warm restart's newest rows, until its snapshot (snapshot_now)
@@ -170,7 +168,7 @@ class ExperimentIndex:
         self._rests = set()  # records a bulk load read rows-first, the rest to read
         self._unreadable = Unreadable(app_name, self._monotonic)
         self._vmx = VmxCheck(lambda: self._io or self._store, app_name,
-                             clock=clock.monotonic if clock else time.monotonic)  # an upgrade's check
+                             clock=clock.monotonic)  # an upgrade's check
         self._io_unreadable = None  # the I/O helper's Unreadable.summary(), after its refresh
         self._lock = TracedLock(f"index refresh:{app_name}")
         self._published = threading.Event()  # a first snapshot, or a refresh that failed
@@ -188,7 +186,7 @@ class ExperimentIndex:
         self.drops_folds = True  # False: whoever adopts this index drops them (a rebuild)
 
     def _monotonic(self):
-        return self._clock.monotonic() if self._clock else _monotonic()
+        return self._clock.monotonic()
 
     @classmethod
     def follower(cls, cache_store, scope, *, clock=None):

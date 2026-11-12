@@ -2,7 +2,7 @@
 # KNOWN_IO only shrinks. REAL_IO and REAL_WIRED are hand-kept and survive --regen.
 
 REAL_IO = {'vmn_exp.core.real_io': 'the thin stdlib classes behind vmn_exp.core.ports and real_io(), which entry points build (plan 44 G2)', 'vmn_exp.storage.buffer_owner': "storage: a log buffer's marker file and owner flock: the real local implementation (plan 40 C5)", 'vmn_exp.storage.buffer_host': "storage: finds, locks and removes this host's log buffer dirs: the real local implementation (plan 40 C6)", 'vmn_exp.cli.buffers_cmd': "run_buffers is the `vmn-exp buffers` entry point: it builds the command's real IO (plan 40 C6)", 'vmn_exp.cli.plugin': 'the command handler shims are composition roots: vmn calls them with vmn_ctx or args only, so each invocation builds real_io() until core vmn passes vmn_ctx.io (plan 44 G7)', 'vmn_exp.storage.host_dirs': 'storage: resolves the per-host dirs from the environment, the filesystem type and the temp dir: the real implementation (plan 40 C5)', 'vmn_exp.storage.local': 'storage: the local-disk SnapshotStorage backend itself (plan 44 G14)', 'vmn_exp.storage.local_metrics': 'storage: its metric streams: O_APPEND writes to metrics/<stream>.vms (plan 44 G14)', 'vmn_exp.storage.stream_owner': 'storage: the owner files that pick the stream a local record copy appends to (LocalStreams) (plan 44 G14)', 'vmn_exp.storage.files': 'storage: atomic write (temp + rename) and patch-file helpers shared by the backends (plan 44 G14)', 'vmn_exp.storage.store_marker': 'storage: store.yml create-if-absent (O_EXCL-style link) at the store root (plan 44 G14)', 'vmn_exp.storage.listing': 'storage: directory listings of local records (scandir/stat), the cost the index is built around (plan 44 G14)', 'vmn_exp.storage.child_markers': "storage: empty children/<verstr> marker objects in a parent's record (plan 44 G14)", 'vmn_exp.storage.children_flag': "storage: the .children_complete flag file beside an app's records (plan 44 G14)", 'vmn_exp.storage.ship_state': "storage: per-record ship state shared by the copy's processes (file + lock) (plan 44 G14)", 'vmn_exp.storage.s3': 'storage: download paths only: writes downloaded objects to local files (plan 44 G14)', 'vmn_exp.storage.buffered': 'storage: the local log buffer directory of a direct-to-bucket run; its files are real, its clock is injected (plan 44 G14, G10)', 'vmn_exp.core.sqlite_conn': 'storage: the one SQLite connection policy (CLAUDE.md invariant) (plan 44 G14)', 'vmn_exp.core.sqlite_files': 'storage: rebuilds a SQLite cache file under its readers (rename, link) (plan 44 G14)', 'vmn_exp.core.index_io_process': "storage: a helper process whose whole job is the index's filesystem work; also a process root (G11) (plan 44 G14)", 'vmn_exp.ui.diag.gc_pauses': 'measures the real process: GC pause times on a module-level singleton (PAUSES) the gc callbacks feed (plan 44 G19)', 'vmn_exp.ui.diag.latency': "measures the real process: the event loop's and a pool thread's lag, sampled on real time (plan 44 G19)", 'vmn_exp.ui.leaderboard_cache': 'a per-process cache salt: _NONCE keeps ETags from before a restart from matching (plan 44 G13)', 'vmn_exp.ui.settled_subtree': 'a per-process cache salt: _NONCE keys its memo to this process (plan 44 G13)', 'vmn_exp.core.gc_policy': "tunes the real process's garbage collector (gc thresholds, a daemon collector on real time): a process-level tuner, not logic (plan 44 G11)"}
-REAL_WIRED = {'start_run': ('vmn_exp.sdk.run', 'a public SDK function is an entry point that builds real IO (owner decision G7/G10): the Random of the run attempt id, and the clock and host the Run reads (plan 44 G13, G10)'), 'resolve_storage': ('vmn_exp.sdk.store_resolve', 'a public SDK function is an entry point that builds real IO (owner decision G7/G10): the clock the core storage resolver takes (plan 44 G10)'), 'configured_storage': ('vmn_exp.sdk.store_resolve', 'the SDK functions that resolve a storage themselves reach the core resolver through it, an SDK entry point: the clock it takes (plan 44 G10)'), 'finish_run': ('vmn_exp.sdk.manage', 'a public SDK function is an entry point that builds real IO (owner decision G7/G10): the Random of the final attempt id (plan 44 G13)'), 'finish_runs': ('vmn_exp.sdk.manage', 'a public SDK function is an entry point that builds real IO (owner decision G7/G10): the Random of the final attempt ids (plan 44 G13)')}
+REAL_WIRED = {'start_run': ('vmn_exp.sdk.run', 'a public SDK function is an entry point that builds real IO (owner decision G7/G10): the Random of the run attempt id, and the clock and host the Run reads (plan 44 G13, G10)'), 'resolve_storage': ('vmn_exp.sdk.store_resolve', 'a public SDK function is an entry point that builds real IO (owner decision G7/G10): the clock the core storage resolver takes (plan 44 G10)'), 'configured_storage': ('vmn_exp.sdk.store_resolve', 'the SDK functions that resolve a storage themselves reach the core resolver through it, an SDK entry point: the clock it takes (plan 44 G10)'), 'finish_run': ('vmn_exp.sdk.manage', 'a public SDK function is an entry point that builds real IO (owner decision G7/G10): the Random of the final attempt id (plan 44 G13)'), 'finish_runs': ('vmn_exp.sdk.manage', 'a public SDK function is an entry point that builds real IO (owner decision G7/G10): the Random of the final attempt ids (plan 44 G13)'), 'ExperimentIndex': ('vmn_exp.core.index', 'a list-2 name (plan 44 G11): a call that omits the clock gets real_io().clock; production passes its own (test_production_code_passes_a_clock_to_every_list_2_name)'), 'SqliteStore': ('vmn_exp.core.index_store', 'a list-2 name (plan 44 G11): a call that omits the clock gets real_io().clock; production passes its own (test_production_code_passes_a_clock_to_every_list_2_name)'), 'LeaderboardCache': ('vmn_exp.ui.leaderboard_cache', "a list-2 name (plan 44 G11): a call that omits the clock gets real_io().clock; production passes its own (test_production_code_passes_a_clock_to_every_list_2_name); it takes the clock's now"), 'PostgresStore': ('vmn_exp.ui.cache_pg', "SqliteStore's Postgres twin resolves an omitted clock the same way (plan 44 G11)"), 'list_runs': ('vmn_exp.sdk.reader', 'a public SDK function is an entry point that builds real IO (owner decision G7/G10): the clock its statuses are derived at (plan 44 G11)'), 'get_run': ('vmn_exp.sdk.reader', 'a public SDK function is an entry point that builds real IO (owner decision G7/G10): the clock its statuses are derived at (plan 44 G11)'), 'param_importance': ('vmn_exp.sdk.reader', 'a public SDK function is an entry point that builds real IO (owner decision G7/G10): the clock its statuses are derived at (plan 44 G11)'), 'get_run_state': ('vmn_exp.sdk.reader', 'a public SDK function is an entry point that builds real IO (owner decision G7/G10): the clock its statuses are derived at (plan 44 G11)'), 'get_run_states': ('vmn_exp.sdk.reader', 'a public SDK function is an entry point that builds real IO (owner decision G7/G10): the clock its statuses are derived at (plan 44 G11)'), 'get_lineage': ('vmn_exp.sdk.reader', 'a public SDK function is an entry point that builds real IO (owner decision G7/G10): the clock its statuses are derived at (plan 44 G11)'), 'similar_runs': ('vmn_exp.sdk.reader', 'a public SDK function is an entry point that builds real IO (owner decision G7/G10): the clock its statuses are derived at (plan 44 G11)')}
 
 KNOWN_IO = {
     'vmn_exp._base': {'env': 2, 'fs': 6, 'time': 1},
@@ -39,7 +39,7 @@ KNOWN_IO = {
     'vmn_exp.cli.run_disabled': {'console': 4, 'env': 1, 'fs': 1, 'subprocess': 1},
     'vmn_exp.cli.settings': {'console': 10},
     'vmn_exp.cli.similar_backfill': {'console': 3},
-    'vmn_exp.cli.similar_hint': {'clock_alias': 1, 'console': 2, 'env': 1, 'fs': 1},
+    'vmn_exp.cli.similar_hint': {'console': 2, 'env': 1, 'fs': 1},
     'vmn_exp.cli.similar_output': {'console': 4, 'time': 1},
     'vmn_exp.cli.supervisor': {'console': 1, 'fs': 1, 'process_self': 1},
     'vmn_exp.cli.sweep.agent': {'process_self': 1},
@@ -50,7 +50,6 @@ KNOWN_IO = {
     'vmn_exp.core.alerts.config': {'env': 3},
     'vmn_exp.core.alerts.dispatch': {'thread': 1},
     'vmn_exp.core.alerts.sinks': {'env': 1, 'net': 1, 'subprocess': 1},
-    'vmn_exp.core.alerts.transitions': {'time': 1},
     'vmn_exp.core.app_conf': {'fs': 1},
     'vmn_exp.core.background': {'thread': 1, 'time': 2},
     'vmn_exp.core.children_scan': {'thread': 1},
@@ -58,18 +57,13 @@ KNOWN_IO = {
     'vmn_exp.core.from_snapshot': {'fs': 3},
     'vmn_exp.core.gc_policy': {'real_default': 2, 'thread': 1},
     'vmn_exp.core.identity': {'env': 2, 'subprocess': 1},
-    'vmn_exp.core.index': {'clock_alias': 1, 'thread': 1},
-    'vmn_exp.core.index_bulk': {'clock_alias': 1},
-    'vmn_exp.core.index_freshness': {'clock_alias': 1},
+    'vmn_exp.core.index': {'thread': 1},
     'vmn_exp.core.index_io_process': {'console': 3, 'fs': 1, 'subprocess': 1},
     'vmn_exp.core.index_load_pool': {'thread': 1},
     'vmn_exp.core.index_point': {'fs': 1},
-    'vmn_exp.core.index_relist': {'clock_alias': 1, 'thread': 4, 'time': 1},
+    'vmn_exp.core.index_relist': {'thread': 4, 'time': 1},
     'vmn_exp.core.index_remote_workers': {'console': 2, 'env': 1, 'thread': 2},
-    'vmn_exp.core.index_store': {'clock_alias': 1},
-    'vmn_exp.core.index_store_conn': {'clock_alias': 1},
     'vmn_exp.core.index_store_upgrade': {'fs': 3},
-    'vmn_exp.core.index_sweep': {'clock_alias': 1},
     'vmn_exp.core.index_workers': {'console': 3, 'env': 1, 'subprocess': 1, 'thread': 1},
     'vmn_exp.core.journal_reader': {'thread': 1},
     'vmn_exp.core.log': {'fs': 1},
@@ -82,11 +76,10 @@ KNOWN_IO = {
     'vmn_exp.core.rerun': {'fs': 2},
     'vmn_exp.core.similar_corpus': {'fs': 1},
     'vmn_exp.core.similar_fts': {'sqlite': 1},
-    'vmn_exp.core.similar_match': {'clock_alias': 1},
     'vmn_exp.core.snapshot_features': {'fs': 5},
     'vmn_exp.core.sqlite_conn': {'fs': 1, 'sqlite': 1},
     'vmn_exp.core.sqlite_files': {'fs': 8, 'sqlite': 1},
-    'vmn_exp.core.status': {'env': 1, 'time': 1},
+    'vmn_exp.core.status': {'env': 1},
     'vmn_exp.core.storage_resolve': {'env': 2},
     'vmn_exp.core.streams': {'process_self': 2, 'random': 1},
     'vmn_exp.core.subtree_direct': {'thread': 1},
@@ -194,7 +187,6 @@ KNOWN_IO = {
     'vmn_exp.ui.report_index': {'fs': 1, 'thread': 1, 'time': 2},
     'vmn_exp.ui.routes_media': {'fs': 1},
     'vmn_exp.ui.routes_series': {'thread': 1},
-    'vmn_exp.ui.routes_similar': {'time': 1},
     'vmn_exp.ui.schema_cache': {'fs': 1},
     'vmn_exp.ui.security': {'fs': 2},
     'vmn_exp.ui.server_logging': {'console': 1, 'time': 1},

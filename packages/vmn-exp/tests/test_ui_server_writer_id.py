@@ -31,7 +31,7 @@ def _rewind(tmp_path):
     storage.save(APP, V, {"verstr": V, "timestamp": "2026-01-01T00:00:00Z"}, {})
     action, err = build_store_action("exp_rewind", APP, {"verstr": V, "step": 0})
     assert err is None
-    action.run(storage, lambda app, verstr: None)
+    action.run(storage, lambda app, verstr: None, RealClock().now())
     return [name for root, _, files in os.walk(tmp_path / "store") for name in files
             if os.path.basename(root) == "log"]
 

@@ -102,14 +102,14 @@ def _format_list_row(row, node, columns, policies, indent, parent_label):
     )
 
 
-def _listed(storage, app_name, args, schema, clock=None):
+def _listed(storage, app_name, args, schema, clock):
     """``(rows, declared schema, app has runs, loading)``: the annotated runs
     the query and archived filter keep, in storage order — from the persisted
     index (only ``--last``'s without a query), else from a snapshot, whose
     ``loading`` it is (None when whole or from the persisted rows)."""
     query, archived = getattr(args, "query", None), getattr(args, "archived", False)
     view = index_list.list_view(
-        storage, app_name, query, archived, getattr(args, "last", None), schema, clock
+        storage, app_name, query, archived, getattr(args, "last", None), schema, clock=clock
     )
     if view is not None:
         return (*view, None)
@@ -120,9 +120,9 @@ def _listed(storage, app_name, args, schema, clock=None):
 
 
 @measure_runtime_decorator
-def experiment_list(vcs, params, storage, args, console, clock=None):
+def experiment_list(vcs, params, storage, args, console, clock):
     """``vmn-exp list``; *clock* (a :class:`~vmn_exp.core.ports.Clock`):
-    the index's and the statuses' (None: the modules' own)."""
+    the index's and the statuses'."""
     from vmn_exp.cli import experiment as _exp
 
     app_name = _exp._app_name(vcs, args)

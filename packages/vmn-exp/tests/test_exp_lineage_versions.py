@@ -4,7 +4,8 @@ version V and which runs used it" (plan 06)."""
 import pytest
 from test_sdk_usage import FakeRun, _model, _storage
 
-from vmn_exp.registry.lineage import version_lineage
+from vmn_exp.core.real_io import RealClock
+from vmn_exp.registry.lineage import app_indexes, version_lineage
 from vmn_exp.registry.log import set_version_status
 from vmn_exp.sdk.datasets import register_dataset
 from vmn_exp.sdk.reader import get_lineage
@@ -69,7 +70,7 @@ def test_version_lineage_producer_and_consumers(tmp_path):
     use_model("clf@1", run=first, storage=storage)
     use_model("clf", run=second, storage=storage)
 
-    found = version_lineage(storage, "clf", 1)
+    found = version_lineage(storage, "clf", 1, app_indexes(storage, RealClock()))
     assert (found["model"], found["version"], found["kind"], found["status"]) == (
         "clf", 1, "model", "active",
     )
@@ -86,7 +87,7 @@ def test_version_lineage_pruned_consumer_marked_missing(tmp_path):
     use_model("clf@1", run=consumer, storage=storage)
     storage.delete("serving", consumer.id)
 
-    assert _keys(version_lineage(storage, "clf", 1)["consumers"]) == [
+    assert _keys(version_lineage(storage, "clf", 1, app_indexes(storage, RealClock()))["consumers"]) == [
         ("serving", consumer.id, False)
     ]
 
@@ -96,7 +97,7 @@ def test_version_lineage_deleted_version_status(tmp_path):
     _model(storage, "clf")
     set_version_status(storage, "clf", 1, "deleted")
 
-    found = version_lineage(storage, "clf", 1)
+    found = version_lineage(storage, "clf", 1, app_indexes(storage, RealClock()))
     assert found["status"] == "deleted"
     assert _keys([found["producer"]]) == [(*PRODUCER, True)]
 
@@ -104,7 +105,7 @@ def test_version_lineage_deleted_version_status(tmp_path):
 def test_version_lineage_of_a_reference_dataset_has_no_producer(tmp_path):
     storage = _storage(tmp_path)
     _dataset(storage, tmp_path)
-    found = version_lineage(storage, "ds", 1)
+    found = version_lineage(storage, "ds", 1, app_indexes(storage, RealClock()))
     assert (found["kind"], found["producer"], found["consumers"]) == ("dataset", None, [])
 
 
@@ -112,4 +113,4 @@ def test_version_lineage_of_an_unknown_version_raises(tmp_path):
     storage = _storage(tmp_path)
     _model(storage, "clf")
     with pytest.raises(KeyError):
-        version_lineage(storage, "clf", 9)
+        version_lineage(storage, "clf", 9, app_indexes(storage, RealClock()))

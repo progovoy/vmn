@@ -137,18 +137,18 @@ def _exp_run_without_repo(args):
 
     io = real_io()
     dispatch = {
-        "create": experiment_create,
+        "create": functools.partial(experiment_create, clock=io.clock),
         "run": functools.partial(experiment_run, io=io),
-        "add": functools.partial(experiment_add, random=io.random),
-        "list": functools.partial(experiment_list, console=io.console),
-        "show": functools.partial(experiment_show, console=io.console),
+        "add": functools.partial(experiment_add, io=io),
+        "list": functools.partial(experiment_list, console=io.console, clock=io.clock),
+        "show": functools.partial(experiment_show, console=io.console, clock=io.clock),
         "compare": functools.partial(experiment_compare, console=io.console),
-        "prune": experiment_prune,
-        "compact": experiment_compact,
-        "rewind": experiment_rewind,
-        "push": experiment_push,
-        "similar": experiment_similar,
-        "similar-backfill": experiment_similar_backfill,
+        "prune": functools.partial(experiment_prune, clock=io.clock),
+        "compact": functools.partial(experiment_compact, clock=io.clock),
+        "rewind": functools.partial(experiment_rewind, clock=io.clock),
+        "push": functools.partial(experiment_push, clock=io.clock),
+        "similar": functools.partial(experiment_similar, clock=io.clock),
+        "similar-backfill": functools.partial(experiment_similar_backfill, clock=io.clock),
         "backfill-children": experiment_backfill_children,
     }
 
@@ -161,7 +161,7 @@ def _exp_run_without_repo(args):
         os.environ["VMN_WRITER_ID"] = args.writer_id
     params = experiment_storage_params(None, args)
     try:
-        storage = _get_experiment_storage(None, params, clock=real_io().clock)
+        storage = _get_experiment_storage(None, params, clock=io.clock)
     except ValueError as exc:
         VMN_LOGGER.error(str(exc))
         return 1

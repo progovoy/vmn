@@ -32,10 +32,10 @@ def experiment_watch(vcs, storage, app_name, args, clock):
         )
         return 1
     while True:
-        for verstr, status in watch_app(storage, app_name, alerter, within_sec):
+        for verstr, status in watch_app(storage, app_name, alerter, within_sec, clock=clock):
             print(f"{verstr} {status}")
         if compact:
-            compact_runs(storage, app_name, runs_with_status(storage, app_name, DEAD))
+            compact_runs(storage, app_name, runs_with_status(storage, app_name, DEAD, clock))
         if not args.interval:
             return 0
         time.sleep(args.interval)

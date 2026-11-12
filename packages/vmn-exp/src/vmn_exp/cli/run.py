@@ -263,7 +263,7 @@ def experiment_run(vcs, params, storage, args, repo_lock=None, *, io):
     from vmn_exp.cli.similar_hint import print_hint
 
     exp_conf = experiment_conf(vcs)
-    print_hint(storage, app_name, verstr, args, exp_conf, command=run_cmd)
+    print_hint(storage, app_name, verstr, args, exp_conf, command=run_cmd, clock=io.clock)
     return run_supervision(
         storage, app_name, verstr, args, exp_conf,
         getattr(vcs, "vmn_root_path", None), io,
@@ -589,7 +589,7 @@ class _Supervision:
         alert_if_failed(
             self.storage, self.app_name, self.verstr,
             getattr(self, "run_state", None), alerter,
-            run_name=getattr(self.args, "run_name", None),
+            run_name=getattr(self.args, "run_name", None), now=self.io.clock.now(),
         )
 
     def _ingest_new(self):

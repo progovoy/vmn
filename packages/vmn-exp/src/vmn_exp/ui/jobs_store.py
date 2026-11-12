@@ -7,7 +7,7 @@ with the server's own access. Prune, delete, push and git actions are never
 offered here: they stay CLI-only, under the user's own access.
 
 :func:`build_store_action` validates a request into a :class:`StoreAction`;
-``action.run(storage, hint)`` performs it, returns its log text, raises on
+``action.run(storage, hint, now)`` performs it, returns its log text, raises on
 failure, and calls ``hint(app, verstr)`` for every run record it touched.
 """
 from dataclasses import dataclass
@@ -33,10 +33,10 @@ from vmn_exp.ui.jobs_models import validate_alias_body, validate_register_body
 @dataclass
 class StoreAction:
     command: List[str]  # what the job shows as its command
-    perform: Callable  # (storage, hint) -> log text
+    perform: Callable  # (storage, hint, now: when runs' status is judged) -> log text
 
-    def run(self, storage, hint):
-        return self.perform(storage, hint)
+    def run(self, storage, hint, now):
+        return self.perform(storage, hint, now)
 
 
 class StoreActionError(RuntimeError):
@@ -54,7 +54,7 @@ def _tag(app_name, body):
         return None, err
     verstr = body["verstr"]
 
-    def perform(storage, hint):
+    def perform(storage, hint, now):
         if not tag_run(storage, app_name, verstr, body.get("set") or {}, body.get("remove") or []):
             raise StoreActionError(f"Experiment '{verstr}' not found for {app_name}")
         hint(app_name, verstr)
@@ -68,7 +68,7 @@ def _note(app_name, body):
     if not _valid_verstr(verstr) or not isinstance(note, str):
         return None, "verstr and note are required"
 
-    def perform(storage, hint):
+    def perform(storage, hint, now):
         _require_run(storage, app_name, verstr)
         append_to_log(storage, app_name, verstr, create_log_entry("note", text=note))
         flush_log(storage, app_name, verstr)
@@ -87,7 +87,7 @@ def _archive(archived):
             return None, err
         verstrs = list(body["verstrs"])
 
-        def perform(storage, hint):
+        def perform(storage, hint, now):
             for verstr in verstrs:
                 if not set_archived(storage, app_name, verstr, archived):
                     raise StoreActionError(f"Experiment '{verstr}' not found for {app_name}")
@@ -105,10 +105,10 @@ def _rewind(app_name, body):
         return None, err
     verstr, step = body["verstr"], body["step"]
 
-    def perform(storage, hint):
+    def perform(storage, hint, now):
         _require_run(storage, app_name, verstr)
         rewind_run(storage, app_name, verstr, step,
-                   load_run_state(storage, app_name, verstr) or {})
+                   load_run_state(storage, app_name, verstr) or {}, now)
         flush_log(storage, app_name, verstr)
         rebuild_compacted(storage, app_name, verstr)
         hint(app_name, verstr)
@@ -130,7 +130,7 @@ def _model_register(app_name, body):
     if err:
         return None, err
 
-    def perform(storage, hint):
+    def perform(storage, hint, now):
         ensure_model(storage, model, description=fields["description"])
         n = register_version(storage, model, fields["run"],
                              artifact_path=fields["artifact_path"],
@@ -150,7 +150,7 @@ def _model_alias(app_name, body):
     if err:
         return None, err
 
-    def perform(storage, hint):
+    def perform(storage, hint, now):
         set_alias(storage, model, fields["alias"], fields["version"], expect=fields["expect"])
         return f"Alias {fields['alias']!r} -> {model} version {fields['version']}"
 
@@ -164,7 +164,7 @@ def _model_deprecate(app_name, body):
     if isinstance(version, bool) or not isinstance(version, int) or version < 1:
         return None, "'version' must be a positive integer"
 
-    def perform(storage, hint):
+    def perform(storage, hint, now):
         set_version_status(storage, model, version, "deprecated")
         return f"Deprecated {model} version {version}"
 

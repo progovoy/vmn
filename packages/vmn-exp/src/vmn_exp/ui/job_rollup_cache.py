@@ -12,7 +12,6 @@ change reaches the answers without a new generation.
 Split rollups (plan 28 P3) are kept the same way per split field, in LRUs
 of their own (:class:`_SplitRollups`).
 """
-import vmn_exp.core.status as experiment_status
 from vmn_exp.core.progress import progress_names
 from vmn_exp.ui.job_rollup import JobTree, StaticRollups, overlay
 from vmn_exp.ui.job_rollup_payload import failure_counts, job_payload, job_summary
@@ -30,11 +29,10 @@ LATEST_SPLITS = 8
 ANSWERS = 256
 
 
-def minute(now=None):
+def minute(now):
     """The clock job answers follow besides the live bucket: throughput and
-    ETA count completions per minute back from *now* (None:
-    :func:`~vmn_exp.core.status._now`)."""
-    return int((now or experiment_status._now()).timestamp() // 60)
+    ETA count completions per minute back from *now*."""
+    return int(now.timestamp() // 60)
 
 
 def _payload(job, parts, spec, now, idx_of):

@@ -244,7 +244,6 @@ def start_run(
     ensure_logger()
     _check_intent(intent, intent_keywords)
     io = real_io()
-
     prior_state, start_step = None, None
     ref, reopen = resume.requested_run_id(run_id, reopen)
     fork.check_modes(ref, fork_from, rewind_to_step)
@@ -254,9 +253,10 @@ def start_run(
         app_name, storage, verstr, prior_state, exp_conf = resume.locate(
             app_name, ref, storage, from_env=not run_id
         )
-        resume.check_reopenable(app_name, verstr, prior_state, reopen, not run_id)
+        now = io.clock.now()
+        resume.check_reopenable(app_name, verstr, prior_state, reopen, not run_id, now)
         if rewind_to_step is not None:
-            start_step = fork.rewind(storage, app_name, verstr, prior_state, rewind_to_step)
+            start_step = fork.rewind(storage, app_name, verstr, prior_state, rewind_to_step, now)
     elif adopted:
         app_name, storage, verstr, exp_conf = adopted
     else:

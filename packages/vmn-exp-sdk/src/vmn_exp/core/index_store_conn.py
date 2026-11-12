@@ -23,7 +23,6 @@ file and the reason), then debug.
 import logging
 import math
 import sqlite3
-import time
 
 from vmn_exp.core import sqlite_files
 from vmn_exp.core.best_effort import warn_once
@@ -33,17 +32,15 @@ from vmn_exp.core.sqlite_conn import checkpoint, wal_oversized
 
 FIRST_BACKOFF_SEC = 1.0
 MAX_BACKOFF_SEC = 60.0
-_monotonic = time.monotonic
 _LOGGER = logging.getLogger(__name__)
 
 
 class StoreConnection:
     """*path*'s connection, opened through *connect_file(file)*; a failed
-    open is retried after a backoff on *monotonic* (None: this module's
-    ``_monotonic``, read at call time)."""
+    open is retried after a backoff on *monotonic*."""
 
-    def __init__(self, path, connect_file, monotonic=None):
-        self._clock = monotonic
+    def __init__(self, path, connect_file, monotonic):
+        self._monotonic = monotonic
         self.path = path
         self._connect = connect_file
         self.conn = None
@@ -51,9 +48,6 @@ class StoreConnection:
         self._stamp = None
         self._retry_at = None  # math.inf: a newer schema owns the file
         self._backoff = FIRST_BACKOFF_SEC
-
-    def _monotonic(self):
-        return (self._clock or _monotonic)()
 
     def get(self):
         """The live connection, or None while unavailable."""

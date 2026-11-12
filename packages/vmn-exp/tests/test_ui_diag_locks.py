@@ -16,6 +16,7 @@ from vmn_exp.ui.leaderboard_cache import LeaderboardCache
 from vmn_exp.ui.refresher import Refresher
 from vmn_exp.ui.report_index import ReportIndexes
 from vmn_exp.ui.store_upkeep import StoreUpkeep
+from vmn_exp.core.real_io import RealClock
 
 
 def _unique(prefix):
@@ -103,7 +104,7 @@ def test_the_refresher_lock_is_traced():
 
 
 def test_the_store_upkeep_lock_is_traced():
-    upkeep = StoreUpkeep(clock=time.monotonic)
+    upkeep = StoreUpkeep(clock=time.monotonic, now=RealClock().now)
     _assert_named_holder(upkeep._lock, "store upkeep")
     assert upkeep.wait_idle(1)
 

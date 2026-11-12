@@ -120,7 +120,7 @@ def _rewind_step(step):
     return operator.index(step)
 
 
-def rewind_run(storage, app_name, verstr, step, prior_state, now=None):
+def rewind_run(storage, app_name, verstr, step, prior_state, now):
     """Hide *verstr*'s history past *step* (*prior_state*: its ``run_state``).
 
     Refused while the run is live elsewhere (its status derived at *now*):

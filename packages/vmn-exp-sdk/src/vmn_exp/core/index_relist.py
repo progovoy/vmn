@@ -48,7 +48,6 @@ LISTING_WORKERS = 8
 LISTING_ATTEMPTS = 4
 RETRY_SEC = 1.0
 _LOGGER = logging.getLogger(__name__)
-_wall = time.time
 
 
 class _NoNames(RuntimeError):
@@ -102,10 +101,10 @@ class Relisting:
     """One listing of an app's records, *files* or names alone, compared
     with the *known* keys; :meth:`take` hands it over a chunk at a time."""
 
-    def __init__(self, watch, known, files=True, wall=None):
-        """*wall*: epoch seconds now (None: this module's ``_wall``)."""
+    def __init__(self, watch, known, wall, files=True):
+        """*wall*: epoch seconds now."""
         self.files = files
-        self.started_at = (wall or _wall)()
+        self.started_at = wall()
         self._watch, self._known = watch, frozenset(known)
         self._lock = threading.Lock()
         self._changed = threading.Condition(self._lock)  # notified as records are listed

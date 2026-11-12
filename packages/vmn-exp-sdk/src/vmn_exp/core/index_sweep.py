@@ -59,7 +59,6 @@ write moves its sig), on another host behind its local copy, or on S3 — shows
 up by the next full sweep, whichever process runs it.
 """
 import threading
-import time
 
 from vmn_exp.core.index_lazy import has_meta
 from vmn_exp.core.index_listing import METADATA_FILE, ListingWatch, as_sigs  # noqa: F401
@@ -90,7 +89,6 @@ MAX_RECHECK_PER_SEC = 50
 LIVE_RELIST_SEC = 10
 # How long a changed record keeps being listed (capped by full_sweep_sec).
 TOUCH_WINDOW_SEC = 300
-_wall = time.time
 
 
 def live_relist_sec(record):
@@ -108,12 +106,10 @@ def live_relist_sec(record):
 class Sweep(SweepBehind, SweepRetake, SweepState):
     """The listing policy of one index; times are the caller's monotonic clock."""
 
-    def __init__(self, storage, app_name, full_sweep_sec=DEFAULT_FULL_SWEEP_SEC, watch=None,
-                 clock=None):
+    def __init__(self, storage, app_name, full_sweep_sec=DEFAULT_FULL_SWEEP_SEC, watch=None, *,
+                 clock):
         """*clock*: the :class:`~vmn_exp.core.ports.Clock` whose wall time the
-        reconcile times and the statuses a listing judges by read (None:
-        this module's ``_wall`` and :func:`~vmn_exp.core.status._now`, read
-        at call time)."""
+        reconcile times and the statuses a listing judges by read."""
         self._clock = clock
         self.full_sweep_sec = full_sweep_sec
         self.watch = watch or ListingWatch(storage, app_name)
@@ -138,14 +134,10 @@ class Sweep(SweepBehind, SweepRetake, SweepState):
         self._taken = set()  # keys this refresh's listings took (see SweepRetake)
 
     def wall(self):
-        return self._clock.now().timestamp() if self._clock else _wall()
-
-    def _wall_clock(self):
-        """The wall clock a relisting is timed on (None: its module's)."""
-        return self.wall if self._clock else None
+        return self._clock.now().timestamp()
 
     def _status_now(self):
-        return self._clock.now() if self._clock else None
+        return self._clock.now()
 
     def reset(self):
         """Forget every baseline: the next listing is full and compares all."""

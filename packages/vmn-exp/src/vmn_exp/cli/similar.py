@@ -35,7 +35,7 @@ NEEDS_A_TREE = (
 )
 
 
-def experiment_similar(vcs, storage, app_name, args):
+def experiment_similar(vcs, storage, app_name, args, clock):
     context, err = read_context(args)
     if err is not None:
         return err
@@ -58,7 +58,7 @@ def experiment_similar(vcs, storage, app_name, args):
             top=args.top or DEFAULT_TOP, query=args.query, context=context,
             text_only=args.text_only, all_apps=args.all_apps,
             schema_of=conf_schema_of(getattr(vcs, "vmn_root_path", None)),
-            target=target, include_archived=args.archived,
+            target=target, include_archived=args.archived, clock=clock,
         )
     except QueryError as exc:
         VMN_LOGGER.error(f"Invalid --query: {exc}")

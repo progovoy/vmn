@@ -67,7 +67,7 @@ def _root(snapshot, verstr):
     return root
 
 
-def results(snapshot, hits, now=None):
+def results(snapshot, hits, now):
     """The route's payload rows for *hits* ``[(slot, field)]``, their
     statuses as of *now*."""
     out = []

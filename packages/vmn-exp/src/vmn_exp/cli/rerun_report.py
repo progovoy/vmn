@@ -75,15 +75,16 @@ def print_plan(source, checkouts):
               f"({origin}){steps}")
 
 
-def warn(storage, source, env):
-    """Everything that makes the rerun differ from the original run."""
-    for line in _warnings(storage, source, env):
+def warn(storage, source, env, now):
+    """Everything that makes the rerun differ from the original run (whether
+    it still runs judged at *now*)."""
+    for line in _warnings(storage, source, env, now):
         VMN_LOGGER.warning(line)
 
 
-def _warnings(storage, source, env):
+def _warnings(storage, source, env, now):
     meta = source.metadata
-    if _still_running(storage, source):
+    if _still_running(storage, source, now):
         yield f"{source.verstr} is still running"
     if source.recorded and source.recorded.runner == core.RUNNER_SDK:
         yield ("The source is an SDK run: the metrics its script logs land on the "
@@ -100,7 +101,7 @@ def _warnings(storage, source, env):
     yield from _env_warnings(storage, source, env)
 
 
-def _still_running(storage, source, now=None):
+def _still_running(storage, source, now):
     state = source.run_state
     # Only a run claiming to run needs the store's write time to tell running from stuck.
     if not state or state.get("state") != "running" or state.get("exit_code") is not None:

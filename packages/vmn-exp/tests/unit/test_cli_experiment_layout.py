@@ -64,7 +64,7 @@ def test_patching_resolve_experiment_version_on_the_experiment_module_reaches_sh
                         lambda *a, **kw: calls.append(a) or (None, "patched"))
     console = (FakeConsole(),) if action in ("experiment_show", "experiment_export") else ()
     random = (FakeRandom(),) if action == "experiment_add" else ()
-    clock = (FakeClock(),) if action == "experiment_restore" else ()
+    clock = (FakeClock(),) if action in ("experiment_restore", "experiment_show") else ()
     assert getattr(experiment, action)(None, {}, _storage(tmp_path), _args(**extra), *console, *random,
                                        *clock) == 1
     assert len(calls) == 1

@@ -22,10 +22,7 @@ class ServerDeps:
     audit: Any  # AuditLog, or None without a control plane
     token_service: Any  # TokenService, or None without a control plane
     event_sleep: Any  # async sleep(sec) between a live-event stream's ticks
-    # The Clock run statuses are derived at and the indexes run on; None:
-    # their modules' own clocks, read at call time (what real_deps passes
-    # until plan 44 G11 Part B moves it onto io.clock).
-    status_clock: Any = None
+    status_clock: Any  # the Clock run statuses are derived at and the indexes run on
 
 
 def real_deps(io, control_plane, background_refresh, read_only, keep_warm):
@@ -45,9 +42,10 @@ def real_deps(io, control_plane, background_refresh, read_only, keep_warm):
         io=io,
         jobs=JobRunner(processes=io.processes, random=io.random, start_thread=start_daemon),
         refresher=refresher,
-        upkeep=(StoreUpkeep(clock=io.clock.monotonic)
+        upkeep=(StoreUpkeep(clock=io.clock.monotonic, now=io.clock.now)
                 if background_refresh and not read_only else None),
         audit=AuditLog(control_plane, clock=wall, random=io.random) if control_plane else None,
         token_service=TokenService(control_plane, clock=wall, random=io.random) if control_plane else None,
         event_sleep=asyncio.sleep,
+        status_clock=io.clock,
     )

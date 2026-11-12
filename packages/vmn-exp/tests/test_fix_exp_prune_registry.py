@@ -17,6 +17,8 @@ from exp_helpers import _bootstrap, _exp, _storage
 
 from vmn_exp.registry.log import set_version_status
 from vmn_exp.registry.store import ensure_model, register_version
+from vmn_exp.core.real_io import RealClock
+from vmn_exp.registry.lineage import app_indexes
 
 
 # ---------------------------------------------------------------------------
@@ -227,6 +229,7 @@ def test_prune_consumer_run_allowed_version_lineage_marks_missing(app_layout, ca
     err, out = _prune(app_layout, capfd, keep=0)
     assert err == 0, out
     assert _verstrs(app_layout) == [producer]
-    found = version_lineage(_storage(app_layout), "mymodel", 1)
+    storage = _storage(app_layout)
+    found = version_lineage(storage, "mymodel", 1, app_indexes(storage, RealClock()))
     assert [(n["verstr"], n["found"]) for n in found["consumers"]] == [(consumer, False)]
     assert found["producer"]["found"] is True

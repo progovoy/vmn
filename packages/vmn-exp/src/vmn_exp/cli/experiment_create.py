@@ -28,9 +28,10 @@ from version_stamp.api import VMN_LOGGER, measure_runtime_decorator
 
 
 @measure_runtime_decorator
-def experiment_create(vcs, params, storage, args, repo_lock=None):
+def experiment_create(vcs, params, storage, args, repo_lock=None, *, clock):
     """Create a run; ``repo_lock`` is the per-repo lock the CLI entry point
-    acquired, handed back once the run is written (see :func:`experiment_run`)."""
+    acquired, handed back once the run is written (see :func:`experiment_run`);
+    the similar-runs hint runs on *clock*."""
     from vmn_exp.cli import experiment as _exp
 
     extra = {}
@@ -86,7 +87,7 @@ def experiment_create(vcs, params, storage, args, repo_lock=None):
         repo_lock.release()
     from vmn_exp.cli.similar_hint import print_hint
 
-    print_hint(storage, app_name, verstr, args, experiment_conf(vcs))
+    print_hint(storage, app_name, verstr, args, experiment_conf(vcs), clock=clock)
     print(verstr)
     return 0
 
@@ -150,7 +151,7 @@ def _experiment_create_core(
 
 
 @measure_runtime_decorator
-def experiment_add(vcs, params, storage, args, random):
+def experiment_add(vcs, params, storage, args, io):
     from vmn_exp.cli import experiment as _exp
 
     verstr, err = _exp._resolve_experiment_version(storage, vcs, args, default_latest=True)
@@ -210,4 +211,4 @@ def experiment_add(vcs, params, storage, args, random):
     # One-shot command: nothing else will flush this to the remote later.
     flush_log(storage, app_name, verstr)
 
-    return apply_finish(storage, app_name, verstr, args, random)
+    return apply_finish(storage, app_name, verstr, args, io)

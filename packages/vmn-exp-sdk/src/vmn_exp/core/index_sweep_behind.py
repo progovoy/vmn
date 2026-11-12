@@ -125,8 +125,7 @@ class SweepBehind:
         if current is not None and (current.files or not files):
             return
         self._judge_all_live(records)
-        self._relisting = index_relist.Relisting(self.watch, records.keys(), files,
-                                                  wall=self._wall_clock())
+        self._relisting = index_relist.Relisting(self.watch, records.keys(), self.wall, files)
         if files:
             self.last_reconcile_at = self._relisting.started_at
 

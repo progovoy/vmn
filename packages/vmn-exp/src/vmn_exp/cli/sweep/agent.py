@@ -37,7 +37,7 @@ def run_agent(vcs, storage, args, sweep, spec, repo_lock=None, *, io):
     base_name = (storage.load_metadata(vcs.name, sweep) or {}).get("name") or "sweep"
     ran = 0
     while args.count is None or ran < args.count:
-        claim = _next_claim(storage, vcs.name, sweep, spec, agent, args.retry_failed)
+        claim = _next_claim(storage, vcs.name, sweep, spec, agent, args.retry_failed, io.clock)
         if claim is None:
             break
         supervision = _run_trial(vcs, storage, args, sweep, spec, claim, base_name,
@@ -53,13 +53,13 @@ def run_agent(vcs, storage, args, sweep, spec, repo_lock=None, *, io):
     return 0
 
 
-def _next_claim(storage, app_name, sweep, spec, agent, retry_failed):
+def _next_claim(storage, app_name, sweep, spec, agent, retry_failed, clock):
     rows = None
 
     def current_rows():
         nonlocal rows
         if rows is None:
-            rows = trial_rows(storage, app_name, sweep, spec)
+            rows = trial_rows(storage, app_name, sweep, spec, clock=clock)
         return rows
 
     if retry_failed:

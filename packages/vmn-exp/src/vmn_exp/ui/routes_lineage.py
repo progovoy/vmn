@@ -89,8 +89,8 @@ class _Apps:
     """Per-request memo of the snapshots lineage touches (the run's app and
     any app a ``vmn://`` input names)."""
 
-    def __init__(self, snapshot_for):
-        self._snapshot_for, self._snapshots = snapshot_for, {}
+    def __init__(self, snapshot_for, now):
+        self._snapshot_for, self._snapshots, self._now = snapshot_for, {}, now
 
     def snapshot(self, app_name):
         if app_name not in self._snapshots:
@@ -100,10 +100,10 @@ class _Apps:
     def index_for(self, app_name):
         return lineage_index(self.snapshot(app_name))
 
-    def status_of(self, app_name, verstr, now=None):
+    def status_of(self, app_name, verstr):
         snap = self.snapshot(app_name)
         return derive_status(
-            snap.run_states.get(verstr), now=now,
+            snap.run_states.get(verstr), now=self._now,
             observed_at=snap.run_state_observed_at.get(verstr),
         )
 
@@ -115,11 +115,12 @@ def _checked(depth, limit):
         raise HTTPException(400, f"limit must be 1..{MAX_LIMIT}")
 
 
-def register(app, prefix, lineage_inputs, segment, registry_of):
+def register(app, prefix, lineage_inputs, segment, registry_of, now):
     """Add the route; *lineage_inputs(ws_name, app_tag)* →
     ``(app_name, snapshot_for(app_name), storage)``, *segment(verstr)* returns
     a URL verstr or raises a 400, *registry_of(storage)* the
-    :class:`~vmn_exp.ui.registry_snapshot.RegistrySnapshot` to read."""
+    :class:`~vmn_exp.ui.registry_snapshot.RegistrySnapshot` to read, *now()*
+    the time statuses are derived at."""
 
     @app.get(f"{prefix}/workspaces/{{ws_name}}/apps/{{app_tag}}/experiments/{{verstr}}/lineage", dependencies=[require(VIEWER)])
     def experiment_lineage(
@@ -133,7 +134,7 @@ def register(app, prefix, lineage_inputs, segment, registry_of):
         segment(verstr)
         _checked(depth, limit)
         app_name, snapshot_for, storage = lineage_inputs(ws_name, app_tag)
-        apps = _Apps(snapshot_for)
+        apps = _Apps(snapshot_for, now())
         try:
             found = run_lineage(
                 storage, app_name, verstr, apps.index_for, depth=depth, limit=limit,
@@ -144,7 +145,7 @@ def register(app, prefix, lineage_inputs, segment, registry_of):
         return json_response(found, request=request)
 
 
-def register_version_lineage(app, prefix, workspace_inputs, registry_of):
+def register_version_lineage(app, prefix, workspace_inputs, registry_of, now):
     """Add ``GET .../models/{name}/versions/{n}/lineage``; *workspace_inputs(ws_name)*
     → ``(snapshot_for(app_name), storage)``, *registry_of* as :func:`register`'s."""
 
@@ -153,7 +154,7 @@ def register_version_lineage(app, prefix, workspace_inputs, registry_of):
         if not valid_model_name(model_name):
             raise HTTPException(400, f"Invalid model name {model_name!r}")
         snapshot_for, storage = workspace_inputs(ws_name)
-        apps = _Apps(snapshot_for)
+        apps = _Apps(snapshot_for, now())
         try:
             found = version_lineage(
                 storage, model_name, n, index_for=apps.index_for, status_of=apps.status_of,

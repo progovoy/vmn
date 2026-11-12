@@ -102,8 +102,7 @@ def finish_run(app_name, ref, exit_code, *, error=None, end_reason=None, force=F
     heartbeats are then dropped.
     """
     app_name, storage, verstr = _target(app_name, ref, storage)
-    return _finish_one(storage, app_name, verstr, exit_code, error, end_reason, force,
-                       real_io().random)
+    return _finish_one(storage, app_name, verstr, exit_code, error, end_reason, force, real_io())
 
 
 def finish_runs(app_name, refs, exit_code, *, error=None, end_reason=None, force=False,
@@ -118,14 +117,14 @@ def finish_runs(app_name, refs, exit_code, *, error=None, end_reason=None, force
     run_finish.checked_force(force)
     app_name, storage, _ = _resolve(app_name, storage)
     refs = list(dict.fromkeys(refs))
-    random = real_io().random
+    io = real_io()
 
     def finish(target):
         if isinstance(target, ValueError):
             return target
         try:
             return _finish_one(storage, app_name, target, exit_code, error,
-                               end_reason, force, random)
+                               end_reason, force, io)
         except ValueError as exc:
             return exc
 
@@ -150,9 +149,10 @@ def _targets(storage, app_name, refs):
     return targets
 
 
-def _finish_one(storage, app_name, verstr, exit_code, error, end_reason, force, random):
+def _finish_one(storage, app_name, verstr, exit_code, error, end_reason, force, io):
     done = run_finish.finish_run(storage, app_name, verstr, exit_code, error=error,
-                                 end_reason=end_reason, force=force, random=random)
+                                 end_reason=end_reason, force=force, random=io.random,
+                                 now=io.clock.now())
     return _changed(done, app_name, verstr)
 
 

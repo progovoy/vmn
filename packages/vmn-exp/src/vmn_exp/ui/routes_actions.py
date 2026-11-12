@@ -63,7 +63,8 @@ def register(app, prefix, ctx, jobs, leaderboards, read_only):
             return JSONResponse(spec.preview(verstrs))
         if ws.kind == "store":
             storage, reads = ctx.edit_storage(ws), ctx.exp_storage_for(ws)
-            apply = partial(spec.apply, storage, hint=lambda app, v: ctx.source.touched(ws, app, reads))
+            apply = partial(spec.apply, storage, hint=lambda app, v: ctx.source.touched(ws, app, reads),
+                            now=leaderboards.now())
 
             def act(batch):
                 return ship_pending_first(storage, partial(apply, batch))
@@ -86,7 +87,7 @@ def register(app, prefix, ctx, jobs, leaderboards, read_only):
             ctx.source.touched(ws, app, reads)
 
         job, err = jobs.submit_call(ws.name, store_action.command, lambda: ship_pending_first(
-            storage, lambda: store_action.run(storage, hint)))
+            storage, lambda: store_action.run(storage, hint, leaderboards.now())))
         if err:
             raise HTTPException(409, err)
         return job

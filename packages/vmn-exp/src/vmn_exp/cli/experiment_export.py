@@ -81,7 +81,7 @@ def experiment_export(vcs, params, storage, args, console):
 
 
 @measure_runtime_decorator
-def experiment_prune(vcs, params, storage, args):
+def experiment_prune(vcs, params, storage, args, clock):
     from vmn_exp.cli import experiment as _exp
 
-    return _experiment_prune(vcs, params, storage, args, _exp._app_name(vcs, args))
+    return _experiment_prune(vcs, params, storage, args, _exp._app_name(vcs, args), clock)

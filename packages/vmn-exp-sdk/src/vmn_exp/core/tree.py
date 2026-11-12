@@ -12,7 +12,6 @@ states only through the reader its caller passes in.
 """
 from collections import Counter
 
-import vmn_exp.core.status as experiment_status
 from vmn_exp.core.settle import (
     ENDED,
     LOST,
@@ -210,7 +209,7 @@ def annotate_tree(rows):
     return _annotate_tree_in_place([dict(r) for r in rows])
 
 
-def annotate_rows(rows, run_states, observed_at=None, now=None):
+def annotate_rows(rows, run_states, observed_at=None, *, now):
     """Copies of *rows* with their derived status fields and tree fields.
 
     *run_states* is ``{verstr: raw run state}``, *observed_at* ``{verstr:
@@ -218,7 +217,6 @@ def annotate_rows(rows, run_states, observed_at=None, now=None):
     """
     run_states = run_states or {}
     observed_at = observed_at or {}
-    now = experiment_status._now(now)  # one clock reading for every row
     return _annotate_tree_in_place([
         dict(row, **with_queue_sec(row, status_fields(
             run_states.get(row["verstr"]), now=now,
@@ -272,7 +270,7 @@ TREE_FIELDS = ("children", "kind", "depth", "settled", "tree_status", "child_cou
 
 
 def subtree_status(
-    verstr, parent_of, read_state, children_of=None, observed_at=None, row_of=None, now=None,
+    verstr, parent_of, read_state, children_of=None, observed_at=None, row_of=None, *, now,
 ):
     """``(run_state, tree_fields)`` for one run, reading its subtree's states only.
 
@@ -332,7 +330,7 @@ def _sweep_fields(verstr, children, row_of):
     return {"sweep_planned": planned, "sweep_trials": sweep_trial_count(rows)}
 
 
-def run_status(verstr, parent_of, read_state, observed_at=None, children_of=None, row_of=None, now=None):
+def run_status(verstr, parent_of, read_state, observed_at=None, children_of=None, row_of=None, *, now):
     """One run's status fields plus its tree fields, reading its subtree only.
 
     Arguments as for :func:`subtree_status`; *observed_at(verstr)* weighs the
@@ -376,7 +374,7 @@ def _child_row_fields(row):
 
 
 def fleet_summary(verstr, children_of, read_state, observed_at=None, expected=None,
-                  read_child_row=None, closed=False, now=None):
+                  read_child_row=None, closed=False, *, now):
     """Fleet status for an outer run: per-child status counts and progress.
 
     Returns None when *verstr* has no children. *expected* is the declared

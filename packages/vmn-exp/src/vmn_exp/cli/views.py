@@ -245,7 +245,7 @@ def event_log(log):
 
 def show_payload(
     idx, metadata, patches, log, run_state, tree, log_tail=None, observed_at=None,
-    schema=None, now=None,
+    schema=None, *, now,
 ):
     """The ``show --json`` object; *log_tail* keeps only the newest entries.
     *schema* is the app's metrics schema; the status is derived at *now*."""

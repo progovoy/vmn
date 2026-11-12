@@ -15,6 +15,7 @@ from version_stamp.core.logging import init_stamp_logger
 from vmn_exp.ui.index import app_snapshot
 from vmn_exp.ui.readers import diffs as diff_reader
 from vmn_exp.ui.readers import experiments as exp_reader
+from vmn_exp.core.real_io import RealClock
 
 
 @pytest.fixture(autouse=True)
@@ -94,7 +95,7 @@ def test_get_experiment_from_storage(tmp_path):
     )
 
     result, err = exp_reader.get_experiment_from_storage(
-        storage, "myapp", "1.0.0-dev.aaa.bbb"
+        storage, "myapp", "1.0.0-dev.aaa.bbb", now=RealClock().now()
     )
 
     assert err is None
@@ -116,7 +117,7 @@ def test_get_experiment_from_storage_not_found(tmp_path):
     storage = LocalSnapshotStorage(str(tmp_path), area="runs")
 
     result, err = exp_reader.get_experiment_from_storage(
-        storage, "myapp", "1.0.0-dev.nonexistent.xxx"
+        storage, "myapp", "1.0.0-dev.nonexistent.xxx", now=RealClock().now()
     )
 
     assert result is None

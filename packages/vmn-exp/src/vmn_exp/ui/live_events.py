@@ -128,12 +128,12 @@ def snapshot_change(old, new, scope=None):
     return _payload(rows, new, old)
 
 
-def live_change(snapshot, scope=None):
+def live_change(snapshot, scope=None, *, now):
     """``{rows, jobs?}`` of the live runs in *scope*; None without any.
-    The snapshot's running runs are re-judged now: one may have gone stuck."""
+    The snapshot's running runs are re-judged at *now*: one may have gone stuck."""
     running = _LIVE.per_snapshot(snapshot, lambda: [
-        v for v in snapshot.run_states if is_live(snapshot, v)])
-    live = [v for v in running if is_live(snapshot, v)]
+        v for v in snapshot.run_states if is_live(snapshot, v, now)])
+    live = [v for v in running if is_live(snapshot, v, now)]
     live = _in_scope(live, scope, snapshot)
     return _payload(live, snapshot) if live else None
 
@@ -146,9 +146,9 @@ def _event(kind, data):
     return f"event: {kind}\ndata: {json.dumps(data, separators=(',', ':'))}\n\n"
 
 
-async def event_stream(read, scope=None, *, clock, sleep, max_sec=None):
+async def event_stream(read, scope=None, *, clock, sleep, status_now, max_sec=None):
     """The stream's chunks; *read* is an async callable answering the app's
-    current snapshot."""
+    current snapshot, *status_now()* the time live runs are judged at."""
     max_sec = MAX_STREAM_SEC if max_sec is None else max_sec
     start = sent = clock()
     tick = int(start // LIVE_TICK_SEC)
@@ -166,7 +166,7 @@ async def event_stream(read, scope=None, *, clock, sleep, max_sec=None):
             last = snap
         now_tick = int(now // LIVE_TICK_SEC)
         if change is None and now_tick != tick:
-            change = live_change(snap, scope)
+            change = live_change(snap, scope, now=status_now())
         tick = now_tick
         if change is not None:
             yield _event("change", {"generation": _token(snap, tick), "changed": change})

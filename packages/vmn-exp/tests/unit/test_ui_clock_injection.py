@@ -166,7 +166,7 @@ class _Index:
 
 def test_store_upkeep_spaces_its_passes_on_the_given_clock_and_hands_it_to_app_upkeep():
     clock, index = FakeClock(), _Index()
-    upkeep = StoreUpkeep(interval_sec=10, clock=clock.monotonic)
+    upkeep = StoreUpkeep(interval_sec=10, clock=clock.monotonic, now=clock.now)
     upkeep.note(index, None, APP)
     try:
         upkeep.refreshed(index, "first")
@@ -228,7 +228,7 @@ def test_event_stream_heartbeats_on_the_given_clock_without_real_sleeping():
     started = clock.monotonic()
     snapshot = types.SimpleNamespace(generation=1, run_states={}, rows=[])
     routes_events.register(app, "/api", lambda ws, tag: lambda: snapshot, True,
-                           lambda value, what: value, clock.monotonic, clock.sleep)
+                           lambda value, what: value, clock.monotonic, clock.sleep, clock.clock.now)
 
     body = TestClient(app).get("/api/workspaces/ws/apps/app/events").text
 

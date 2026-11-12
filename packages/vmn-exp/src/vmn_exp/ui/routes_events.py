@@ -36,7 +36,7 @@ class EventStreamResponse(StreamingResponse):
             self._release()
 
 
-def register(app, prefix, reader_for, background, segment, clock, sleep):
+def register(app, prefix, reader_for, background, segment, clock, sleep, now):
     """Add the route; *reader_for(ws_name, app_tag)* → a blocking callable
     answering the app's current snapshot (raising 4xx for a bad workspace
     or app); *background*: whether a background refresher serves them; a
@@ -59,5 +59,5 @@ def register(app, prefix, reader_for, background, segment, clock, sleep):
                                            reason=TOO_MANY_STREAMS),
                                 status_code=503, headers={"Retry-After": "30"})
         stream = live_events.event_stream(lambda: run_in_threadpool(read), scope,
-                                          clock=clock, sleep=sleep)
+                                          clock=clock, sleep=sleep, status_now=now)
         return EventStreamResponse(stream, slots.release)

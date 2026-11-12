@@ -56,7 +56,7 @@ def _observed_at(rs_sig):
     return observed_at_from_mtime(rs_sig[1]) if rs_sig and len(rs_sig) > 1 else None
 
 
-def _settled(record, now=None):
+def _settled(record, now):
     """False only for ``running``: every other status will not change on its
     own, so it may drop to the reduced re-listing rate (sig-diff + the
     touched window) instead of being listed on every fast cycle forever.
@@ -65,7 +65,7 @@ def _settled(record, now=None):
     somehow does (a write resuming it), that write bumps the record's
     directory signature, which the caller's sig-diff check still catches on
     the very next cycle regardless of status. *now*: the time the status
-    is judged at (None: :func:`~vmn_exp.core.status._now`).
+    is judged at.
     """
     try:
         status = derive_status(record["run_state"], now=now,

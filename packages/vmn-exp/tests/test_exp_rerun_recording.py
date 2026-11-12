@@ -16,6 +16,7 @@ from vmn_exp.core.real_io import real_io
 from vmn_exp.core.rerun import RUNNER_CLI, RUNNER_SDK
 from vmn_exp.core.status import load_run_state
 from vmn_exp.snapshot import LocalSnapshotStorage
+from vmn_exp.core.real_io import RealClock
 
 META = {"verstr": "0.0.1-dev.a.r2", "timestamp": "2026-01-01T00:00:00Z"}
 
@@ -72,7 +73,7 @@ def test_detail_returns_rerun_of(tmp_path):
     storage = LocalSnapshotStorage(str(tmp_path))
     storage.save("app", "b", dict(META, verstr="b", rerun_of="a"), {})
     storage.append_log_entry("app", "b", "w", {"timestamp": META["timestamp"], "type": "create"})
-    detail, err = experiment_detail(storage, "app", "b")
+    detail, err = experiment_detail(storage, "app", "b", now=RealClock().now())
     assert err is None
     assert detail["rerun_of"] == "a"
 
