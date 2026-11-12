@@ -351,5 +351,5 @@ def build_app(
     startup_warmup.install(app, manager, ctx.list_apps, ctx.app_inputs, leaderboards,
                            refresher.background)
     diag.install_app(app, API_PREFIX, refresher)
-    mount_static(app, os.path.join(os.path.dirname(__file__), "static"))
+    mount_static(app, deps.static_dir)
     return app

@@ -2,6 +2,8 @@
 matches routes in registration order and several paths overlap under
 ``.../apps/{app_tag}/...``, so moving routes out of server.py keeps the
 ordered table exactly as it was."""
+import dataclasses
+
 from fakes.clock import FakeClock
 from fakes.console import FakeConsole
 from fakes.env import FakeEnv
@@ -104,15 +106,30 @@ GOLDEN = [
 
 
 def _route_table(app):
-    return [(route.path, " ".join(sorted(route.methods or ()))) for route in app.routes]
+    return [(route.path, " ".join(sorted(getattr(route, "methods", None) or ())))
+            for route in app.routes]
 
 
-def test_route_table_is_unchanged(tmp_path):
+def _app(tmp_path, static_dir):
     io = IO(clock=FakeClock(), env=FakeEnv(), processes=FakeProcesses(),
             random=FakeRandom(), host=FakeHost(), console=FakeConsole())
     deps = real_deps(io, control_plane=None, background_refresh=False, read_only=False,
                      keep_warm=None)
+    deps = dataclasses.replace(deps, static_dir=str(static_dir))
+    return build_app(WorkspaceManager(str(tmp_path / "data")), deps)
 
-    app = build_app(WorkspaceManager(str(tmp_path / "data")), deps)
+
+def test_route_table_is_unchanged(tmp_path):
+    app = _app(tmp_path, tmp_path / "no-bundle")
 
     assert _route_table(app) == GOLDEN
+
+
+def test_a_built_bundle_mounts_its_assets_and_the_spa_after_every_api_route(tmp_path):
+    bundle = tmp_path / "static"
+    (bundle / "assets").mkdir(parents=True)
+    (bundle / "index.html").write_text("<html></html>")
+
+    app = _app(tmp_path, bundle)
+
+    assert _route_table(app) == GOLDEN[:-1] + [("/assets", ""), ("/{full_path:path}", "GET")]

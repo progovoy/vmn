@@ -2,6 +2,7 @@
 not build itself, and the IO they were built from (plan 44 G4).
 ``real_deps`` builds the real ones; tests hand ``build_app`` their own."""
 import asyncio
+import os
 from dataclasses import dataclass
 from typing import Any
 
@@ -23,6 +24,7 @@ class ServerDeps:
     token_service: Any  # TokenService, or None without a control plane
     event_sleep: Any  # async sleep(sec) between a live-event stream's ticks
     status_clock: Any  # the Clock run statuses are derived at and the indexes run on
+    static_dir: str  # the web bundle served at / (absent: the API alone)
 
 
 def real_deps(io, control_plane, background_refresh, read_only, keep_warm):
@@ -48,4 +50,5 @@ def real_deps(io, control_plane, background_refresh, read_only, keep_warm):
         token_service=TokenService(control_plane, clock=wall, random=io.random) if control_plane else None,
         event_sleep=asyncio.sleep,
         status_clock=io.clock,
+        static_dir=os.path.join(os.path.dirname(__file__), "static"),
     )
