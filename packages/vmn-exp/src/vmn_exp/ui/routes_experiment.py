@@ -58,7 +58,7 @@ def register(app, prefix, ctx, job_views, leaderboards, background, series_cap, 
             step_range=bounds,
             schema=ctx.app_schema(ws, app_name),
             job_status=lambda v: job_views.detail_status(*ctx.leaderboard_inputs(ws_name, app_tag), v),
-            now=leaderboards.now(),
+            now=leaderboards.now(), min_stale_sec=leaderboards.min_stale_sec,
             **_detail_options(ws, app_name),
         )
         if err:

@@ -15,33 +15,34 @@ from collections import Counter
 
 from vmn_exp.core import index as experiment_index
 from vmn_exp.core.values import is_finite_number
-from vmn_exp.core.status import FAILED, STOPPED, STUCK, SUCCEEDED
+from vmn_exp.core.status import FAILED, MIN_STALE_SEC, STOPPED, STUCK, SUCCEEDED
 from vmn_exp.core.tree import annotate_rows, children_by_parent, subtree_verstrs
 
 RETRYABLE = (FAILED, STUCK)
 _CHILDREN = weakref.WeakKeyDictionary()  # IndexSnapshot -> {parent: [child]}
 
 
-def trial_rows(storage, app_name, sweep_verstr, spec, wait=True, max_age_sec=0, *, clock):
+def trial_rows(storage, app_name, sweep_verstr, spec, wait=True, max_age_sec=0, *, clock,
+               min_stale_sec=MIN_STALE_SEC):
     """Every run of the sweep (retries included), status-annotated, with the
     target metric attributed (see :func:`attribute_metric`). *wait*: refresh
     the app's index first; False takes the current snapshot, refreshed first
     only when older than a positive *max_age_sec*. *clock* (a
-    :class:`~vmn_exp.core.ports.Clock`): the index's and the statuses'."""
+    :class:`~vmn_exp.core.ports.Clock`): the index's and the statuses' (on *min_stale_sec*)."""
     snap = experiment_index.indexed_snapshot(
         storage, app_name, max_age_sec=max_age_sec, wait=wait, clock=clock
     )
-    return snapshot_trials(spec, sweep_verstr, snap, clock.now())
+    return snapshot_trials(spec, sweep_verstr, snap, clock.now(), min_stale_sec)
 
 
-def snapshot_trials(spec, sweep_verstr, snap, now):
-    """:func:`trial_rows` off an index snapshot, statuses as of *now*. Only
+def snapshot_trials(spec, sweep_verstr, snap, now, min_stale_sec=MIN_STALE_SEC):
+    """:func:`trial_rows` off an index snapshot, statuses as of *now* on *min_stale_sec*. Only
     the sweep's subtree is copied and annotated; the snapshot's parent map is
     built once per snapshot."""
     members = (snap.row(v) for v in subtree_verstrs(sweep_verstr, snapshot_children(snap)))
     annotated = annotate_rows(
         [row for row in members if row is not None],
-        snap.run_states, snap.run_state_observed_at, now=now,
+        snap.run_states, snap.run_state_observed_at, now=now, min_stale_sec=min_stale_sec,
     )
     trials = [r for r in annotated if r.get("parent") == sweep_verstr]
     return attribute_metric(spec, trials, annotated)

@@ -24,7 +24,7 @@ from vmn_exp.core.metric_summary import value_policy
 from vmn_exp.core.provenance import no_code_reason
 from vmn_exp.core.record_format import record_format_version
 from vmn_exp.core.run_error import error_summary
-from vmn_exp.core.status import status_fields
+from vmn_exp.core.status import MIN_STALE_SEC, status_fields
 
 PATCH_TYPES = ("working_tree", "local_commits")
 # ``show --patch`` prints at most this much patch text unless ``--max-bytes`` says otherwise.
@@ -245,13 +245,13 @@ def event_log(log):
 
 def show_payload(
     idx, metadata, patches, log, run_state, tree, log_tail=None, observed_at=None,
-    schema=None, *, now,
+    schema=None, *, now, min_stale_sec=MIN_STALE_SEC,
 ):
     """The ``show --json`` object; *log_tail* keeps only the newest entries.
-    *schema* is the app's metrics schema; the status is derived at *now*."""
+    *schema* is the app's metrics schema; the status is derived at *now* on *min_stale_sec*."""
     fold = fold_log(log)
     run = fold_row(idx, metadata, fold, schema=schema)
-    run.update(status_fields(run_state, now=now, observed_at=observed_at))
+    run.update(status_fields(run_state, now=now, observed_at=observed_at, min_stale_sec=min_stale_sec))
     run.update(tree)
     run["base_commit"] = metadata.get("base_commit")
     run["format_version"] = record_format_version(metadata)

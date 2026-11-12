@@ -27,7 +27,7 @@ from vmn_exp.core.index_views import (
 )
 from vmn_exp.core.metric_schema import goal_counts
 from vmn_exp.core.resolve_ref import RefLookups, no_runs_error, resolve_with
-from vmn_exp.core.status import derive_status, observed_at_from_mtime
+from vmn_exp.core.status import MIN_STALE_SEC, derive_status, observed_at_from_mtime
 from vmn_exp.core.tree import children_by_parent
 
 _VIEWS_PER_SNAPSHOT = 4
@@ -160,10 +160,10 @@ class IndexSnapshot:
         seen last, or None. Shared: copy before changing."""
         return self.note_sigs.get(verstr)
 
-    def status_of(self, verstr, now):
-        """*verstr*'s derived status at *now*, its run state's store write
-        time (:attr:`run_state_observed_at`) as *observed_at*."""
-        return derive_status(self.run_states.get(verstr), now=now,
+    def status_of(self, verstr, now, min_stale_sec=MIN_STALE_SEC):
+        """*verstr*'s derived status at *now* on *min_stale_sec*, its run state's
+        store write time (:attr:`run_state_observed_at`) as *observed_at*."""
+        return derive_status(self.run_states.get(verstr), now=now, min_stale_sec=min_stale_sec,
                              observed_at=self.run_state_observed_at.get(verstr))
 
     def declared_schema(self):

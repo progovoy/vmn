@@ -26,7 +26,7 @@ from vmn_exp.core.code_store import (
 )
 from vmn_exp.core.env import capture_env_safe, should_capture
 from vmn_exp.core.fork import resolve_run
-from vmn_exp.core.status import load_run_state
+from vmn_exp.core.status import load_run_state, min_stale_sec
 from vmn_exp.core.storage_resolve import experiment_dir
 from vmn_exp.core.writer import create_run, get_writer_id, new_run_ids
 from vmn_exp.gitmode.features import rerun_features
@@ -62,7 +62,7 @@ def experiment_rerun(vcs, params, storage, args, repo_lock=None, *, io):
         report.print_recipe(source, args.json)
         return 0
     if args.dry_run:
-        return _dry_run(vcs, storage, source, args, io.clock.now(), io.env)
+        return _dry_run(vcs, storage, source, args, io)
     return _execute(vcs, params, storage, args, source, repo_lock, io)
 
 
@@ -122,21 +122,21 @@ def _code_of(storage, app_name, metadata, patches):
     return resolve_code(storage, app_name, dict(metadata, **summary, code=key), patches)
 
 
-def _capture_env(vcs, storage, args, source, now, env):
-    """Capture the env the rerun will record (its opt-out read from the Env
-    *env*), warning about everything that makes the rerun differ from the original."""
+def _capture_env(vcs, storage, args, source, io):
+    """Capture the env the rerun will record (its opt-out read from *io*'s
+    env), warning about everything that makes the rerun differ from the original."""
     captured = None
-    if should_capture(args.capture_env, experiment_conf(vcs), env=env):
-        captured = capture_env_safe(env, _detect_python_exe(source.invocation.command))
-    report.warn(storage, source, captured, now)
+    if should_capture(args.capture_env, experiment_conf(vcs), env=io.env):
+        captured = capture_env_safe(io.env, _detect_python_exe(source.invocation.command))
+    report.warn(storage, source, captured, io.clock.now(), min_stale_sec(io.env))
     return captured
 
 
-def _dry_run(vcs, storage, source, args, now, env):
+def _dry_run(vcs, storage, source, args, io):
     checkouts, err = plan_workdir(vcs, source.metadata, source.patches, args.worktree_dir)
     if err:
         return _refuse(source, err)
-    _capture_env(vcs, storage, args, source, now, env)
+    _capture_env(vcs, storage, args, source, io)
     report.print_plan(source, checkouts)
     return 0
 
@@ -152,7 +152,7 @@ def _execute(vcs, params, storage, args, source, repo_lock, io):
             cwd, err = _child_dir(workdir, source.invocation.cwd)
             if err:
                 return _refuse(source, err)
-            captured = _capture_env(vcs, storage, args, source, io.clock.now(), io.env)
+            captured = _capture_env(vcs, storage, args, source, io)
             verstr, err = _claim(vcs, storage, args, source, captured, io.env, io.host)
             if err is not None:
                 return err

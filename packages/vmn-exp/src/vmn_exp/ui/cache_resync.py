@@ -32,7 +32,8 @@ CHECK_SEC = 1.0
 def _build(storage, app, store, like):
     """*app* loaded afresh into *store*, swept like the live index *like*
     (journaled only once loaded: a journaled sweep lists behind serving)."""
-    fresh = ExperimentIndex(storage, app, cache_store=store, clock=like.clock)
+    fresh = ExperimentIndex(storage, app, cache_store=store, clock=like.clock,
+                            min_stale_sec=like.min_stale_sec)
     fresh.full_sweep_sec = like.full_sweep_sec
     fresh.drops_folds = False  # *store* closes on commit; the adopting index drops them
     fresh.refresh().journaled = like.journaled

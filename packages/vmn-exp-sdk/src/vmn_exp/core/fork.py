@@ -19,7 +19,7 @@ import operator
 
 from vmn_exp.core.resolve_ref import _resolve_verstr
 from vmn_exp.core.rewind import create_rewind_entry, entry_step
-from vmn_exp.core.status import RUNNING, derive_status, run_state_observed_at
+from vmn_exp.core.status import MIN_STALE_SEC, RUNNING, derive_status, run_state_observed_at
 from vmn_exp.core.metric_entries import split_metric_entries
 from vmn_exp.core.writer import append_entries_to_log, append_metric_entries
 
@@ -121,16 +121,19 @@ def _rewind_step(step):
     return operator.index(step)
 
 
-def rewind_run(storage, app_name, verstr, step, prior_state, now, *, writer):
+def rewind_run(storage, app_name, verstr, step, prior_state, now, min_stale_sec=MIN_STALE_SEC, *,
+               writer):
     """Hide *verstr*'s history past *step* (*prior_state*: its ``run_state``),
     with an entry in *writer*'s stream.
 
-    Refused while the run is live elsewhere (its status derived at *now*):
+    Refused while the run is live elsewhere (its status derived at *now* on
+    *min_stale_sec*):
     its writer would keep logging steps the rewind is about to hide.
     """
     step = _rewind_step(step)
     observed = run_state_observed_at(storage, app_name, verstr)
-    if prior_state and derive_status(prior_state, now=now, observed_at=observed) == RUNNING:
+    if prior_state and derive_status(prior_state, now=now, observed_at=observed,
+                                     min_stale_sec=min_stale_sec) == RUNNING:
         raise RuntimeError(
             f"Run '{verstr}' is running (host {prior_state.get('host')}, pid "
             f"{prior_state.get('pid')}); finish it before rewinding it."

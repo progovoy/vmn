@@ -8,19 +8,23 @@ shared cache; every other replica is a follower, applying that cache's
 reconciles first (its records may be stale from before it lost the lead).
 """
 from vmn_exp.core.index import ExperimentIndex
+from vmn_exp.core.status import MIN_STALE_SEC
 
 
 class ElectedIndex:
     def __init__(self, storage, app_name, cache_store, election, workspace_id=0, org_id=None,
-                 *, clock=None):
-        """*clock*: both indexes' (see :class:`~vmn_exp.core.index.ExperimentIndex`)."""
+                 *, clock=None, min_stale_sec=MIN_STALE_SEC):
+        """*clock*, *min_stale_sec*: both indexes' (see
+        :class:`~vmn_exp.core.index.ExperimentIndex`)."""
         self.app_name = app_name
         self.workspace_id = workspace_id
         self.org_id = org_id
         self._election = election
         self._cache_store = cache_store
-        self._leader = ExperimentIndex(storage, app_name, cache_store=cache_store, clock=clock)
-        self._follower = ExperimentIndex.follower(cache_store, app_name, clock=clock)
+        self._leader = ExperimentIndex(storage, app_name, cache_store=cache_store, clock=clock,
+                                       min_stale_sec=min_stale_sec)
+        self._follower = ExperimentIndex.follower(cache_store, app_name, clock=clock,
+                                                  min_stale_sec=min_stale_sec)
         self.leading = False
 
     @property

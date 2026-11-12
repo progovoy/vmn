@@ -6,6 +6,7 @@ A fork is a new run seeded with another run's history up to a step (see
 marker that hides its history past a step (see :mod:`vmn_exp.core.rewind`).
 """
 from vmn_exp.core.fork import next_step, rewind_run, seed_fork, split_fork_ref
+from vmn_exp.core.status import min_stale_sec
 from vmn_exp.core.writer import get_writer_id
 from vmn_exp.sdk import resume
 
@@ -34,8 +35,9 @@ def seed(storage, app_name, verstr, source, step, io):
 
 
 def rewind(storage, app_name, verstr, prior_state, step, now, io):
-    """Hide *verstr*'s history past *step* (refused while it runs at *now*),
-    as the writer of *io*'s env and host; returns the step it continues from."""
-    rewind_run(storage, app_name, verstr, step, prior_state, now,
+    """Hide *verstr*'s history past *step* (refused while it runs at *now*, by
+    *io*'s env's stuck floor), as the writer of *io*'s env and host; returns
+    the step it continues from."""
+    rewind_run(storage, app_name, verstr, step, prior_state, now, min_stale_sec(io.env),
                writer=get_writer_id(io.env, io.host))
     return next_step(step)

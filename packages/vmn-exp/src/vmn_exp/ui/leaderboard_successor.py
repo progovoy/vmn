@@ -42,7 +42,7 @@ def _successor(base, bucket, follow):
     with base.successor_lock:
         if base.successor is None and base.outers_checked != bucket:
             now = base.now_of()
-            if any(not is_live(base.snapshot, base.rows[i]["verstr"], now)
+            if any(not is_live(base.snapshot, base.rows[i]["verstr"], now, base.stale_sec)
                    for i in base.live_outers):
                 base.successor = follow(base)
             base.outers_checked = bucket

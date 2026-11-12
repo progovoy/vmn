@@ -35,7 +35,7 @@ from collections import defaultdict
 from vmn_exp.core.activity import activity
 from vmn_exp.core.log_compact import compact_record_logs
 from vmn_exp.core.metric_compact import compact_record
-from vmn_exp.core.status import FAILED, STUCK, derive_status
+from vmn_exp.core.status import FAILED, MIN_STALE_SEC, STUCK, derive_status
 from vmn_exp.core.traced_lock import TracedLock
 from vmn_exp.ui.upkeep_flag import flag_marked_app
 
@@ -51,11 +51,11 @@ _LOGGER = logging.getLogger(__name__)
 
 class AppUpkeep:
     """One app's upkeep state across passes; *now()* the aware UTC time a
-    pass judges the dead runs at."""
+    pass judges the dead runs at, on *min_stale_sec*."""
 
-    def __init__(self, storage, app_name, clock, now):
+    def __init__(self, storage, app_name, clock, now, min_stale_sec=MIN_STALE_SEC):
         self._storage, self._app, self._clock = storage, app_name, clock
-        self._now = now
+        self._now, self._stale_sec = now, min_stale_sec
         self._listed = set()  # parents whose markers were listed
         self._marked = set()  # (parent, child) known to be marked
         self._compacted = set()  # verstrs compacted (or failed to) this process
@@ -150,7 +150,8 @@ class AppUpkeep:
         observed, now = snapshot.run_state_observed_at, self._now()
         dead = [row for row in snapshot.rows if row["verstr"] not in self._compacted
                 and derive_status(snapshot.run_states.get(row["verstr"]), now=now,
-                                  observed_at=observed.get(row["verstr"])) in DEAD]
+                                  observed_at=observed.get(row["verstr"]),
+                                  min_stale_sec=self._stale_sec) in DEAD]
         dead.sort(key=lambda row: row.get("timestamp") or "", reverse=True)
         return [row["verstr"] for row in dead]
 
@@ -159,12 +160,12 @@ class StoreUpkeep:
     """Runs :class:`AppUpkeep` passes for the noted indexes on one thread."""
 
     def __init__(self, interval_sec=UPKEEP_INTERVAL_SEC, budget_sec=PASS_BUDGET_SEC, *, clock,
-                 now):
+                 now, min_stale_sec=MIN_STALE_SEC):
         """Passes are spaced on *clock* (monotonic seconds), which each
         :class:`AppUpkeep` budgets its compaction on too, and judge dead
         runs at *now()* (see :class:`AppUpkeep`)."""
         self.interval_sec, self.budget_sec, self._clock = interval_sec, budget_sec, clock
-        self._now = now
+        self._now, self._stale_sec = now, min_stale_sec
         self._apps = {}  # index -> AppUpkeep
         self._pending = {}  # index -> the newest snapshot not passed over yet
         self._last_pass = {}  # index -> monotonic time of its last pass
@@ -177,7 +178,8 @@ class StoreUpkeep:
         """*index* serves *app_name* of the store *storage*."""
         with self._lock:
             if index not in self._apps:
-                self._apps[index] = AppUpkeep(storage, app_name, self._clock, self._now)
+                self._apps[index] = AppUpkeep(storage, app_name, self._clock, self._now,
+                                              self._stale_sec)
 
     def refreshed(self, index, snapshot):
         with self._lock:

@@ -25,6 +25,7 @@ from vmn_exp.core.query import compile_query
 from vmn_exp.core.real_io import real_io
 from vmn_exp.core.refs import needs_listing, point_placement, resolve_experiment
 from vmn_exp.core.run_finish import FinishRefusedError, RunRefusedError  # noqa: F401
+from vmn_exp.core.status import min_stale_sec
 from vmn_exp.core.writer import append_to_log, create_log_entry, flush_log, get_writer_id
 from vmn_exp.sdk.reader import _resolve, list_runs
 from vmn_exp.sdk.resume import ReopenRefusedError  # noqa: F401
@@ -153,7 +154,8 @@ def _targets(storage, app_name, refs):
 def _finish_one(storage, app_name, verstr, exit_code, error, end_reason, force, io):
     done = run_finish.finish_run(storage, app_name, verstr, exit_code, error=error,
                                  end_reason=end_reason, force=force, random=io.random,
-                                 now=io.clock.now(), writer=get_writer_id(io.env, io.host))
+                                 now=io.clock.now(), writer=get_writer_id(io.env, io.host),
+                                 min_stale_sec=min_stale_sec(io.env))
     return _changed(done, app_name, verstr)
 
 

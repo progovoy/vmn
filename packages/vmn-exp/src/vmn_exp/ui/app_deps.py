@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from vmn_exp.core.ports import IO, wall_seconds
+from vmn_exp.core.status import min_stale_sec
 from vmn_exp.ui.audit import AuditLog
 from vmn_exp.ui.auth.tokens import TokenService
 from vmn_exp.ui.jobs import JobRunner, start_daemon
@@ -44,7 +45,8 @@ def real_deps(io, control_plane, background_refresh, read_only, keep_warm):
         io=io,
         jobs=JobRunner(processes=io.processes, random=io.random, start_thread=start_daemon),
         refresher=refresher,
-        upkeep=(StoreUpkeep(clock=io.clock.monotonic, now=io.clock.now)
+        upkeep=(StoreUpkeep(clock=io.clock.monotonic, now=io.clock.now,
+                            min_stale_sec=min_stale_sec(io.env))
                 if background_refresh and not read_only else None),
         audit=AuditLog(control_plane, clock=wall, random=io.random) if control_plane else None,
         token_service=TokenService(control_plane, clock=wall, random=io.random) if control_plane else None,

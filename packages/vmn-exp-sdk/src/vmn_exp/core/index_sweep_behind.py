@@ -28,7 +28,6 @@ from vmn_exp.core import index_relist
 from vmn_exp.core.index_freshness import FULL_LISTING, JOURNAL
 from vmn_exp.core.index_lazy import has_meta
 from vmn_exp.core.index_listing import METADATA_FILE
-from vmn_exp.core.index_sweep_state import _settled
 
 HINTS_PER_REFRESH = 2000
 RELIST_PER_REFRESH = 2000
@@ -117,7 +116,7 @@ class SweepBehind:
     def _judge_all_live(self, records):
         if self._live is None:
             now = self._status_now()
-            self._live = {k for k, r in records.items() if has_meta(r) and not _settled(r, now)}
+            self._live = {k for k, r in records.items() if has_meta(r) and not self._is_settled(r, now)}
 
     def _relist(self, records, files):
         """Start a relisting, unless one that covers it is under way."""

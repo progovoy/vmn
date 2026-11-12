@@ -16,7 +16,6 @@ the writer's heartbeat timestamp and, when known, the store's write time of
 """
 import datetime
 import math
-import os
 
 from vmn_exp import _base
 from vmn_exp._base import VMN_LOGGER
@@ -135,11 +134,10 @@ def min_stale_sec(env):
     return positive_env_sec(env, MIN_STALE_ENV, MIN_STALE_SEC)
 
 
-def stale_after_sec(run_state):
-    """How long a heartbeat may go unrefreshed before the run counts as stuck."""
-    # The floor is the process's setting: status is derived where no env is
-    # handed down (plan 44 G12 leaves threading one through derive_status).
-    return max(heartbeat_interval_sec(run_state) * STALE_MULTIPLIER, min_stale_sec(os.environ))
+def stale_after_sec(run_state, min_stale_sec=MIN_STALE_SEC):
+    """How long a heartbeat may go unrefreshed before the run counts as stuck,
+    never less than *min_stale_sec* (the roots' :func:`min_stale_sec` of their env)."""
+    return max(heartbeat_interval_sec(run_state) * STALE_MULTIPLIER, min_stale_sec)
 
 
 def run_state_observed_at(storage, app_name, verstr):
@@ -218,15 +216,15 @@ def ended_status(run_state):
     return SUCCEEDED if ok else FAILED
 
 
-def derive_status(run_state, now, observed_at=None):
+def derive_status(run_state, now, observed_at=None, *, min_stale_sec=MIN_STALE_SEC):
     """Status of one run at *now* (an aware UTC datetime): created / running
     / stuck / succeeded / failed.
 
     *observed_at* is the storage mtime of ``run_state.yml``
     (:func:`run_state_observed_at`); pass it when you have it. A run with no
     exit code is ``stuck`` only when its heartbeat timestamp *and* that store
-    write time are both older than :func:`stale_after_sec`; without
-    *observed_at* the heartbeat timestamp alone decides.
+    write time are both older than :func:`stale_after_sec` (floored at
+    *min_stale_sec*); without *observed_at* the heartbeat timestamp alone decides.
     """
     if not run_state:
         return CREATED
@@ -240,7 +238,7 @@ def derive_status(run_state, now, observed_at=None):
     age = _liveness_age_sec(run_state, now, observed_at)
     if age is None:
         return STUCK
-    return RUNNING if age <= stale_after_sec(run_state) else STUCK
+    return RUNNING if age <= stale_after_sec(run_state, min_stale_sec) else STUCK
 
 
 def _durations(run_state, status, now, observed_at):
@@ -257,7 +255,7 @@ def _durations(run_state, status, now, observed_at):
     return None, _non_negative(_seconds_between(started, last_alive_at(run_state, now, observed_at)))
 
 
-def status_fields(run_state, now, observed_at=None):
+def status_fields(run_state, now, observed_at=None, *, min_stale_sec=MIN_STALE_SEC):
     """The full status payload for one run at *now*, ready to serialize.
 
     ``duration_sec`` is the recorded duration once the run finished, and the
@@ -266,7 +264,8 @@ def status_fields(run_state, now, observed_at=None):
     ``duration_at_least_sec``: its last proof of life minus its start.
     """
     run_state = run_state or {}
-    status = derive_status(run_state, now=now, observed_at=observed_at)
+    status = derive_status(run_state, now=now, observed_at=observed_at,
+                           min_stale_sec=min_stale_sec)
     duration, at_least = _durations(run_state, status, now, observed_at)
 
     if observed_at is not None:

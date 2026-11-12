@@ -9,7 +9,6 @@ primary declared goal, and the ``last_good`` run a failure card links to.
 """
 from vmn_exp.core.log import primary_metric
 from vmn_exp.core.metric_schema import metric_goal
-from vmn_exp.core.status import derive_status
 from vmn_exp.core.values import is_finite_number
 from vmn_exp.ui.readers.last_good_index import last_good_row
 
@@ -17,19 +16,16 @@ ORIGINS = ("parent", "forked_from", "rerun_of")
 _GLOB = frozenset("*?[")
 
 
-def status_of(snapshot, verstr, now):
-    return derive_status(
-        snapshot.run_states.get(verstr), now=now,
-        observed_at=snapshot.run_state_observed_at.get(verstr),
-    )
+def status_of(snapshot, verstr, now, stale_sec):
+    return snapshot.status_of(verstr, now, stale_sec)
 
 
 def run_ref(row):
     return {"verstr": row["verstr"], "idx": row.get("idx"), "name": row.get("name")}
 
 
-def _with_status(snapshot, row, now):
-    return dict(run_ref(row), status=status_of(snapshot, row["verstr"], now))
+def _with_status(snapshot, row, now, stale_sec):
+    return dict(run_ref(row), status=status_of(snapshot, row["verstr"], now, stale_sec))
 
 
 def _command(snapshot, verstr):
@@ -85,11 +81,12 @@ def best_run(ordered, metric, verstr):
     )
 
 
-def baselines(snapshot, verstr, has_patch, schema, ordered_by, now):
+def baselines(snapshot, verstr, has_patch, schema, ordered_by, now, stale_sec):
     """K3's ``{base?, parent?, forked_from?, rerun_of?, previous?, best?}``,
     each ``{verstr, idx, name, status}``, ``best`` also naming the ``metric``
     it is best on (plan 32 F7); *ordered_by(metric)* is the app's rows best
-    first on *metric*, asked only when *schema* declares a goal."""
+    first on *metric*, asked only when *schema* declares a goal; statuses at
+    *now* on *stale_sec*."""
     row = snapshot.row(verstr)
     found = {"base": row if has_patch else None}
     for origin in ORIGINS:
@@ -97,7 +94,7 @@ def baselines(snapshot, verstr, has_patch, schema, ordered_by, now):
     found["previous"] = previous_run(snapshot, row)
     metric = primary_goal(schema)
     found["best"] = best_run(ordered_by(metric), metric, verstr) if metric else None
-    out = {k: _with_status(snapshot, r, now) for k, r in found.items() if r is not None}
+    out = {k: _with_status(snapshot, r, now, stale_sec) for k, r in found.items() if r is not None}
     if "best" in out:
         out["best"]["metric"] = metric
     return out

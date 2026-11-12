@@ -9,10 +9,15 @@ each touched record last changed. The live and pending sets travel as they
 are; a record that went live since was written to, which moved its signature.
 What makes a record no longer live is :func:`_settled`'s call.
 """
-from vmn_exp.core.status import RUNNING, derive_status, observed_at_from_mtime
+from vmn_exp.core.status import MIN_STALE_SEC, RUNNING, derive_status, observed_at_from_mtime
 
 
 class SweepState:
+    def _is_settled(self, record, now=None):
+        """:func:`_settled` of *record* at *now* (None: the clock's), on the
+        sweep's stuck floor."""
+        return _settled(record, now or self._status_now(), self.min_stale_sec)
+
     def export_state(self, now, wall):
         """The sweep's state for a later process, in wall time *wall* (a
         monotonic clock does not cross processes; ms keep it from drifting
@@ -56,7 +61,7 @@ def _observed_at(rs_sig):
     return observed_at_from_mtime(rs_sig[1]) if rs_sig and len(rs_sig) > 1 else None
 
 
-def _settled(record, now):
+def _settled(record, now, min_stale_sec=MIN_STALE_SEC):
     """False only for ``running``: every other status will not change on its
     own, so it may drop to the reduced re-listing rate (sig-diff + the
     touched window) instead of being listed on every fast cycle forever.
@@ -65,11 +70,12 @@ def _settled(record, now):
     somehow does (a write resuming it), that write bumps the record's
     directory signature, which the caller's sig-diff check still catches on
     the very next cycle regardless of status. *now*: the time the status
-    is judged at.
+    is judged at; *min_stale_sec*: its stuck floor.
     """
     try:
         status = derive_status(record["run_state"], now=now,
-                               observed_at=_observed_at(record.get("rs_sig")))
+                               observed_at=_observed_at(record.get("rs_sig")),
+                               min_stale_sec=min_stale_sec)
     except (TypeError, ValueError):  # a hand-edited, unparseable exit code
         return False
     return status != RUNNING

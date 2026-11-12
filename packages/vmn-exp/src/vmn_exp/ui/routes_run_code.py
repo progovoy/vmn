@@ -87,5 +87,6 @@ def register(app, prefix, run_storage, leaderboard_inputs, leaderboards, segment
         def ordered_by(metric):
             return leaderboards.ordered(snapshot, schema, sort=metric)
 
-        found = baselines(snapshot, verstr, has_patch, schema, ordered_by, leaderboards.now())
+        found = baselines(snapshot, verstr, has_patch, schema, ordered_by, leaderboards.now(),
+                          leaderboards.min_stale_sec)
         return json_response(found, request=request)

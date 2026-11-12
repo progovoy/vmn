@@ -64,8 +64,8 @@ from vmn_exp.core.index_lazy import has_meta
 from vmn_exp.core.index_listing import METADATA_FILE, ListingWatch, as_sigs  # noqa: F401
 from vmn_exp.core.index_sweep_behind import SweepBehind
 from vmn_exp.core.index_sweep_failed import SweepRetake
-from vmn_exp.core.index_sweep_state import SweepState, _settled
-from vmn_exp.core.status import heartbeat_interval_sec, stale_after_sec
+from vmn_exp.core.index_sweep_state import SweepState
+from vmn_exp.core.status import MIN_STALE_SEC, heartbeat_interval_sec, stale_after_sec
 
 DEFAULT_FULL_SWEEP_SEC = 300  # 0: every refresh is a full listing
 # The most records one refresh re-lists for the consistency check (and the
@@ -91,26 +91,26 @@ LIVE_RELIST_SEC = 10
 TOUCH_WINDOW_SEC = 300
 
 
-def live_relist_sec(record):
+def live_relist_sec(record, min_stale_sec=MIN_STALE_SEC):
     """How often a journaled sweep lists live *record* (None: a pending
     claim) for its heartbeat: once per beat, never more often than
-    LIVE_RELIST_SEC, and within half its stale window, so a beat that landed
-    is seen long before the run would read ``stuck`` without it."""
+    LIVE_RELIST_SEC, and within half its stale window (on *min_stale_sec*), so
+    a beat that landed is seen long before the run would read ``stuck`` without it."""
     if record is None:
         return LIVE_RELIST_SEC
     run_state = record.get("run_state")
     period = max(heartbeat_interval_sec(run_state), LIVE_RELIST_SEC)
-    return min(period, stale_after_sec(run_state) / 2)
+    return min(period, stale_after_sec(run_state, min_stale_sec) / 2)
 
 
 class Sweep(SweepBehind, SweepRetake, SweepState):
     """The listing policy of one index; times are the caller's monotonic clock."""
 
     def __init__(self, storage, app_name, full_sweep_sec=DEFAULT_FULL_SWEEP_SEC, watch=None, *,
-                 clock):
+                 clock, min_stale_sec=MIN_STALE_SEC):
         """*clock*: the :class:`~vmn_exp.core.ports.Clock` whose wall time the
-        reconcile times and the statuses a listing judges by read."""
-        self._clock = clock
+        reconcile times and the statuses a listing judges (on *min_stale_sec*) read."""
+        self._clock, self.min_stale_sec = clock, min_stale_sec
         self.full_sweep_sec = full_sweep_sec
         self.watch = watch or ListingWatch(storage, app_name)
         self._last_full = None
@@ -155,7 +155,7 @@ class Sweep(SweepBehind, SweepRetake, SweepState):
         next listing — unless *record* already says it is no live run."""
         if self._live is None:
             return
-        if record is not None and (not has_meta(record) or _settled(record, self._status_now())):
+        if record is not None and (not has_meta(record) or self._is_settled(record)):
             self._live.discard(key)
         else:
             self._live.add(key)
@@ -269,7 +269,7 @@ class Sweep(SweepBehind, SweepRetake, SweepState):
         if not self._judge_live(records, key):
             self._live_at.pop(key, None)
             return False
-        if now - self._live_at.setdefault(key, now) < live_relist_sec(records.get(key)):
+        if now - self._live_at.setdefault(key, now) < live_relist_sec(records.get(key), self.min_stale_sec):
             return False
         self._live_at[key] = now
         return True
@@ -279,7 +279,7 @@ class Sweep(SweepBehind, SweepRetake, SweepState):
         record = records.get(key)
         if record is None:
             return True  # a claim still waiting for its metadata
-        if not has_meta(record) or _settled(record, self._status_now()):
+        if not has_meta(record) or self._is_settled(record):
             self._live.discard(key)
             return False
         return True
@@ -323,7 +323,7 @@ class Sweep(SweepBehind, SweepRetake, SweepState):
         if record is None or not has_meta(record):
             self._live.discard(key)
             return record is None
-        settled = _settled(record, self._status_now())
+        settled = self._is_settled(record)
         (self._live.discard if settled else self._live.add)(key)
         return self._changed_since(key, sig, now, settled)
 
@@ -364,7 +364,7 @@ class Sweep(SweepBehind, SweepRetake, SweepState):
         self.last_reconcile_at = self.wall()
         if self._live is None:
             at = self._status_now()
-            self._live = {k for k, r in records.items() if has_meta(r) and not _settled(r, at)}
+            self._live = {k for k, r in records.items() if has_meta(r) and not self._is_settled(r, at)}
         self._pending = {k for k in self._sigs if k not in present}
         self._listed_full = listing
         return listing, [key for key in records if key not in present]
@@ -385,7 +385,7 @@ class Sweep(SweepBehind, SweepRetake, SweepState):
             return True
         if not has_meta(record):
             return False  # not an experiment (a legacy verinfo file)
-        return self._changed_since(key, sig, now, _settled(record, self._status_now()))
+        return self._changed_since(key, sig, now, self._is_settled(record))
 
     def _changed_since(self, key, sig, now, settled):
         if not settled:

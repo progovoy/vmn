@@ -49,7 +49,7 @@ from vmn_exp.core.storage_resolve import try_repo_root
 from vmn_exp.core.step_metric import join_all, step_metrics
 from vmn_exp.core.refs import point_placement, resolve_experiment, tree_links
 from vmn_exp.core.similar_search import find as _find_similar
-from vmn_exp.core.status import load_run_state, run_state_observed_at
+from vmn_exp.core.status import load_run_state, min_stale_sec, run_state_observed_at
 from vmn_exp.core.tree import annotate_rows, run_status
 from vmn_exp.registry.lineage import app_indexes, run_lineage
 from vmn_exp.sdk import _resolve_app_name, frames
@@ -77,8 +77,7 @@ def _resolve(app_name, storage):
     Storage defaults to :func:`~vmn_exp.sdk.store_resolve.resolve_storage`
     (``VMN_EXPERIMENT_DIR`` > the checkout, fronting ``VMN_EXPERIMENT_STORE``).
     Returns ``(app_name, storage, root_path)``; *root_path* is None when the
-    caller supplied both or no checkout is found: there is no conf.yml to read.
-    """
+    caller supplied both or no checkout is found: there is no conf.yml to read."""
     root_path = None if (app_name and storage) else try_repo_root()
     storage = storage or resolve_storage(repo_root=root_path or False)
     env = real_io().env  # reached only from the public readers, SDK entry points
@@ -90,8 +89,7 @@ def _metrics_schema(storage, root_path, app_name):
     """``experiment.metrics`` from the app's conf.yml over the store settings
     (:mod:`vmn_exp.core.app_settings`) — sort direction and summary policies.
 
-    The app conf only, like the ui reads it; branch confs are not consulted.
-    """
+    The app conf only, like the ui reads it; branch confs are not consulted."""
     conf = read_experiment_conf(app_name, root_path).get("metrics") if root_path else None
     return app_metrics_schema(storage, app_name, conf)
 
@@ -102,7 +100,7 @@ def _metrics_schema(storage, root_path, app_name):
 
 
 def _rows_and_declared(app_name, storage, use_index=True, schema=None, incomplete=None,
-                       *, clock):
+                       *, clock, stale_sec):
     """``(rows, declared schema, extra)``: every run of an app,
     status-annotated, in storage order (oldest first); the goals/hidden flags
     the runs declare (:mod:`vmn_exp.core.metric_schema`) and what a query
@@ -115,7 +113,7 @@ def _rows_and_declared(app_name, storage, use_index=True, schema=None, incomplet
     *incomplete* ``"warn"`` warns it at the public reader's caller
     (:func:`~vmn_exp.sdk.reader_select.check_loading`).
     Asking about a single run goes through :func:`_subtree_row` instead.
-    *clock* (a :class:`~vmn_exp.core.ports.Clock`): the index's and the statuses'.
+    *clock* (a :class:`~vmn_exp.core.ports.Clock`): the index's and the statuses' (on *stale_sec*).
     """
     now = clock.now()
     if use_index:
@@ -128,7 +126,7 @@ def _rows_and_declared(app_name, storage, use_index=True, schema=None, incomplet
         extra = rows_extra(snap, now=now)
     check_loading(snap.loading, incomplete, stacklevel=3)
     rows = annotate_rows(row_copies(snap, False), snap.run_states, snap.run_state_observed_at,
-                         now=now)
+                         now=now, min_stale_sec=stale_sec)
     return rows, snap.declared_schema(), extra
 
 
@@ -174,12 +172,11 @@ def list_runs(
             the app's: by default (or ``"raise"``) that raises
             :class:`IndexingWarning`; ``"warn"`` warns it and returns the
             rows loaded so far.
-        clock: the :class:`~vmn_exp.core.ports.Clock` statuses derive on.
-    """
+        clock: the :class:`~vmn_exp.core.ports.Clock` statuses derive on."""
     app_name, storage, root_path = _resolve(app_name, storage)
     schema, clock = _metrics_schema(storage, root_path, app_name), clock or real_io().clock
     rows, declared, extra = _rows_and_declared(app_name, storage, use_index, schema, incomplete,
-                                               clock=clock)
+                                               clock=clock, stale_sec=min_stale_sec(real_io().env))
     rows = filter_archived(rows, include_archived)
     rows = filter_rows(filter_by_status(rows, status), query, extra, clock.now())
     # Summaries follow the conf schema only; direction also what runs declare.
@@ -200,13 +197,14 @@ def param_importance(app_name=None, metric=None, *, storage=None, query=None, st
     """
     app_name, storage, _ = _resolve(app_name, storage)
     clock = real_io().clock
-    rows, _, extra = _rows_and_declared(app_name, storage, incomplete=incomplete, clock=clock)
+    rows, _, extra = _rows_and_declared(app_name, storage, incomplete=incomplete, clock=clock,
+                                        stale_sec=min_stale_sec(real_io().env))
     rows = filter_archived(rows, include_archived)
     matching = filter_rows(filter_by_status(rows, status), query, extra=extra, now=clock.now())
     return _param_importance(matching, metric, universe=rows)
 
 
-def _subtree_row(app_name, storage, verstr, snapshot, now):
+def _subtree_row(app_name, storage, verstr, snapshot, now, stale_sec):
     """The row for one run, costing the run's subtree rather than the workspace.
 
     The placement *snapshot* gives the parent/child edges and the row's index;
@@ -227,7 +225,7 @@ def _subtree_row(app_name, storage, verstr, snapshot, now):
         observed_at=lambda v: run_state_observed_at(storage, app_name, v),
         children_of=children_of,
         row_of=snapshot.row,
-        now=now,
+        now=now, min_stale_sec=stale_sec,
     )
     return {"idx": row["idx"], "meta": meta}, status
 
@@ -257,7 +255,7 @@ def get_run(app_name=None, ref="latest", *, storage=None, x=None, clock=None):
         raise ValueError(err)
 
     target, status = _subtree_row(app_name, storage, verstr, snapshot,
-                                  (clock or real_io().clock).now())
+                                  (clock or real_io().clock).now(), min_stale_sec(real_io().env))
     if target is None:
         raise ValueError(f"Experiment '{verstr}' not found for {app_name}")
 
@@ -293,7 +291,8 @@ def get_run_state(app_name=None, verstr=None, *, storage=None):
     listing. *verstr* must be the exact name. Raises ValueError when no such
     run exists."""
     app_name, storage, _ = _resolve(app_name, storage)
-    read = read_run_state(storage, app_name, verstr, real_io().clock.now()) if verstr else None
+    now, stale_sec = real_io().clock.now(), min_stale_sec(real_io().env)
+    read = read_run_state(storage, app_name, verstr, now, stale_sec) if verstr else None
     if read is None:
         raise ValueError(f"Experiment '{verstr}' not found for {app_name}")
     return read[2]
@@ -307,7 +306,8 @@ def get_run_states(app_name=None, refs=(), *, storage=None):
     never touch the index or list the app (``latest`` / ``@N`` resolve through
     it once per call; prefixes are not resolved)."""
     app_name, storage, _ = _resolve(app_name, storage)
-    return read_run_states(storage, app_name, list(refs), real_io().clock.now())
+    io = real_io()
+    return read_run_states(storage, app_name, list(refs), io.clock.now(), min_stale_sec(io.env))
 
 
 def get_lineage(app_name=None, ref="latest", *, depth=1, storage=None, limit=DEFAULT_LIMIT):

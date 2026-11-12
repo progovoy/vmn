@@ -12,7 +12,7 @@ import shlex
 from vmn_exp.cli.provenance import _load_full_env
 from vmn_exp.core import rerun as core
 from vmn_exp.core.provenance import env_diff
-from vmn_exp.core.status import RUNNING, derive_status, run_state_observed_at
+from vmn_exp.core.status import MIN_STALE_SEC, RUNNING, derive_status, run_state_observed_at
 from vmn_exp.storage.files import safe_verstr
 from version_stamp.api import VMN_LOGGER, _predates_untracked_capture
 
@@ -75,16 +75,16 @@ def print_plan(source, checkouts):
               f"({origin}){steps}")
 
 
-def warn(storage, source, env, now):
+def warn(storage, source, env, now, min_stale_sec=MIN_STALE_SEC):
     """Everything that makes the rerun differ from the original run (whether
-    it still runs judged at *now*)."""
-    for line in _warnings(storage, source, env, now):
+    it still runs judged at *now* on *min_stale_sec*)."""
+    for line in _warnings(storage, source, env, now, min_stale_sec):
         VMN_LOGGER.warning(line)
 
 
-def _warnings(storage, source, env, now):
+def _warnings(storage, source, env, now, min_stale_sec):
     meta = source.metadata
-    if _still_running(storage, source, now):
+    if _still_running(storage, source, now, min_stale_sec):
         yield f"{source.verstr} is still running"
     if source.recorded and source.recorded.runner == core.RUNNER_SDK:
         yield ("The source is an SDK run: the metrics its script logs land on the "
@@ -101,13 +101,13 @@ def _warnings(storage, source, env, now):
     yield from _env_warnings(storage, source, env)
 
 
-def _still_running(storage, source, now):
+def _still_running(storage, source, now, min_stale_sec):
     state = source.run_state
     # Only a run claiming to run needs the store's write time to tell running from stuck.
     if not state or state.get("state") != "running" or state.get("exit_code") is not None:
         return False
     observed = run_state_observed_at(storage, source.app_name, source.verstr)
-    return derive_status(state, now=now, observed_at=observed) == RUNNING
+    return derive_status(state, now=now, observed_at=observed, min_stale_sec=min_stale_sec) == RUNNING
 
 
 def _env_warnings(storage, source, env):

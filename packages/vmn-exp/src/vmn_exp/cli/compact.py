@@ -11,20 +11,20 @@ from vmn_exp.core import index as experiment_index
 from vmn_exp.core.fork import resolve_run
 from vmn_exp.core.metric_compact import compact_record
 from vmn_exp.core.log_compact import compact_record_logs
-from vmn_exp.core.status import FAILED, RUNNING, STUCK, SUCCEEDED, derive_status
+from vmn_exp.core.status import FAILED, MIN_STALE_SEC, RUNNING, STUCK, SUCCEEDED, derive_status
 
 FINISHED = (SUCCEEDED, FAILED)
 DEAD = (FAILED, STUCK)
 
 
-def runs_with_status(storage, app_name, statuses, clock):
+def runs_with_status(storage, app_name, statuses, clock, min_stale_sec=MIN_STALE_SEC):
     """The verstrs of *app_name*'s runs whose derived status is in *statuses*;
     *clock* (a :class:`~vmn_exp.core.ports.Clock`): the index's and the
-    statuses'."""
+    statuses', *min_stale_sec* their stuck floor."""
     snap = experiment_index.indexed_snapshot(storage, app_name, wait=True, clock=clock)
     now = clock.now()
     return sorted(v for v, state in snap.run_states.items()
-                  if derive_status(state, now=now,
+                  if derive_status(state, now=now, min_stale_sec=min_stale_sec,
                                    observed_at=snap.run_state_observed_at.get(v))
                   in statuses)
 
@@ -47,8 +47,8 @@ def compact_runs(storage, app_name, verstrs):
     return failed
 
 
-def _named_runs(storage, app_name, refs, clock):
-    live = set(runs_with_status(storage, app_name, (RUNNING,), clock))
+def _named_runs(storage, app_name, refs, clock, stale_sec):
+    live = set(runs_with_status(storage, app_name, (RUNNING,), clock, stale_sec))
     verstrs = [resolve_run(storage, app_name, ref, "compact") for ref in refs]
     running = [v for v in verstrs if v in live]
     if running:
@@ -56,14 +56,14 @@ def _named_runs(storage, app_name, refs, clock):
     return verstrs
 
 
-def experiment_compact(storage, app_name, args, clock):
+def experiment_compact(storage, app_name, args, clock, stale_sec=MIN_STALE_SEC):
     refs = getattr(args, "version", None) or []
     if bool(refs) == bool(getattr(args, "all_finished", False)):
         VMN_LOGGER.error("exp compact needs run refs (-v) or --all-finished, not both")
         return 1
     try:
-        verstrs = (_named_runs(storage, app_name, refs, clock) if refs
-                   else runs_with_status(storage, app_name, FINISHED, clock))
+        verstrs = (_named_runs(storage, app_name, refs, clock, stale_sec) if refs
+                   else runs_with_status(storage, app_name, FINISHED, clock, stale_sec))
     except ValueError as exc:
         VMN_LOGGER.error(str(exc))
         return 1

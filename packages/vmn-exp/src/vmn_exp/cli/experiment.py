@@ -37,7 +37,7 @@ from vmn_exp.core.inputs import create_input_entry
 from vmn_exp.core.from_snapshot import (  # noqa: F401
     create_from_snapshot as _experiment_create_from_snapshot,
 )
-from vmn_exp.core.status import load_run_state  # noqa: F401
+from vmn_exp.core.status import load_run_state, min_stale_sec  # noqa: F401
 from version_stamp.api import export_tree, relative_timestamp  # noqa: F401
 
 # The commands, one module each.
@@ -327,9 +327,9 @@ def handle_experiment(vmn_ctx, io):
     elif action == "add":
         return experiment_add(vcs, params, storage, args, io)
     elif action == "list":
-        return experiment_list(vcs, params, storage, args, io.console, io.clock)
+        return experiment_list(vcs, params, storage, args, io.console, io.clock, min_stale_sec(io.env))
     elif action == "show":
-        return experiment_show(vcs, params, storage, args, io.console, io.clock)
+        return experiment_show(vcs, params, storage, args, io.console, io.clock, min_stale_sec(io.env))
     elif action == "compare":
         return experiment_compare(vcs, params, storage, args, io.console)
     elif action == "diff":
@@ -355,7 +355,7 @@ def handle_experiment(vmn_ctx, io):
 
         return experiment_export_metrics(storage, _app_name(vcs, args), args)
     elif action == "compact":
-        return experiment_compact(vcs, params, storage, args, io.clock)
+        return experiment_compact(vcs, params, storage, args, io.clock, min_stale_sec(io.env))
     elif action == "push":
         return experiment_push(vcs, params, storage, args, io.clock, io.env)
     elif action == "lineage":
@@ -377,7 +377,8 @@ def handle_experiment(vmn_ctx, io):
 def experiment_rewind(vcs, params, storage, args, io):
     from vmn_exp.cli.rewind import experiment_rewind as rewind
 
-    return rewind(storage, _app_name(vcs, args), args, io.clock, get_writer_id(io.env, io.host))
+    return rewind(storage, _app_name(vcs, args), args, io.clock, get_writer_id(io.env, io.host),
+                  min_stale_sec(io.env))
 
 
 def experiment_similar(vcs, params, storage, args, clock):
@@ -398,10 +399,10 @@ def experiment_backfill_children(vcs, params, storage, args):
     return backfill(storage, _app_name(vcs, args), args)
 
 
-def experiment_compact(vcs, params, storage, args, clock):
+def experiment_compact(vcs, params, storage, args, clock, stale_sec):
     from vmn_exp.cli.compact import experiment_compact as compact
 
-    return compact(storage, _app_name(vcs, args), args, clock)
+    return compact(storage, _app_name(vcs, args), args, clock, stale_sec)
 
 
 def experiment_push(vcs, params, storage, args, clock, env):

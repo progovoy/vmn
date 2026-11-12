@@ -8,6 +8,7 @@ paying for it, so without one (an embedded ``create_app``) the route is a
 ``MAX_STREAMS`` open streams it is a 503 (the client polls too)."""
 from fastapi.responses import JSONResponse, StreamingResponse
 from starlette.concurrency import run_in_threadpool
+from vmn_exp.core.status import MIN_STALE_SEC
 from vmn_exp.ui.api_errors import error_body
 from vmn_exp.ui.auth.authz import require
 from vmn_exp.ui.auth.principal import VIEWER
@@ -36,11 +37,13 @@ class EventStreamResponse(StreamingResponse):
             self._release()
 
 
-def register(app, prefix, reader_for, background, segment, clock, sleep, now):
+def register(app, prefix, reader_for, background, segment, clock, sleep, now,
+             stale_sec=MIN_STALE_SEC):
     """Add the route; *reader_for(ws_name, app_tag)* → a blocking callable
     answering the app's current snapshot (raising 4xx for a bad workspace
     or app); *background*: whether a background refresher serves them; a
-    stream ticks on *clock* (monotonic) with the async *sleep*."""
+    stream ticks on *clock* (monotonic) with the async *sleep*, judging live
+    runs at *now()* on *stale_sec*."""
     slots = live_events.StreamSlots(live_events.MAX_STREAMS)
     app.state.event_slots = slots
 
@@ -59,5 +62,6 @@ def register(app, prefix, reader_for, background, segment, clock, sleep, now):
                                            reason=TOO_MANY_STREAMS),
                                 status_code=503, headers={"Retry-After": "30"})
         stream = live_events.event_stream(lambda: run_in_threadpool(read), scope,
-                                          clock=clock, sleep=sleep, status_now=now)
+                                          clock=clock, sleep=sleep, status_now=now,
+                                          min_stale_sec=stale_sec)
         return EventStreamResponse(stream, slots.release)

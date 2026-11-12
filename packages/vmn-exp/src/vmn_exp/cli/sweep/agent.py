@@ -13,7 +13,7 @@ from vmn_exp.cli.run import _create_experiment, _Supervision
 from vmn_exp.cli.supervised_env import adopt_requested
 from vmn_exp.core.app_conf import experiment_conf
 from vmn_exp.core.background import Coalescing
-from vmn_exp.core.status import FAILED, SUCCEEDED
+from vmn_exp.core.status import FAILED, SUCCEEDED, min_stale_sec
 from vmn_exp.core.sweep.claims import attach_run, claim_next_trial, claim_retry
 from vmn_exp.core.sweep.command import require_command, trial_command
 from vmn_exp.core.sweep.early_stop import stopper_for
@@ -36,7 +36,8 @@ def run_agent(vcs, storage, args, sweep, spec, repo_lock=None, *, io):
     base_name = (storage.load_metadata(vcs.name, sweep) or {}).get("name") or "sweep"
     ran = 0
     while args.count is None or ran < args.count:
-        claim = _next_claim(storage, vcs.name, sweep, spec, agent, args.retry_failed, io.clock)
+        claim = _next_claim(storage, vcs.name, sweep, spec, agent, args.retry_failed, io.clock,
+                            min_stale_sec(io.env))
         if claim is None:
             break
         supervision = _run_trial(vcs, storage, args, sweep, spec, claim, base_name,
@@ -57,13 +58,13 @@ def agent_id(env, host):
     return f"{get_writer_id(env, host)}:{host.pid()}"
 
 
-def _next_claim(storage, app_name, sweep, spec, agent, retry_failed, clock):
+def _next_claim(storage, app_name, sweep, spec, agent, retry_failed, clock, stale_sec):
     rows = None
 
     def current_rows():
         nonlocal rows
         if rows is None:
-            rows = trial_rows(storage, app_name, sweep, spec, clock=clock)
+            rows = trial_rows(storage, app_name, sweep, spec, clock=clock, min_stale_sec=stale_sec)
         return rows
 
     if retry_failed:

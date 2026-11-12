@@ -27,7 +27,7 @@ from vmn_exp.core.log import (
     sort_descending,
 )
 from vmn_exp.core.settle import row_closes, row_settled_as
-from vmn_exp.core.status import CREATED, RUNNING
+from vmn_exp.core.status import CREATED, MIN_STALE_SEC, RUNNING
 from vmn_exp.core.tree import (
     children_by_parent,
     own_rollup_status,
@@ -39,11 +39,11 @@ from vmn_exp.core.values import is_finite_number
 from vmn_exp.ui.leaderboard_tree import parent_in
 
 
-def is_live(snapshot, verstr, now):
+def is_live(snapshot, verstr, now, min_stale_sec=MIN_STALE_SEC):
     """Whether time alone can change *verstr*'s status: only a ``running`` run
-    at *now* (judged with the store's write time too) can turn ``stuck``; a
+    at *now* (on *min_stale_sec*, with the store's write time too) can turn ``stuck``; a
     stuck one stays stuck until a write, which makes a new snapshot."""
-    return snapshot.status_of(verstr, now) == RUNNING
+    return snapshot.status_of(verstr, now, min_stale_sec) == RUNNING
 
 
 def _ancestors_and_self(verstr, parent_of):

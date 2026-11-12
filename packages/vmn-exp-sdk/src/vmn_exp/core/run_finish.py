@@ -29,6 +29,7 @@ from vmn_exp.core.state_cas import (
 )
 from vmn_exp.core.status import (
     FAILED,
+    MIN_STALE_SEC,
     RUN_STATE_FILE,
     RUNNING,
     SUCCEEDED,
@@ -67,7 +68,7 @@ class FinishRefusedError(RunRefusedError):
 
 
 def finish_run(storage, app_name, verstr, exit_code, error=None, end_reason=None,
-               force=False, *, random, now, writer):
+               force=False, *, random, now, writer, min_stale_sec=MIN_STALE_SEC):
     """Write *verstr*'s final run state; False when there is no such record.
     Its ``error`` entry goes to *writer*'s stream.
 
@@ -75,7 +76,7 @@ def finish_run(storage, app_name, verstr, exit_code, error=None, end_reason=None
     ``error`` log entry. *force* is False, ``"live"`` or True (see the module
     doc). Raises :class:`FinishRefusedError` and ValueError for an
     *exit_code* that is not an int or an unknown *force*. The prior status
-    is derived at *now*.
+    is derived at *now* on *min_stale_sec*.
     """
     exit_code = checked_exit_code(exit_code)
     overridden = checked_force(force)
@@ -84,7 +85,7 @@ def finish_run(storage, app_name, verstr, exit_code, error=None, end_reason=None
     observed_at = run_state_observed_at(storage, app_name, verstr)
 
     def finishable(prior):
-        _refuse_unfinishable(prior, observed_at, verstr, overridden, now)
+        _refuse_unfinishable(prior, observed_at, verstr, overridden, now, min_stale_sec)
         return prior
 
     finishable(load_run_state(storage, app_name, verstr) or {})
@@ -140,10 +141,10 @@ def checked_force(force):
     raise ValueError(f"force must be False, 'live' or True, got {force!r}")
 
 
-def _refuse_unfinishable(prior, observed_at, verstr, overridden, now):
+def _refuse_unfinishable(prior, observed_at, verstr, overridden, now, min_stale_sec):
     if overridden == _FORCE_OVERRIDES[True]:
         return  # nothing left to refuse: the prior state is not even read
-    status = derive_status(prior, now=now, observed_at=observed_at)
+    status = derive_status(prior, now=now, observed_at=observed_at, min_stale_sec=min_stale_sec)
     exit_code = prior.get("exit_code")
     if status == RUNNING and LIVE not in overridden:
         raise FinishRefusedError(

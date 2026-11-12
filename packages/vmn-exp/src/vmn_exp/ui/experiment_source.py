@@ -20,7 +20,7 @@ from vmn_exp.core.app_settings import attention_entries, metrics_overlay, ui_ove
 from vmn_exp.core.index_point import shared_store
 from vmn_exp.core.index_store import SqliteStore
 from vmn_exp.core.query_extra import bind_similar_scope
-from vmn_exp.core.status import run_state_observed_at
+from vmn_exp.core.status import MIN_STALE_SEC, run_state_observed_at
 from vmn_exp.storage.areas import app_key
 from vmn_exp.ui import index as ui_index
 from vmn_exp.ui.app_deps import wall_seconds
@@ -94,11 +94,12 @@ def _open_journal(ws, storage, cache_path, clock, index_clock=None):
 
 class ExperimentSource:
     def __init__(self, data_dir, use_index=True, refresher=None, cache_dsn=None,
-                 search_rows=None, store_upkeep=None, *, clock, env, processes, index_clock=None):
-        """*index_clock*: the indexes' and their caches' (see
+                 search_rows=None, store_upkeep=None, *, clock, env, processes, index_clock=None,
+                 min_stale_sec=MIN_STALE_SEC):
+        """*index_clock*, *min_stale_sec*: the indexes' and their caches' (see
         :class:`~vmn_exp.core.index.ExperimentIndex`; None: their modules'
         own clocks). *env*: the host's, which git workspaces' stores read."""
-        self._index_clock, self._env = index_clock, env
+        self._index_clock, self._env, self.min_stale_sec = index_clock, env, min_stale_sec
         self._db_dir = os.path.join(data_dir, "index")
         # --no-index: git workspaces' indexes are kept in memory only.
         self._ws_db_dir = self._db_dir if use_index else None
@@ -127,7 +128,7 @@ class ExperimentSource:
         if cache_dsn:
             from vmn_exp.ui.pg_mode import PgIndexes
 
-            self._pg = PgIndexes(cache_dsn, self.refresher)
+            self._pg = PgIndexes(cache_dsn, self.refresher, min_stale_sec)
 
     def workspace_index(self, ws):
         """The git workspace's read cache (in memory only with ``--no-index``)."""
@@ -135,7 +136,7 @@ class ExperimentSource:
             if ws.name not in self._indexes:
                 self._indexes[ws.name] = ui_index.WorkspaceIndex(
                     ws.path, self._ws_db_dir, processes=self._processes, clock=self._clock, env=self._env,
-                    index_clock=self._index_clock)
+                    index_clock=self._index_clock, min_stale_sec=self.min_stale_sec)
             return self._indexes[ws.name]
 
     def snapshot(self, ws, app_name, s3_storage=None, schema=None):
@@ -176,10 +177,10 @@ class ExperimentSource:
             snap = ui_index.app_snapshot(
                 s3_storage, app_name, cache_path, refresher, schema,
                 self._journal(ws, s3_storage, cache_path), ws.reconcile_sec,
-                index_clock=self._index_clock,
+                index_clock=self._index_clock, min_stale_sec=self.min_stale_sec,
             )
             self._heal(ws, app_name, s3_storage, cache_path, lambda: experiment_index.shared_index(
-                s3_storage, app_name, cache_path, clock=self._index_clock))
+                s3_storage, app_name, cache_path, clock=self._index_clock, min_stale_sec=self.min_stale_sec))
             return snap
         index = self.workspace_index(ws)
         snap = index.snapshot(app_name, refresher, schema)
@@ -282,7 +283,7 @@ class ExperimentSource:
             self._pg.index(ws, app_name, s3_storage).refresh()
             return
         ui_index.refresh_app(s3_storage, app_name, ui_index.s3_cache_path(self._db_dir, ws),
-                             index_clock=self._index_clock)
+                             index_clock=self._index_clock, min_stale_sec=self.min_stale_sec)
 
     def owner_of(self, snapshot):
         """``(workspace, app name)`` of the app *snapshot* was served or

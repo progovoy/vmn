@@ -7,6 +7,7 @@ The first :data:`MAX_TRIALS` trials are served (``trials_total`` counts
 them all; the rest are the job's Runs tab), and ``job`` is the job's compact
 rollup (plan 23 S3)."""
 from fastapi import HTTPException, Request
+from vmn_exp.core.status import MIN_STALE_SEC
 from vmn_exp.core.sweep.claims import claimed_trials
 from vmn_exp.core.sweep.spec import SpecError, parse_spec
 from vmn_exp.core.sweep.summary import snapshot_trials
@@ -26,11 +27,12 @@ def _spec_of(storage, app_name, verstr):
         return None
 
 
-def register(app, prefix, sweep_inputs, segment, job_of, now):
+def register(app, prefix, sweep_inputs, segment, job_of, now, stale_sec=MIN_STALE_SEC):
     """Add the route; *sweep_inputs(ws_name, app_tag)* →
     ``(app_name, snapshot_for(app_name), storage)``, *segment(verstr)* returns
     a URL verstr or raises a 400, *job_of(ws_name, app_tag, verstr)* the
-    job's compact rollup (None without trials), *now()* the time trials' statuses are at."""
+    job's compact rollup (None without trials), *now()* the time trials' statuses are at,
+    on *stale_sec*."""
 
     @app.get(f"{prefix}/workspaces/{{ws_name}}/apps/{{app_tag}}/experiments/{{verstr}}/sweep", dependencies=[require(VIEWER)])
     def experiment_sweep(request: Request, ws_name: str, app_tag: str, verstr: str):
@@ -39,7 +41,7 @@ def register(app, prefix, sweep_inputs, segment, job_of, now):
         spec = _spec_of(storage, app_name, verstr)
         if spec is None:
             raise HTTPException(404, f"{verstr} is not a sweep of {app_name}")
-        trials = snapshot_trials(spec, verstr, snapshot_for(app_name), now())
+        trials = snapshot_trials(spec, verstr, snapshot_for(app_name), now(), stale_sec)
         payload = sweep_view(spec, verstr, trials, claimed_trials(storage, app_name, verstr))
         payload["trials_total"] = len(payload["trials"])
         payload["trials"] = payload["trials"][:MAX_TRIALS]

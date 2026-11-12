@@ -7,6 +7,7 @@ from vmn_exp.cli.experiment import (
 )
 from vmn_exp.cli.views import dumps
 from vmn_exp.core.refs import resolve_experiment
+from vmn_exp.core.status import min_stale_sec
 from vmn_exp.core.storage_resolve import _get_experiment_storage
 from vmn_exp.core.sweep.claims import claimed_trials
 from vmn_exp.core.sweep.spec import SpecError, load_spec, metric_definition, parse_spec
@@ -28,7 +29,7 @@ def handle_sweep(vmn_ctx, io):
             return sweep_create(vcs, storage, args, io.env, io.host)
         sweep, spec = resolve_sweep(storage, vcs.name, args.ref)
         if args.action == "status":
-            return sweep_status(storage, vcs.name, sweep, spec, args, io.clock)
+            return sweep_status(storage, vcs.name, sweep, spec, args, io.clock, min_stale_sec(io.env))
         from vmn_exp.cli.sweep.agent import run_agent
 
         return run_agent(vcs, storage, args, sweep, spec, getattr(vmn_ctx, "repo_lock", None),
@@ -78,9 +79,9 @@ def resolve_sweep(storage, app_name, ref):
     return verstr, parse_spec(meta["sweep"])
 
 
-def sweep_status(storage, app_name, sweep, spec, args, clock):
-    summary = summarize(spec, trial_rows(storage, app_name, sweep, spec, clock=clock),
-                        claimed_trials(storage, app_name, sweep))
+def sweep_status(storage, app_name, sweep, spec, args, clock, stale_sec):
+    rows = trial_rows(storage, app_name, sweep, spec, clock=clock, min_stale_sec=stale_sec)
+    summary = summarize(spec, rows, claimed_trials(storage, app_name, sweep))
     summary["sweep"] = sweep
     if args.json:
         print(dumps(summary))

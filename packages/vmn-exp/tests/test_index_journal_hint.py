@@ -1,6 +1,8 @@
 """Plan 11 §5.2 / phase 2c: a journaled index lists only what the journal
 names (``hint``) plus its live records; full listings happen at the first
 load and on ``reconcile``, never per tick."""
+import os
+
 import pytest
 
 from test_fix_index_refresh_scale import Clock
@@ -59,7 +61,8 @@ def _make(st, i, run_state=FINISHED):
 
 
 def _journaled(st, clock):
-    index = ExperimentIndex(st, APP, full_sweep_sec=RECONCILE_SEC, clock=clock)
+    index = ExperimentIndex(st, APP, full_sweep_sec=RECONCILE_SEC, clock=clock,
+                            min_stale_sec=status.min_stale_sec(os.environ))
     index.journaled = True
     return index
 

@@ -2,17 +2,15 @@
 """An incremental index of an app's experiments: leaderboard rows without
 re-reading every log whenever anything changes.
 
-This module is the facade: :class:`ExperimentIndex` is assembled from mixins
-that keep all state on the index — :mod:`~vmn_exp.core.index_surface`
-(properties, freshness, snapshots), :mod:`~vmn_exp.core.index_refresh`
-(refreshing, how a refresh decides what to read), :mod:`~vmn_exp.core.index_load`
-(loading what a listing hands over), :mod:`~vmn_exp.core.index_publish`
-(applying and publishing changes), :mod:`~vmn_exp.core.index_persist`
-(its store) and :mod:`~vmn_exp.core.index_read` (reading records) — and
-:mod:`~vmn_exp.core.index_direct` builds snapshots without it. What tests
-patch here (the chunk size, the retry interval, the record readers, the
-process-wide registry) is read here, the moved code reaching it through seam
-methods such as ``_chunk()``.
+This module is the facade: :class:`ExperimentIndex` is assembled from mixins that keep all
+state on the index — :mod:`~vmn_exp.core.index_surface` (properties, freshness, snapshots),
+:mod:`~vmn_exp.core.index_refresh` (refreshing, how a refresh decides what to read),
+:mod:`~vmn_exp.core.index_load` (loading what a listing hands over),
+:mod:`~vmn_exp.core.index_publish` (applying and publishing changes),
+:mod:`~vmn_exp.core.index_persist` (its store) and :mod:`~vmn_exp.core.index_read` (reading
+records) — and :mod:`~vmn_exp.core.index_direct` builds snapshots without it. What tests
+patch here (the chunk size, the retry interval, the record readers, the process-wide
+registry) is read here, the moved code reaching it through seam methods such as ``_chunk()``.
 
 Storage is duck-typed (``list_files``, ``load_file``, and optionally
 ``list_record_names``/``list_files(keys=)``/``direct_files``/``read_file_from``/
@@ -55,7 +53,7 @@ from vmn_exp.core.index_load_pool import LoadPool
 from vmn_exp.core.log import load_log
 from vmn_exp.core.ports import wall_seconds
 from vmn_exp.core.real_io import real_io
-from vmn_exp.core.status import load_run_state
+from vmn_exp.core.status import MIN_STALE_SEC, load_run_state
 from vmn_exp.core.traced_lock import TracedLock
 
 _LOGGER = logging.getLogger(__name__)
@@ -76,13 +74,14 @@ class ExperimentIndex(IndexSurface, IndexRefresh, IndexLoad, IndexPublish, Index
     """Incrementally maintained rows for one app of one storage backend.
 
     *clock* (a :class:`~vmn_exp.core.ports.Clock`) times its refreshes,
-    sweeps, freshness and store (None: ``real_io().clock``)."""
+    sweeps, freshness and store (None: ``real_io().clock``); *min_stale_sec*: its sweep's."""
 
     def __init__(
         self, storage, app_name, cache_path=None, full_sweep_sec=DEFAULT_FULL_SWEEP_SEC,
-        cache_store=None, *, clock=None,
+        cache_store=None, *, clock=None, min_stale_sec=MIN_STALE_SEC,
     ):
         self.clock = self._clock = clock = clock or real_io().clock
+        self.min_stale_sec = min_stale_sec
         self._storage = storage
         self.app_name = app_name
         self._cache_path = cache_path
@@ -91,7 +90,7 @@ class ExperimentIndex(IndexSurface, IndexRefresh, IndexLoad, IndexPublish, Index
         self._freshness = index_freshness.Freshness(
             lambda: self._io or self._store, app_name,
             wall_seconds(clock))
-        self._sweep = Sweep(storage, app_name, full_sweep_sec, clock=clock)
+        self._sweep = Sweep(storage, app_name, full_sweep_sec, clock=clock, min_stale_sec=min_stale_sec)
         self._baseline = ListingBaseline(self._store, app_name)
         self._mark = JournalMark(self._store, app_name)
         self._io = None  # the I/O helper process, once use_io_process() started it
@@ -145,17 +144,18 @@ class ExperimentIndex(IndexSurface, IndexRefresh, IndexLoad, IndexPublish, Index
         return kept_parts(self._store, self.app_name)
 
     @classmethod
-    def follower(cls, cache_store, scope, *, clock=None):
+    def follower(cls, cache_store, scope, *, clock=None, min_stale_sec=MIN_STALE_SEC):
         """An index that never reads storage: each refresh applies
         *cache_store*'s ``load_since`` deltas, which a leader saves."""
-        index = cls(None, scope, clock=clock)
+        index = cls(None, scope, clock=clock, min_stale_sec=min_stale_sec)
         index._store = cache_store
         index._cache_gen = 0
         return index
 
     def _lean_copy(self):
         lean = ExperimentIndex(self._storage, self.app_name, self._cache_path,
-                               self.full_sweep_sec, self._store, clock=self._clock)
+                               self.full_sweep_sec, self._store, clock=self._clock,
+                               min_stale_sec=self.min_stale_sec)
         lean._lean = True
         return lean
 
@@ -194,26 +194,26 @@ _SHARED = {}
 _SHARED_LOCK = threading.Lock()
 
 
-def shared_index(storage, app_name, cache_path=None, full_sweep_sec=None, *, clock=None):
+def shared_index(storage, app_name, cache_path=None, full_sweep_sec=None, *, clock=None,
+                 min_stale_sec=MIN_STALE_SEC):
     """The process-wide index for *storage*'s *app_name* data.
 
     Keyed by the backend's ``cache_identity()`` so equivalent storage objects
     share one warm index. Persisted at *cache_path* when given (the ui keeps its
     own under the server data dir), else at the backend's ``index_cache_path``.
-    A *full_sweep_sec* other than None sets that index's sweep interval.
-    A new index runs on *clock* (see :class:`ExperimentIndex`); the first
-    caller's clock is the one a shared index keeps.
+    A *full_sweep_sec* other than None sets that index's sweep interval; a new index
+    keeps its first caller's *clock* and *min_stale_sec* (see :class:`ExperimentIndex`).
     """
-    index = _process_index(storage, app_name, cache_path, clock)
+    index = _process_index(storage, app_name, cache_path, clock, min_stale_sec)
     if full_sweep_sec is not None:
         index.full_sweep_sec = full_sweep_sec
     return index
 
 
-def _process_index(storage, app_name, cache_path, clock=None):
-    # The storage's own index file is the one point reads, listings and
-    # similar searches read: the process's one store of it. A caller's file
-    # (the ui's, one per workspace) keeps a store per index.
+def _process_index(storage, app_name, cache_path, clock=None, min_stale_sec=MIN_STALE_SEC):
+    # The storage's own index file is the one point reads, listings and similar searches
+    # read: the process's one store of it. A caller's file (the ui's, one per workspace)
+    # keeps a store per index.
     store = None
     if cache_path is None:
         cache_path = index_path(storage, app_name)
@@ -221,13 +221,15 @@ def _process_index(storage, app_name, cache_path, clock=None):
     identity_of = getattr(storage, "cache_identity", None)
     identity = identity_of() if identity_of else None
     if identity is None:
-        return ExperimentIndex(storage, app_name, cache_path, cache_store=store, clock=clock)
+        return ExperimentIndex(storage, app_name, cache_path, cache_store=store, clock=clock,
+                               min_stale_sec=min_stale_sec)
     key = (identity, app_name, cache_path)
     with _SHARED_LOCK:
         index = _SHARED.get(key)
         if index is None:
-            index = _SHARED[key] = ExperimentIndex(storage, app_name, cache_path,
-                                                   cache_store=store, clock=clock)
+            index = _SHARED[key] = ExperimentIndex(
+                storage, app_name, cache_path, cache_store=store, clock=clock,
+                min_stale_sec=min_stale_sec)
         return index
 
 

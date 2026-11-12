@@ -15,6 +15,7 @@ from fastapi.responses import JSONResponse
 from starlette.concurrency import run_in_threadpool
 from vmn_exp.core.app_conf import read_experiment_conf
 from vmn_exp.core.similar_search import conf_weights
+from vmn_exp.core.status import min_stale_sec
 from vmn_exp.ui.api_errors import error_body, status_code_name
 from vmn_exp.ui.app_presence import app_exists
 from vmn_exp.ui.attention_built_in import with_built_in
@@ -45,12 +46,8 @@ from vmn_exp.ui.thread_limiters import install_default_limiter
 from vmn_exp.ui.workspaces import workspace_storage
 
 from vmn_exp.ui import (
-    api_errors, diag, control_plane_sweep,
-    routes_actions,
-    routes_admin,
-    routes_baseline,
-    routes_cache,
-    routes_comments,
+    api_errors, diag, control_plane_sweep, routes_actions, routes_admin, routes_baseline,
+    routes_cache, routes_comments,
     routes_events,
     routes_experiment,
     routes_job,
@@ -162,18 +159,20 @@ def build_app(
     )
 
     refresher = app.state.refresher = deps.refresher
+    stale_sec = min_stale_sec(deps.io.env)  # the stuck floor every status here is derived on
     search_sql = search_rows = None
     if search_dsn:
         from vmn_exp.ui.search_pg import PgRowSearch
         from vmn_exp.ui.search_rows_writer import SearchRowsWriter
 
         search_sql = PgRowSearch(search_dsn)
-        search_rows = SearchRowsWriter(search_sql, deps.status_clock.now)
+        search_rows = SearchRowsWriter(search_sql, deps.status_clock.now, stale_sec)
     upkeep = app.state.store_upkeep = deps.upkeep
     source = ExperimentSource(manager.data_dir, use_index=use_index, refresher=refresher,
                               cache_dsn=cache_dsn, search_rows=search_rows,
                               store_upkeep=upkeep, clock=deps.io.clock, env=deps.io.env,
-                              processes=deps.io.processes, index_clock=deps.status_clock)
+                              processes=deps.io.processes, index_clock=deps.status_clock,
+                              min_stale_sec=stale_sec)
     # Looked up at call time, so a test's patch of this module or of
     # storage_access/storage.open still applies.
     ctx = ServerContext(
@@ -183,7 +182,8 @@ def build_app(
         probe_store=lambda uri: storage_access.probe_store(uri, random=deps.io.random, env=deps.io.env),
         app_exists=lambda *args: app_exists(*args), clock=deps.io.clock, env=deps.io.env,
     )
-    leaderboards = LeaderboardCache(conf_of=ctx.board_conf, now=deps.status_clock.now)
+    leaderboards = LeaderboardCache(conf_of=ctx.board_conf, now=deps.status_clock.now,
+                                    min_stale_sec=stale_sec)
     if refresher.background:  # requests after a refresh pay no base or search build
         refresher.on_refresh = leaderboards.warm
     job_views = JobViews(leaderboards)
@@ -307,7 +307,7 @@ def build_app(
         return partial(source.snapshot, ws, app_name, ctx.exp_storage_for(ws))
 
     routes_events.register(app, API_PREFIX, _events_reader, refresher.background, ctx.segment,
-                           deps.io.clock.monotonic, deps.event_sleep, leaderboards.now)
+                           deps.io.clock.monotonic, deps.event_sleep, leaderboards.now, stale_sec)
     forget_git = routes_shell.register(
         app, API_PREFIX, ctx.git_workspace, ctx.status_snapshot, ctx.app_tags, leaderboards,
         freshness, attention_entries, ctx.status_schema, views, experiment_ui,
@@ -320,15 +320,16 @@ def build_app(
                                                  clock=deps.io.clock.monotonic)
                                for read in (RegistrySnapshot.read, ModelListing.read))
     routes_lineage.register(app, API_PREFIX, _lineage_inputs, ctx.segment, registries.get,
-                            leaderboards.now)
+                            leaderboards.now, stale_sec)
     routes_lineage.register_version_lineage(app, API_PREFIX, _workspace_lineage_inputs,
-                                            registries.get, leaderboards.now)
+                                            registries.get, leaderboards.now, stale_sec)
     routes_job.register(app, API_PREFIX, leaderboard_inputs, job_views, ctx.segment, split_by)
     routes_baseline.register(app, API_PREFIX, leaderboard_inputs, BaselineViews(job_views),
                              ctx.segment, attention_entries)
     routes_sweep.register(app, API_PREFIX, _lineage_inputs, ctx.segment,
                           lambda ws_name, app_tag, verstr: job_views.job_summary(
-                              *leaderboard_inputs(ws_name, app_tag), verstr), leaderboards.now)
+                              *leaderboard_inputs(ws_name, app_tag), verstr), leaderboards.now,
+                          stale_sec)
     routes_run_code.register(app, API_PREFIX, _series_storage, leaderboard_inputs,
                              leaderboards, ctx.segment)
     routes_models.register(app, API_PREFIX, ctx.ws_storage, model_lists, deps.io)

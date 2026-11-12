@@ -36,12 +36,12 @@ from vmn_exp.core.metric_entries import is_metric_entry
 from vmn_exp.core.metric_summary import SchemaPolicies
 from vmn_exp.core.output_log import OUTPUT_LOG_PATH
 from vmn_exp.core.refs import point_placement, storage_index, tree_links
-from vmn_exp.core.status import STUCK, run_state_observed_at, status_fields
+from vmn_exp.core.status import MIN_STALE_SEC, STUCK, run_state_observed_at, status_fields
 from vmn_exp.core.tree import subtree_status
 from version_stamp.api import VMN_LOGGER, measure_runtime_decorator, relative_timestamp
 
 
-def _subtree(storage, app_name, verstr, metadata, snapshot=None, *, now):
+def _subtree(storage, app_name, verstr, metadata, snapshot=None, *, now, stale_sec=MIN_STALE_SEC):
     """``(run_state, tree fields, observed_at)`` of *verstr*: the parent/child
     links come from the experiment index (point reads once it is persisted),
     and run state (with its store write time) is read for the run's subtree
@@ -58,15 +58,18 @@ def _subtree(storage, app_name, verstr, metadata, snapshot=None, *, now):
         children_of=children_of,
         observed_at=observed_at,
         row_of=snapshot.row,
-        now=now,
+        now=now, min_stale_sec=stale_sec,
     )
     return run_state, tree, observed_at(verstr)
 
 
-def _print_status_block(storage, app_name, verstr, metadata, out, snapshot=None, *, now):
-    """Derived run status (as of *now*), runner identity and the experiment's nesting."""
-    run_state, tree, observed_at = _subtree(storage, app_name, verstr, metadata, snapshot, now=now)
-    fields = status_fields(run_state, now=now, observed_at=observed_at)
+def _print_status_block(storage, app_name, verstr, metadata, out, snapshot=None, *, now,
+                        stale_sec=MIN_STALE_SEC):
+    """Derived run status (as of *now*, stuck after *stale_sec*), runner identity
+    and the experiment's nesting."""
+    run_state, tree, observed_at = _subtree(storage, app_name, verstr, metadata, snapshot, now=now,
+                                            stale_sec=stale_sec)
+    fields = status_fields(run_state, now=now, observed_at=observed_at, min_stale_sec=stale_sec)
     out(f"  Status:    {fields['status']}")
     if fields["exit_code"] is not None:
         out(f"  Exit code: {fields['exit_code']}")
@@ -105,7 +108,7 @@ def _split_fold_params(fold, metrics):
     return split_params(metrics, fold_values(fold, "params"), logged_params(fold))
 
 
-def experiment_show(vcs, params, storage, args, console, clock):
+def experiment_show(vcs, params, storage, args, console, clock, stale_sec=MIN_STALE_SEC):
     from vmn_exp.cli import experiment as _exp
 
     app_name = _exp._app_name(vcs, args)
@@ -128,7 +131,7 @@ def experiment_show(vcs, params, storage, args, console, clock):
     if getattr(args, "json", False):
         return _print_show_json(
             storage, app_name, verstr, metadata, patches, log, args, snapshot, schema, out,
-            clock.now(),
+            clock.now(), stale_sec,
         )
 
     out(f"Experiment: {verstr}")
@@ -143,7 +146,8 @@ def experiment_show(vcs, params, storage, args, console, clock):
     if env_summary:
         out(f"  Env:       {format_env_oneliner(env_summary)}")
     _print_output_log(storage, app_name, verstr, out)
-    _print_status_block(storage, app_name, verstr, metadata, out, snapshot, now=clock.now())
+    _print_status_block(storage, app_name, verstr, metadata, out, snapshot, now=clock.now(),
+                        stale_sec=stale_sec)
     fork.print_lineage(metadata, log, out)
 
     for line in patch_stat_lines(metadata, patches):
@@ -188,14 +192,15 @@ SHOW_LOG_TAIL = 50
 
 
 def _print_show_json(
-    storage, app_name, verstr, metadata, patches, log, args, snapshot, schema, out, now
+    storage, app_name, verstr, metadata, patches, log, args, snapshot, schema, out, now, stale_sec
 ):
-    run_state, tree, observed_at = _subtree(storage, app_name, verstr, metadata, snapshot, now=now)
+    run_state, tree, observed_at = _subtree(storage, app_name, verstr, metadata, snapshot, now=now,
+                                            stale_sec=stale_sec)
     idx = storage_index(storage, app_name, verstr, snapshot)
     tail = None if getattr(args, "full_log", False) else SHOW_LOG_TAIL
     payload = show_payload(
         idx, metadata, patches, log, run_state, tree, tail,
-        observed_at=observed_at, schema=schema, now=now,
+        observed_at=observed_at, schema=schema, now=now, min_stale_sec=stale_sec,
     )
     if getattr(args, "patch", False):
         payload["patch"] = patch_payload(
