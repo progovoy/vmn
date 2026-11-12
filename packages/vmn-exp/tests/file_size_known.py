@@ -24,7 +24,7 @@ KNOWN_OVERSIZED = {
     'vmn_exp.importers.mlflow_filestore': 430,
     'vmn_exp.integrations.optuna_study': 312,
     'vmn_exp.sdk.autolog': 387,
-    'vmn_exp.sdk.reader': 404,
+    'vmn_exp.sdk.reader': 399,
     'vmn_exp.sdk.run': 750,
     'vmn_exp.sdk.sysmetrics': 349,
     'vmn_exp.storage.base': 322,

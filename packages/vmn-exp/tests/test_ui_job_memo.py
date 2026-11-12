@@ -12,15 +12,9 @@ from vmn_exp.ui.job_tally import RollupSpec, Tally
 from vmn_exp.ui.job_views import JobViews
 from vmn_exp.ui.leaderboard_cache import LeaderboardCache
 
-from vmn_exp.core import status as status_mod
 from vmn_exp.ui import job_failures, job_views, leaderboard_answers
 
 SCHEMA = {"loss": {"goal": "min", "primary": True}}
-
-
-def _at(monkeypatch, seconds):
-    when = T0 + datetime.timedelta(seconds=seconds)
-    monkeypatch.setattr(status_mod, "_now", lambda now=None: now or when)
 
 
 def _idle_job(inners=40):
@@ -123,16 +117,37 @@ def test_job_importance_is_not_rerun_for_every_completion(monkeypatch):
 
 
 pytest.importorskip("fastapi")
-from test_ui_scope_route import BASE, served  # noqa: E402,F401
+from fastapi.testclient import TestClient  # noqa: E402
+from test_ui_leaderboard_groups_route import _conf, _record  # noqa: E402
+from test_ui_scope_route import BASE  # noqa: E402
+from unit_deps import fake_deps  # noqa: E402
 
 
-def test_a_jobs_view_poll_answers_304_within_the_minute(served, monkeypatch):  # noqa: F811
-    client, _ = served
+@pytest.fixture
+def served(tmp_path):
+    """``(client, clock)``: test_ui_scope_route's runs, served on a FakeClock at T0."""
+    from vmn_exp.ui.server import build_app
+    from vmn_exp.ui.workspaces import WorkspaceManager
+
+    root = tmp_path / "repo"
+    (root / ".git").mkdir(parents=True)
+    root = str(root)
+    for n, loss, parent in [(1, 0.5, None), (2, 9.0, 1), (3, 1.0, 1), (4, 2.0, 3), (5, 3.0, None)]:
+        _record(root, n, loss, parent)
+    _conf(root, {"metrics": {"loss": {"goal": "min"}}})
+    manager = WorkspaceManager(str(tmp_path / "data"))
+    manager.attach_path("ws", root)
+    clock = FakeClock(T0)
+    return TestClient(build_app(manager, fake_deps(clock))), clock
+
+
+def test_a_jobs_view_poll_answers_304_within_the_minute(served, monkeypatch):
+    client, clock = served
     url, params = f"{BASE}/experiments", {"top": "1", "limit": 5}
-    _at(monkeypatch, 5)
+    clock.advance(5)
     tag = client.get(url, params=params).headers["etag"]
-    _at(monkeypatch, 25)
+    clock.advance(20)
     again = client.get(url, params=params, headers={"If-None-Match": tag})
     assert again.status_code == 304
-    _at(monkeypatch, 65)
+    clock.advance(40)
     assert client.get(url, params=params).headers["etag"] != tag

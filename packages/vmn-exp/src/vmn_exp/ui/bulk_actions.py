@@ -44,10 +44,10 @@ class BulkSpec:
         return [self.action, self.app_name] + [
             f"{k}={self.body[k]}" for k in QUERY_KEYS if self.body.get(k)]
 
-    def filters(self):
+    def filters(self, now):
         """The list's filters; archive/unarchive see every run and pick by state."""
         archived = self.action != "exp_tag" or bool(self.body.get("archived"))
-        return dict(scope=self.body.get("scope"), query=pinned(self.body.get("q")),
+        return dict(scope=self.body.get("scope"), query=pinned(self.body.get("q"), now),
                     status=self.body.get("status"), archived=archived)
 
     def pending(self, row):

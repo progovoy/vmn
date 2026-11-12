@@ -50,7 +50,8 @@ def register(app, prefix, ctx, jobs, leaderboards, read_only):
 
         def resolve():
             snapshot, schema = ctx.leaderboard_inputs(ws.name, app_tag)
-            return spec.matching(leaderboards.ordered(snapshot, schema, **spec.filters()))
+            filters = spec.filters(leaderboards.now())
+            return spec.matching(leaderboards.ordered(snapshot, schema, **filters))
 
         try:
             verstrs = resolve()

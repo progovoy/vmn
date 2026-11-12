@@ -62,18 +62,28 @@ class Store:
 
 
 class Clock:
-    def __init__(self):
-        self.now = 1000.0
+    """The index's clock: monotonic seconds move only by ``advance``; the wall
+    is the real time, which the records' heartbeats are written at."""
 
-    def __call__(self):
-        return self.now
+    def __init__(self):
+        self._monotonic = 1000.0
+
+    def monotonic(self):
+        return self._monotonic
+
+    def now(self):
+        return datetime.datetime.now(datetime.timezone.utc)
+
+    def time(self):
+        return self.now().timestamp()
+
+    def advance(self, sec):
+        self._monotonic += sec
 
 
 @pytest.fixture
-def clock(monkeypatch):
-    c = Clock()
-    monkeypatch.setattr(experiment_index, "_monotonic", c)
-    return c
+def clock():
+    return Clock()
 
 
 @pytest.fixture
@@ -108,9 +118,9 @@ def test_a_fast_refresh_does_per_record_work_only_for_what_changed(
     live_store, clock, tmp_path, monkeypatch
 ):
     index = ExperimentIndex(live_store.st, APP, cache_path=str(tmp_path / "idx.sqlite"),
-                            full_sweep_sec=FULL_SWEEP_SEC)
+                            full_sweep_sec=FULL_SWEEP_SEC, clock=clock)
     index.refresh()
-    clock.now += 1
+    clock.advance(1)
     index.refresh()
 
     settled = _counter(monkeypatch, index_sweep, "_settled")
@@ -120,7 +130,7 @@ def test_a_fast_refresh_does_per_record_work_only_for_what_changed(
         _churn(live_store, cycle)
         new = live_store.add(N + M + cycle, f"state: running\nheartbeat: '{_now_iso()}'\n")
         live_store.live.append(new)
-        clock.now += 1
+        clock.advance(1)
         index.refresh()
         snap = index.snapshot()
         assert snap.row(new) is not None
@@ -137,11 +147,11 @@ def test_a_full_sweep_refreshes_only_the_records_whose_files_changed(
     live_store, clock, tmp_path, monkeypatch
 ):
     index = ExperimentIndex(live_store.st, APP, cache_path=str(tmp_path / "idx.sqlite"),
-                            full_sweep_sec=FULL_SWEEP_SEC)
+                            full_sweep_sec=FULL_SWEEP_SEC, clock=clock)
     index.refresh()
     _churn(live_store, 1)
     compared = _counter(monkeypatch, index_record, "log_signatures")
-    clock.now += FULL_SWEEP_SEC + 1  # due: this refresh lists every record
+    clock.advance(FULL_SWEEP_SEC + 1)  # due: this refresh lists every record
     index.refresh()
 
     assert len(compared) <= 3 * M
@@ -151,13 +161,13 @@ def test_a_full_sweep_refreshes_only_the_records_whose_files_changed(
 
 def test_the_rows_match_a_direct_read_after_churn(live_store, clock, tmp_path):
     index = ExperimentIndex(live_store.st, APP, cache_path=str(tmp_path / "idx.sqlite"),
-                            full_sweep_sec=FULL_SWEEP_SEC)
+                            full_sweep_sec=FULL_SWEEP_SEC, clock=clock)
     index.refresh()
     for cycle in range(1, 4):
         _churn(live_store, cycle)
         live_store.st.delete(APP, live_store.live.pop())
         live_store.add(N + M + cycle, "state: finished\nexit_code: 1\n")
-        clock.now += 1 if cycle < 3 else FULL_SWEEP_SEC + 1
+        clock.advance(1 if cycle < 3 else FULL_SWEEP_SEC + 1)
         index.refresh()
     rows, states = experiment_index.direct_rows(live_store.st, APP)
     snap = index.snapshot()

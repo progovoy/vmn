@@ -54,7 +54,7 @@ class MetricsFeed:
                 return samples
             return samples + self._samples.per_snapshot(
                 snapshot, lambda: self._computed(labels, ws, app_name, snapshot, now),
-                key=(ws.name, minute()))
+                key=(ws.name, minute(now)))
         except Exception as exc:
             _LOGGER.warning("Skipped %s/%s's gauges on /metrics: %s", ws.name, app_name, exc)
             return samples

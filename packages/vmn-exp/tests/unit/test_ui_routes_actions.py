@@ -44,6 +44,9 @@ class FakeLeaderboards:
     def __init__(self, rows):
         self.rows = rows
 
+    def now(self):
+        return FakeClock().now()
+
     def ordered(self, snapshot, schema, **filters):
         return self.rows
 

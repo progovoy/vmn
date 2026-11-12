@@ -3,7 +3,7 @@ names (``hint``) plus its live records; full listings happen at the first
 load and on ``reconcile``, never per tick."""
 import pytest
 
-from vmn_exp.core import index as experiment_index
+from test_fix_index_refresh_scale import Clock
 from vmn_exp.core import status
 from vmn_exp.core.index import ExperimentIndex
 from vmn_exp.snapshot import LocalSnapshotStorage
@@ -13,19 +13,9 @@ FINISHED = "state: finished\nexit_code: 0\n"
 RECONCILE_SEC = 3600
 
 
-class Clock:
-    def __init__(self):
-        self.now = 1000.0
-
-    def __call__(self):
-        return self.now
-
-
 @pytest.fixture
-def clock(monkeypatch):
-    c = Clock()
-    monkeypatch.setattr(experiment_index, "_monotonic", c)
-    return c
+def clock():
+    return Clock()
 
 
 @pytest.fixture
@@ -68,8 +58,8 @@ def _make(st, i, run_state=FINISHED):
     return verstr
 
 
-def _journaled(st):
-    index = ExperimentIndex(st, APP, full_sweep_sec=RECONCILE_SEC)
+def _journaled(st, clock):
+    index = ExperimentIndex(st, APP, full_sweep_sec=RECONCILE_SEC, clock=clock)
     index.journaled = True
     return index
 
@@ -86,7 +76,7 @@ def _verstrs(index):
 
 def test_the_first_refresh_is_a_full_listing(st, spy, clock):
     run = _make(st, 1)
-    index = _journaled(st).refresh()
+    index = _journaled(st, clock).refresh()
     assert None in spy["list_files"]
     assert _verstrs(index) == {run}
 
@@ -94,9 +84,9 @@ def test_the_first_refresh_is_a_full_listing(st, spy, clock):
 def test_a_tick_without_hints_lists_no_names_and_no_finished_records(st, spy, clock):
     for i in range(5):
         _make(st, i)
-    index = _journaled(st).refresh()
+    index = _journaled(st, clock).refresh()
     _reset(spy)
-    clock.now += 1
+    clock.advance(1)
     index.refresh()
     assert spy["names"] == 0
     assert None not in spy["list_files"]
@@ -104,15 +94,15 @@ def test_a_tick_without_hints_lists_no_names_and_no_finished_records(st, spy, cl
 
 
 def test_per_tick_listing_does_not_grow_with_finished_runs(st, spy, clock):
-    index = _journaled(st).refresh()
+    index = _journaled(st, clock).refresh()
 
     def per_tick_cost(first, count):
         for i in range(first, first + count):
             index.hint(_make(st, i))
-        clock.now += 1
+        clock.advance(1)
         index.refresh()  # the hinted runs load
         _reset(spy)
-        clock.now += 1
+        clock.advance(1)
         index.refresh()
         return sum(len(keys or ()) for keys in spy["list_files"]), spy["names"]
 
@@ -122,11 +112,11 @@ def test_per_tick_listing_does_not_grow_with_finished_runs(st, spy, clock):
 
 def test_hint_rereads_only_that_record(st, spy, clock):
     runs = [_make(st, i) for i in range(4)]
-    index = _journaled(st).refresh()
+    index = _journaled(st, clock).refresh()
     st.append_log_entry(APP, runs[2], "w", {"timestamp": "t", "type": "metrics",
                                              "values": {"acc": 0.5}})
     _reset(spy)
-    clock.now += 1
+    clock.advance(1)
     index.hint(runs[2])
     index.refresh()
     assert [keys for keys in spy["list_files"] if keys] == [{runs[2]}]
@@ -137,10 +127,10 @@ def test_hint_rereads_only_that_record(st, spy, clock):
 
 def test_a_hint_for_an_unchanged_record_does_nothing(st, spy, clock):
     runs = [_make(st, i) for i in range(3)]
-    index = _journaled(st).refresh()
+    index = _journaled(st, clock).refresh()
     generation = index.generation
     _reset(spy)
-    clock.now += 1
+    clock.advance(1)
     index.hint(runs[1])
     index.refresh()
     assert index.generation == generation
@@ -149,10 +139,10 @@ def test_a_hint_for_an_unchanged_record_does_nothing(st, spy, clock):
 
 def test_a_hinted_new_run_is_visible_without_a_full_listing(st, spy, clock):
     _make(st, 1)
-    index = _journaled(st).refresh()
+    index = _journaled(st, clock).refresh()
     new = _make(st, 2)
     _reset(spy)
-    clock.now += 1
+    clock.advance(1)
     index.hint(new)
     index.refresh()
     assert None not in spy["list_files"] and spy["names"] == 0
@@ -161,9 +151,9 @@ def test_a_hinted_new_run_is_visible_without_a_full_listing(st, spy, clock):
 
 def test_an_unhinted_new_run_waits_for_reconcile(st, spy, clock):
     _make(st, 1)
-    index = _journaled(st).refresh()
+    index = _journaled(st, clock).refresh()
     new = _make(st, 2)
-    clock.now += 1
+    clock.advance(1)
     index.refresh()
     assert new not in _verstrs(index)
     index.reconcile()
@@ -177,11 +167,11 @@ def test_a_reconcile_round_finds_an_unhinted_run_without_a_full_listing(st, spy,
     # Plan 11 §4.6: the rolling consistency check replaced the periodic full
     # listing; a round (reconcile_sec of ticks) also lists the record names.
     _make(st, 1)
-    index = _journaled(st).refresh()
+    index = _journaled(st, clock).refresh()
     new = _make(st, 2)
     _reset(spy)
     for _ in range(11):
-        clock.now += RECONCILE_SEC / 10
+        clock.advance(RECONCILE_SEC / 10)
         index.refresh()
     assert None not in spy["list_files"]
     assert new in _verstrs(index)
@@ -193,22 +183,22 @@ def test_running_records_are_relisted_as_often_as_a_heartbeat_can_matter(st, spy
     # interval here), not per tick.
     live = _make(st, 1, "state: running\nheartbeat: '2026-01-01T00:00:00Z'\n")
     _make(st, 2)
-    index = _journaled(st).refresh()
+    index = _journaled(st, clock).refresh()
     _reset(spy)
-    clock.now += 1
+    clock.advance(1)
     index.refresh()
     assert {live} not in spy["list_files"]
 
-    clock.now += status.DEFAULT_HEARTBEAT_INTERVAL_SEC
+    clock.advance(status.DEFAULT_HEARTBEAT_INTERVAL_SEC)
     index.refresh()
     assert {live} in spy["list_files"]
 
 
 def test_a_hinted_running_record_is_listed_at_once(st, spy, clock):
     live = _make(st, 1, "state: running\nheartbeat: '2026-01-01T00:00:00Z'\n")
-    index = _journaled(st).refresh()
+    index = _journaled(st, clock).refresh()
     _reset(spy)
-    clock.now += 1
+    clock.advance(1)
     index.hint(live)
     index.refresh()
     assert {live} in spy["list_files"]

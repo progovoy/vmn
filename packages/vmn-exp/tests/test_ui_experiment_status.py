@@ -122,14 +122,16 @@ def _index(app_layout):
     )
 
 
-def _indexed_list(idx, app_layout):
-    """The leaderboard over the workspace index's current snapshot."""
+def _indexed_list(idx, app_layout, now=None):
+    """The leaderboard over the workspace index's current snapshot, its
+    statuses derived at *now* (the real time when None)."""
     from vmn_exp.ui.readers import experiments as exp_reader
 
     snap = idx.snapshot(app_layout.app_name)
     rows = [dict(row) for row in snap.rows]  # status is written onto the rows
     return exp_reader.leaderboard(
-        rows, snap.run_states, {}, observed_at=snap.run_state_observed_at
+        rows, snap.run_states, {}, observed_at=snap.run_state_observed_at,
+        now=now or datetime.datetime.now(datetime.timezone.utc),
     )
 
 
@@ -316,7 +318,6 @@ def test_last_metric_at_tracks_newest_metrics_entry(app_layout):
 def test_status_is_recomputed_on_a_cache_hit(app_layout, monkeypatch):
     """A cached row must not freeze `running`: status is derived per request."""
     import vmn_exp.core.index as index_mod
-    import vmn_exp.core.status as status_mod
 
     _write_experiment(app_layout, "0.0.1", run_state=_running_state())
     idx = _index(app_layout)
@@ -327,11 +328,10 @@ def test_status_is_recomputed_on_a_cache_hit(app_layout, monkeypatch):
 
     later = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(hours=1)
     monkeypatch.setattr(index_mod, "direct_rows", _boom)
-    monkeypatch.setattr(status_mod, "_now", lambda now=None: now or later)
 
     # Same files, same fingerprint, cache still warm — an hour later the run's
     # heartbeat is stale, so the served status must be stuck.
-    assert _indexed_list(idx, app_layout)[0]["status"] == "stuck"
+    assert _indexed_list(idx, app_layout, later)[0]["status"] == "stuck"
 
 
 def test_appending_to_a_writer_log_invalidates_the_cache(app_layout):

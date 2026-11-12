@@ -4,7 +4,7 @@ stamps do; it is evaluated when a query is compiled, never frozen in a cache."""
 import datetime
 
 import pytest
-import vmn_exp.core.status as status_mod
+from fakes.clock import FakeClock
 from vmn_exp.core.query import (
     QueryError,
     compile_query,
@@ -18,10 +18,8 @@ NOW = datetime.datetime(2026, 10, 28, 12, 0, 30, tzinfo=datetime.timezone.utc)
 
 
 @pytest.fixture
-def clock(monkeypatch):
-    at = {"now": NOW}
-    monkeypatch.setattr(status_mod, "_now", lambda now=None: now or at["now"])
-    return at
+def clock():
+    return FakeClock(NOW)
 
 
 def _row(verstr, timestamp, **kw):
@@ -37,8 +35,8 @@ ROWS = [
 ]
 
 
-def _verstrs(text, rows=ROWS):
-    return [r["verstr"] for r in filter_rows(rows, text)]
+def _verstrs(text, rows=ROWS, now=NOW):
+    return [r["verstr"] for r in filter_rows(rows, text, now=now)]
 
 
 @pytest.mark.parametrize("text, expected", [
@@ -71,14 +69,14 @@ def test_every_ago_of_a_query_is_pinned():
 
 def test_compiled_queries_follow_the_clock(clock):
     text = 'timestamp < ago("1h")'
-    assert _verstrs(text) == ["old", "hour", "ran"]
-    clock["now"] = NOW + datetime.timedelta(hours=1)
-    assert _verstrs(text) == ["old", "hour", "new", "ran"]
-    assert compile_query(text)(ROWS[2])
+    assert _verstrs(text, now=clock.now()) == ["old", "hour", "ran"]
+    clock.advance(3600)
+    assert _verstrs(text, now=clock.now()) == ["old", "hour", "new", "ran"]
+    assert compile_query(text, now=clock.now())(ROWS[2])
 
 
 def test_parse_query_answers_the_pinned_tree(clock):
-    assert parse_query('timestamp < ago("1h")') == (
+    assert parse_query('timestamp < ago("1h")', now=clock.now()) == (
         "cmp", ("path", ("timestamp",)), "<", "2026-10-28T11:00:30Z")
 
 
@@ -114,6 +112,6 @@ def test_an_error_after_ago_reports_the_offset_in_the_text_given():
 
 
 def test_the_sql_backend_compares_the_pinned_time(clock):
-    where, params = compile_sql('timestamp < ago("1h")')
+    where, params = compile_sql('timestamp < ago("1h")', now=clock.now())
     assert "2026-10-28T11:00:30Z" in params.values()
     assert "COLLATE" in where

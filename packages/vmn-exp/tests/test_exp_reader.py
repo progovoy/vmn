@@ -7,6 +7,7 @@ import os
 import pytest
 import yaml
 from exp_helpers import _storage
+from fakes.clock import FakeClock
 
 from vmn_exp.sdk.reader import get_run, list_runs
 from vmn_exp.core.real_io import RealClock
@@ -234,15 +235,13 @@ def test_missing_run_state_reports_created(app_layout):
 
 def test_status_is_derived_on_every_call(app_layout, monkeypatch):
     """A running run whose heartbeat goes stale must report stuck next call."""
-    import vmn_exp.core.status as status_mod
-
+    clock = FakeClock(datetime.datetime.now(datetime.timezone.utc))
     _write_experiment(app_layout, "0.0.1", run_state=_running_state())
-    assert _runs(app_layout)[0]["status"] == "running"
+    assert _runs(app_layout, clock=clock)[0]["status"] == "running"
 
-    later = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(hours=1)
-    monkeypatch.setattr(status_mod, "_now", lambda now=None: now or later)
-    assert _runs(app_layout)[0]["status"] == "stuck"
-    assert get_run(app_layout.app_name, "0.0.1", storage=_storage(app_layout))[
+    clock.advance(3600)
+    assert _runs(app_layout, clock=clock)[0]["status"] == "stuck"
+    assert get_run(app_layout.app_name, "0.0.1", storage=_storage(app_layout), clock=clock)[
         "status"
     ] == "stuck"
 

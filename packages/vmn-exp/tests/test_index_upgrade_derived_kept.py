@@ -13,7 +13,7 @@ def test_a_derived_bump_serves_the_kept_rows_loading_while_it_rederives(
     monkeypatch.setattr(ExperimentIndex, "use_io_process", lambda self: False)
     hold, release = held
     hold(index_derive, "derive_chunk")
-    index, want = upgraded(live_store, str(tmp_path / "idx.sqlite"), False, _older_derived)
+    index, want = upgraded(live_store, str(tmp_path / "idx.sqlite"), False, _older_derived, clock)
     try:
         serves_kept_rows_mid_derive(index, want, release)
     finally:

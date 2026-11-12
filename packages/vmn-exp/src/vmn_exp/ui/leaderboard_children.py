@@ -68,7 +68,7 @@ class TreeNodes:
         value of *split*)."""
         cache = self._cache
         base, bucket = cache._base(snapshot)
-        key = (base.token, bucket, minute(), cache.schema_key(schema),
+        key = (base.token, bucket, minute(cache.now()), cache.schema_key(schema),
                cache.jobs.progress_names(snapshot), parent, queries, split)
         return self._summaries.get(key, lambda: self._summarized(snapshot, schema, parent,
                                                                  queries, split))

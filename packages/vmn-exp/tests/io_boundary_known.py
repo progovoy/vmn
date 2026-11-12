@@ -42,7 +42,7 @@ KNOWN_IO = {
     'vmn_exp.cli.similar_hint': {'clock_alias': 1, 'console': 2, 'env': 1, 'fs': 1},
     'vmn_exp.cli.similar_output': {'console': 4, 'time': 1},
     'vmn_exp.cli.supervisor': {'console': 1, 'fs': 1, 'process_self': 1},
-    'vmn_exp.cli.sweep.agent': {'process_self': 1, 'time': 1},
+    'vmn_exp.cli.sweep.agent': {'process_self': 1},
     'vmn_exp.cli.sweep.handler': {'console': 3},
     'vmn_exp.cli.watch': {'console': 1, 'time': 1},
     'vmn_exp.core.activity': {'time': 6},

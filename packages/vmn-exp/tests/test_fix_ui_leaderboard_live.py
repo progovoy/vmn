@@ -9,7 +9,6 @@ import random
 import pytest
 
 from fakes.clock import FakeClock
-from vmn_exp.core import status as status_mod
 from vmn_exp.core.index_snapshot import IndexSnapshot
 from vmn_exp.core.log import experiment_row
 from vmn_exp.ui import leaderboard_cache as lb
@@ -78,13 +77,9 @@ SORTS = [None, "loss", "acc", "timestamp", "idx", "started_at", "finished_at", "
 SCHEMAS = [{}, {"loss": {"goal": "min", "primary": True}}, {"acc": {"goal": "max"}}]
 
 
-def _at(monkeypatch, when):
-    monkeypatch.setattr(status_mod, "_now", lambda now=None: now or when)
-
-
-def _reference(snap, schema, **params):
+def _reference(snap, schema, now, **params):
     rows = copy.deepcopy(list(snap.rows))
-    return exp_reader.leaderboard(rows, dict(snap.run_states), schema, **params)
+    return exp_reader.leaderboard(rows, dict(snap.run_states), schema, now=now, **params)
 
 
 def _strip(result):
@@ -100,9 +95,10 @@ def _same(got, want):
 def test_patched_pages_equal_the_uncached_pipeline(monkeypatch, seed):
     rng = random.Random(seed)
     snap = _random_snapshot(rng, rng.randrange(1, 60))
-    cache = lb.LeaderboardCache(bucket_sec=2)
+    clock = FakeClock(start=T0)
+    cache = lb.LeaderboardCache(bucket_sec=2, now=clock.now)
     for step in range(4):
-        _at(monkeypatch, T0 + datetime.timedelta(seconds=37 * step))
+        clock.advance(37 if step else 0)
         for _ in range(10):
             params = dict(
                 sort=rng.choice(SORTS), order=rng.choice([None, "asc", "desc"]),
@@ -111,7 +107,8 @@ def test_patched_pages_equal_the_uncached_pipeline(monkeypatch, seed):
                 last=rng.choice([None, None, None, 7]),
             )
             schema = rng.choice(SCHEMAS)
-            _same(cache.page(snap, schema, **params), _reference(snap, schema, **params))
+            _same(cache.page(snap, schema, **params),
+                  _reference(snap, schema, clock.now(), **params))
 
 
 def _counted(monkeypatch, module, name, calls):
@@ -168,7 +165,7 @@ def test_successive_buckets_do_not_sort_or_annotate_every_row(monkeypatch):
     root = cache.page(snap, {}, query='verstr = "1.0.0-dev.r00000"', limit=1)["rows"][0]
     # The root has finished: its children that went stuck are lost (no failure).
     assert root["tree_status"] == "succeeded"
-    _same(cache.page(snap, {}, **params), _reference(snap, {}, **params))
+    _same(cache.page(snap, {}, **params), _reference(snap, {}, clock.now(), **params))
 
 
 def test_archived_rows_are_hidden_unless_asked_for(monkeypatch):
@@ -177,14 +174,13 @@ def test_archived_rows_are_hidden_unless_asked_for(monkeypatch):
     archived = {r["verstr"] for r in snap.rows[::3]}
     rows = [dict(r, archived=True) if r["verstr"] in archived else r for r in snap.rows]
     snap = IndexSnapshot.build(APP, 1, rows, snap.run_states)
-    _at(monkeypatch, T0)
-    cache = lb.LeaderboardCache()
+    cache = lb.LeaderboardCache(now=FakeClock(start=T0).now)
 
     shown = cache.page(snap, {}, sort="loss", limit=100)
     assert shown["total"] == 20
     assert not {r["verstr"] for r in shown["rows"]} & archived
     everything = cache.page(snap, {}, sort="loss", limit=100, archived=True)
-    _same(everything, _reference(snap, {}, sort="loss", limit=100))
+    _same(everything, _reference(snap, {}, T0, sort="loss", limit=100))
     assert cache.etag(snap, {}, limit=10) != cache.etag(snap, {}, limit=10, archived=True)
     assert cache.facets(snap)["total"] == 20
     assert cache.facets(snap, archived=True)["total"] == 30

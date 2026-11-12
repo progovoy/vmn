@@ -2,9 +2,10 @@
 (file signatures only), so every one is covered once per ``reconcile_sec``;
 what it finds changed without a journal entry is re-read and counted as
 drift. Full listings happen only at the first load and on ``reconcile``."""
+import datetime
+
 import pytest
 
-from vmn_exp.core import index as experiment_index
 from vmn_exp.core.index import ExperimentIndex
 from vmn_exp.snapshot import LocalSnapshotStorage
 
@@ -14,18 +15,31 @@ RECONCILE_SEC = 100
 
 
 class Clock:
-    def __init__(self):
-        self.now = 1000.0
+    """The index's clock: monotonic seconds move by ``advance``; the wall is
+    the real time until a test sets ``wall`` (epoch seconds), which then
+    stands still while monotonic time moves."""
 
-    def __call__(self):
-        return self.now
+    def __init__(self):
+        self._monotonic, self.wall = 1000.0, None
+
+    def monotonic(self):
+        return self._monotonic
+
+    def now(self):
+        if self.wall is None:
+            return datetime.datetime.now(datetime.timezone.utc)
+        return datetime.datetime.fromtimestamp(self.wall, datetime.timezone.utc)
+
+    def time(self):
+        return self.now().timestamp()
+
+    def advance(self, sec):
+        self._monotonic += sec
 
 
 @pytest.fixture
-def clock(monkeypatch):
-    c = Clock()
-    monkeypatch.setattr(experiment_index, "_monotonic", c)
-    return c
+def clock():
+    return Clock()
 
 
 @pytest.fixture
@@ -58,15 +72,15 @@ def _metric(st, verstr, value):
                                             "values": {"acc": value}})
 
 
-def _journaled(st):
-    index = ExperimentIndex(st, APP, full_sweep_sec=RECONCILE_SEC)
+def _journaled(st, clock):
+    index = ExperimentIndex(st, APP, full_sweep_sec=RECONCILE_SEC, clock=clock)
     index.journaled = True
     return index.refresh()
 
 
 def _tick(index, clock, times=1, step=1.0):
     for _ in range(times):
-        clock.now += step
+        clock.advance(step)
         index.refresh()
 
 
@@ -76,7 +90,7 @@ def _row(index, verstr):
 
 def test_every_finished_record_is_relisted_once_per_reconcile_sec(st, listings, clock):
     runs = {_make(st, i) for i in range(20)}
-    index = _journaled(st)
+    index = _journaled(st, clock)
     listings.clear()
     _tick(index, clock, times=RECONCILE_SEC + 5)
     assert None not in listings
@@ -86,7 +100,7 @@ def test_every_finished_record_is_relisted_once_per_reconcile_sec(st, listings, 
 
 def test_an_unjournaled_edit_is_reread_and_counted_as_drift(st, clock):
     runs = [_make(st, i) for i in range(10)]
-    index = _journaled(st)
+    index = _journaled(st, clock)
     _metric(st, runs[4], 0.75)
     assert index.drift == 0
     _tick(index, clock, times=RECONCILE_SEC + 5)
@@ -96,7 +110,7 @@ def test_an_unjournaled_edit_is_reread_and_counted_as_drift(st, clock):
 
 def test_a_hinted_change_is_not_drift(st, clock):
     runs = [_make(st, i) for i in range(10)]
-    index = _journaled(st)
+    index = _journaled(st, clock)
     _metric(st, runs[4], 0.5)
     index.hint(runs[4])
     _tick(index, clock, times=RECONCILE_SEC + 5)
@@ -106,7 +120,7 @@ def test_a_hinted_change_is_not_drift(st, clock):
 
 def test_an_unhinted_new_run_is_found_within_a_reconcile_cycle(st, clock):
     _make(st, 1)
-    index = _journaled(st)
+    index = _journaled(st, clock)
     new = _make(st, 2)
     _tick(index, clock, times=2 * RECONCILE_SEC)
     assert new in {r["verstr"] for r in index.rows()}
@@ -115,18 +129,17 @@ def test_an_unhinted_new_run_is_found_within_a_reconcile_cycle(st, clock):
 
 def test_no_periodic_full_listing_once_journaled(st, listings, clock):
     _make(st, 1)
-    index = _journaled(st)
+    index = _journaled(st, clock)
     listings.clear()
     _tick(index, clock, times=30, step=RECONCILE_SEC / 2)
     assert None not in listings
 
 
 def test_last_reconcile_is_set_by_the_first_load_and_each_cycle(st, clock, monkeypatch):
-    wall = [5000.0]
-    monkeypatch.setattr("vmn_exp.core.index_sweep._wall", lambda: wall[0])
+    clock.wall = 5000.0
     _make(st, 1)
-    index = _journaled(st)
+    index = _journaled(st, clock)
     assert index.last_reconcile_at == 5000.0
-    wall[0] = 6000.0
+    clock.wall = 6000.0
     _tick(index, clock, times=2 * RECONCILE_SEC)
     assert index.last_reconcile_at == 6000.0

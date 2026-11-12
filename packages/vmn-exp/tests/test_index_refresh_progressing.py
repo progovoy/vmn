@@ -40,7 +40,7 @@ def test_a_short_stall_of_a_short_refresh_is_not_failing():
 def test_the_index_reports_how_long_its_refresh_has_not_moved(s3, tmp_path, monkeypatch, wall):
     monkeypatch.setattr(index_module, "_REMOTE_CHUNK", 4)
     storage, seen, lock = _storage(), [], threading.Lock()
-    index = ExperimentIndex(storage, APP, str(tmp_path / "i.sqlite"))
+    index = ExperimentIndex(storage, APP, str(tmp_path / "i.sqlite"), clock=wall)
     load, count = storage.load_file, [0]
     start = wall[0]
 

@@ -8,6 +8,7 @@ pytest.importorskip("fastapi")
 from fastapi import FastAPI  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402
 
+from fakes.clock import FakeClock  # noqa: E402
 from vmn_exp.ui import routes_leaderboard  # noqa: E402
 from vmn_exp.ui.query_params import refuse_unknown_params  # noqa: E402
 
@@ -31,6 +32,9 @@ class FakeCache:
     def __init__(self):
         self.etags = []
         self.jobs = FakeJobs()
+
+    def now(self):
+        return FakeClock().now()
 
     def etag(self, snapshot, schema, **params):
         self.etags.append(params)

@@ -22,19 +22,21 @@ def held_load(monkeypatch):
     release.set()
 
 
-def _restarted(live_store, db):
-    first = ExperimentIndex(live_store.st, APP, cache_path=db, full_sweep_sec=FULL_SWEEP_SEC)
+def _restarted(live_store, db, clock):
+    first = ExperimentIndex(live_store.st, APP, cache_path=db, full_sweep_sec=FULL_SWEEP_SEC,
+                            clock=clock)
     first.refresh()
     total = len(first.snapshot().rows)
     first.close()
-    index = ExperimentIndex(live_store.st, APP, cache_path=db, full_sweep_sec=FULL_SWEEP_SEC)
+    index = ExperimentIndex(live_store.st, APP, cache_path=db, full_sweep_sec=FULL_SWEEP_SEC,
+                            clock=clock)
     assert index.use_io_process()
     return index, total
 
 
 def test_an_offloaded_restart_serves_its_newest_rows_first(
         live_store, clock, tmp_path, held_load, fs_calls):
-    index, total = _restarted(live_store, str(tmp_path / "idx.sqlite"))
+    index, total = _restarted(live_store, str(tmp_path / "idx.sqlite"), clock)
     refresh = threading.Thread(target=index.refresh, daemon=True)
     try:
         fs_calls["on"] = True
@@ -53,10 +55,11 @@ def test_an_offloaded_restart_serves_its_newest_rows_first(
 
 def test_the_helper_lists_an_upgrades_check(live_store, clock, tmp_path):
     db = str(tmp_path / "idx.sqlite")
-    index, _ = _restarted(live_store, db)
+    index, _ = _restarted(live_store, db, clock)
     index.close()
     _as_records_19(db)
-    index = ExperimentIndex(live_store.st, APP, cache_path=db, full_sweep_sec=FULL_SWEEP_SEC)
+    index = ExperimentIndex(live_store.st, APP, cache_path=db, full_sweep_sec=FULL_SWEEP_SEC,
+                            clock=clock)
     assert index.use_io_process()
     try:
         index.refresh()

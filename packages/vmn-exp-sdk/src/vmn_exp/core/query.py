@@ -612,7 +612,7 @@ def pin_ago(text, now=None):
     return "".join(out) + text[at:]
 
 
-def parse_query(text):
+def parse_query(text, now=None):
     """The AST of query *text*: ``("or"|"and", [nodes])``, ``("not", node)``,
     ``("in", field, [literals])`` or ``("cmp", field, op, literal)``, with
     ``op`` one of ``= != < <= > >= ~ !~`` and ``field`` either
@@ -621,10 +621,10 @@ def parse_query(text):
     (:mod:`vmn_exp.core.query_up`); ``under("v")`` is ``("under", v)``, ``similar("t")``
     ``("similar", t)``. Raises :class:`QueryError` like
     :func:`compile_query`; the SQL backend compiles the same tree. Its
-    ``ago()`` calls are pinned to now (:func:`pin_ago`)."""
+    ``ago()`` calls are pinned to *now* (:func:`pin_ago`)."""
     if not text or not text.strip():
         raise QueryError("empty query")
-    return _parsed(pin_ago(text))[0]
+    return _parsed(pin_ago(text, now))[0]
 
 
 @functools.lru_cache(maxsize=256)
@@ -641,7 +641,7 @@ def parse_field(text):
     return field
 
 
-def compile_query(text):
+def compile_query(text, now=None):
     """Compile query *text* into a ``row -> bool`` predicate.
 
     Raises :class:`QueryError` for bad syntax, an unknown field or an operator
@@ -650,9 +650,9 @@ def compile_query(text):
     Cached: the dashboard polls with an unchanged query, and a predicate is a
     stateless closure over the parsed expression, so it is safe to share. An
     exception is not cached — a bad query re-raises from a fresh parse. A
-    query with ``ago()`` is cached by its pinned text (:func:`pin_ago`).
+    query with ``ago()`` is cached by its text pinned to *now* (:func:`pin_ago`).
     """
-    return _compiled(pin_ago(text))
+    return _compiled(pin_ago(text, now))
 
 
 @functools.lru_cache(maxsize=256)
@@ -707,7 +707,7 @@ def _completing(text, extra):
     return complete
 
 
-def filter_rows(rows, text, extra=None):
+def filter_rows(rows, text, extra=None, now=None):
     """Rows matching *text*; all of them when *text* is empty or None.
 
     *extra* ``{key: of(verstr)}`` supplies fields kept off lean rows (the
@@ -717,11 +717,11 @@ def filter_rows(rows, text, extra=None):
     ``similar()`` asks ``extra["similar"](text)`` for its verstrs, once per
     distinct text (:func:`~vmn_exp.core.query_similar.similar_hits`); an
     ``up`` field reads ``extra["up"](verstr)(node)``, by default over the
-    *rows* (:mod:`vmn_exp.core.query_up`).
+    *rows* (:mod:`vmn_exp.core.query_up`); an ``ago()`` is pinned to *now*.
     """
     if not text or not text.strip():
         return rows
-    predicate = compile_query(text)
+    predicate = compile_query(text, now)
     roots = query_roots(text)
     if ANCESTORS in roots and ANCESTORS not in (extra or {}):
         extra = dict(extra or {}, ancestors=ancestry_of(rows))
@@ -730,6 +730,6 @@ def filter_rows(rows, text, extra=None):
     if SIMILAR in roots:
         from vmn_exp.core.query_similar import similar_hits  # it imports this module
 
-        extra = dict(extra or {}, similar=similar_hits(parse_query(text), extra))
+        extra = dict(extra or {}, similar=similar_hits(parse_query(text, now), extra))
     complete = _completing(text, extra)
     return [row for row in rows if predicate(complete(row))]

@@ -137,18 +137,9 @@ def _rows_and_declared(app_name, storage, use_index=True, schema=None, incomplet
 
 
 def list_runs(
-    app_name=None,
-    *,
-    storage=None,
-    sort=None,
-    descending=None,
-    last=None,
-    limit=None,
-    status=None,
-    query=None,
-    use_index=True,
-    include_archived=False,
-    incomplete=None,
+    app_name=None, *, storage=None, sort=None, descending=None, last=None, limit=None,
+    status=None, query=None, use_index=True, include_archived=False, incomplete=None,
+    clock=None,
 ):
     """Runs of an app: ordered by *sort*, else by the app's primary metric
     when one is configured, else in storage order (oldest first).
@@ -182,12 +173,14 @@ def list_runs(
             the app's: by default (or ``"raise"``) that raises
             :class:`IndexingWarning`; ``"warn"`` warns it and returns the
             rows loaded so far.
+        clock: the :class:`~vmn_exp.core.ports.Clock` statuses derive on.
     """
     app_name, storage, root_path = _resolve(app_name, storage)
     schema = _metrics_schema(storage, root_path, app_name)
-    rows, declared, extra = _rows_and_declared(app_name, storage, use_index, schema, incomplete)
+    rows, declared, extra = _rows_and_declared(app_name, storage, use_index, schema, incomplete,
+                                               clock)
     rows = filter_archived(rows, include_archived)
-    rows = filter_rows(filter_by_status(rows, status), query, extra=extra)
+    rows = filter_rows(filter_by_status(rows, status), query, extra, clock and clock.now())
     # Summaries follow the conf schema only; direction also what runs declare.
     return select(rows, effective_schema(schema, declared), last=last, sort=sort,
                   descending=descending, limit=limit)
@@ -213,7 +206,7 @@ def param_importance(
     return _param_importance(matching, metric, universe=rows)
 
 
-def _subtree_row(app_name, storage, verstr, snapshot):
+def _subtree_row(app_name, storage, verstr, snapshot, now):
     """The row for one run, costing the run's subtree rather than the workspace.
 
     The placement *snapshot* gives the parent/child edges and the row's index;
@@ -234,11 +227,12 @@ def _subtree_row(app_name, storage, verstr, snapshot):
         observed_at=lambda v: run_state_observed_at(storage, app_name, v),
         children_of=children_of,
         row_of=snapshot.row,
+        now=now,
     )
     return {"idx": row["idx"], "meta": meta}, status
 
 
-def get_run(app_name=None, ref="latest", *, storage=None, x=None):
+def get_run(app_name=None, ref="latest", *, storage=None, x=None, clock=None):
     """One run: a :func:`list_runs` row plus its ``log``, ``series``,
     ``step_metrics``, ``artifacts`` and the ``media`` / ``tables`` /
     ``histograms`` indexes (see :mod:`vmn_exp.core.media`) and the marked
@@ -251,6 +245,7 @@ def get_run(app_name=None, ref="latest", *, storage=None, x=None):
     the conf.yml schema) to its x metric. With *x* (a metric name), ``series``
     holds every other metric joined on it: each point carries ``x``, the x
     metric's value at the same step, and points without one are dropped.
+    *clock*: the :class:`~vmn_exp.core.ports.Clock` its status derives on.
     """
     app_name, storage, root_path = _resolve(app_name, storage)
     exact = _exact_verstr(storage, app_name, ref)
@@ -261,7 +256,7 @@ def get_run(app_name=None, ref="latest", *, storage=None, x=None):
     if err:
         raise ValueError(err)
 
-    target, status = _subtree_row(app_name, storage, verstr, snapshot)
+    target, status = _subtree_row(app_name, storage, verstr, snapshot, clock and clock.now())
     if target is None:
         raise ValueError(f"Experiment '{verstr}' not found for {app_name}")
 

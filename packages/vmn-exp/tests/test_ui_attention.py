@@ -10,7 +10,6 @@ import pytest
 import yaml
 
 pytest.importorskip("fastapi")
-import vmn_exp.core.status as status_mod
 from fakes.clock import FakeClock
 from fastapi.testclient import TestClient
 from unit_deps import fake_deps
@@ -182,8 +181,6 @@ def test_without_attention_queries_jobs_carry_none(store, clock):
 
 
 def test_an_ago_board_follows_the_clock(store, clock, monkeypatch):
-    # The board's and the pivot's ago() still read status._now (G11 Part B set-aside).
-    monkeypatch.setattr(status_mod, "_now", lambda now=None: now or clock.now())
     client = _client(store)
     q = 'status = "created" and timestamp < ago("1h")'
 
@@ -223,8 +220,6 @@ def test_a_checkout_conf_names_attention_queries_too(tmp_path, clock):
 def test_an_ago_pivot_of_a_settled_outer_run_follows_the_clock(store, clock, monkeypatch):
     """Outer r6's runs r7 (minute 4) and r8 (5) ended: its pivot is kept
     across generations, never its clock."""
-    # The board's and the pivot's ago() still read status._now (G11 Part B set-aside).
-    monkeypatch.setattr(status_mod, "_now", lambda now=None: now or clock.now())
     client = _client(store)
     params = {"rows": "status", "cols": "parent", "scope": _v(6),
               "q": 'timestamp < ago("1h")'}

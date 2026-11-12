@@ -4,8 +4,8 @@ needs freshness passes a positive age: the sweep agent's early-stop check
 its check interval. One-shot readers keep refreshing."""
 import pytest
 
+from test_fix_index_refresh_scale import Clock
 from vmn_exp.cli.sweep.agent import _EarlyStopCheck
-from vmn_exp.core import index as experiment_index
 from vmn_exp.core.alerts import watch_app
 from vmn_exp.core.index import ExperimentIndex, indexed_snapshot
 from vmn_exp.sdk import reader
@@ -21,20 +21,10 @@ SPEC = {
 }
 
 
-class Clock:
-    def __init__(self):
-        self.now = 1000.0
-
-    def __call__(self):
-        return self.now
-
-
 @pytest.fixture
 def clock(monkeypatch, tmp_path):
     monkeypatch.setenv("VMN_EXP_CACHE_DIR", str(tmp_path / "cache"))
-    c = Clock()
-    monkeypatch.setattr(experiment_index, "_monotonic", c)
-    return c
+    return Clock()
 
 
 @pytest.fixture
@@ -71,10 +61,10 @@ def _make(storage, verstr, parent=None, run_state=FINISHED):
 
 def test_refresh_if_stale_0_answers_the_current_snapshot(storage, listings, clock):
     _make(storage, "v1")
-    index = ExperimentIndex(storage, APP)
+    index = ExperimentIndex(storage, APP, clock=clock)
     first = index.refresh_if_stale(0)  # a first load still loads
     _make(storage, "v2")
-    clock.now += 3600
+    clock.advance(3600)
     del listings[:]
     assert index.refresh_if_stale(0) is first
     assert listings == []
@@ -82,37 +72,37 @@ def test_refresh_if_stale_0_answers_the_current_snapshot(storage, listings, cloc
 
 def test_a_positive_age_refreshes_only_once_the_snapshot_is_older(storage, listings, clock):
     _make(storage, "v1")
-    index = ExperimentIndex(storage, APP)
+    index = ExperimentIndex(storage, APP, clock=clock)
     index.refresh_if_stale(10)
     _make(storage, "v2")
-    clock.now += 9
+    clock.advance(9)
     assert [r["verstr"] for r in index.refresh_if_stale(10).rows] == ["v1"]
-    clock.now += 1
+    clock.advance(1)
     assert [r["verstr"] for r in index.refresh_if_stale(10).rows] == ["v1", "v2"]
 
 
 def test_indexed_snapshot_without_an_age_takes_the_loaded_index_as_is(storage, clock):
     _make(storage, "v1")
-    indexed_snapshot(storage, APP)
+    indexed_snapshot(storage, APP, clock=clock)
     _make(storage, "v2")
-    clock.now += 3600
-    assert [r["verstr"] for r in indexed_snapshot(storage, APP).rows] == ["v1"]
-    assert len(indexed_snapshot(storage, APP, max_age_sec=60).rows) == 2
+    clock.advance(3600)
+    assert [r["verstr"] for r in indexed_snapshot(storage, APP, clock=clock).rows] == ["v1"]
+    assert len(indexed_snapshot(storage, APP, max_age_sec=60, clock=clock).rows) == 2
 
 
 def test_the_early_stop_check_refreshes_at_its_check_interval(storage, listings, clock):
     _make(storage, "s", run_state="state: running\n")
     own = _make(storage, "t1", parent="s", run_state="state: running\n")
     _make(storage, "t2", parent="s")
-    check = _EarlyStopCheck(SPEC, storage, APP, "s", own)
+    check = _EarlyStopCheck(SPEC, storage, APP, "s", own, clock)
     try:
         check._check(None)
         assert listings[-1] == "full"  # the agent's first look at the app
         del listings[:]
-        clock.now += 1
+        clock.advance(1)
         check._check(None)
         assert listings == []  # younger than the check interval
-        clock.now += 9
+        clock.advance(9)
         check._check(None)
         assert "names" in listings and "full" not in listings
     finally:
@@ -125,11 +115,11 @@ def test_a_watch_tick_after_the_first_lists_no_store(storage, listings, clock):
             return True
 
     _make(storage, "v1")
-    watch_app(storage, APP, Wants(), 86400)
+    watch_app(storage, APP, Wants(), 86400, clock=clock)
     del listings[:]
-    clock.now += 60
+    clock.advance(60)
     _make(storage, "v2")
-    watch_app(storage, APP, Wants(), 86400)
+    watch_app(storage, APP, Wants(), 86400, clock=clock)
     assert "full" not in listings
     assert listings.count("keys") == 1  # the new run's files only
 

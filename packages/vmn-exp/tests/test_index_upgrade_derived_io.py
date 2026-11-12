@@ -7,21 +7,22 @@ from test_index_upgrade_derived import _as_older_derived
 from vmn_exp.core.index import ExperimentIndex
 
 
-def _offloaded(live_store, db):
-    index = ExperimentIndex(live_store.st, APP, cache_path=db, full_sweep_sec=FULL_SWEEP_SEC)
+def _offloaded(live_store, db, clock):
+    index = ExperimentIndex(live_store.st, APP, cache_path=db, full_sweep_sec=FULL_SWEEP_SEC,
+                            clock=clock)
     assert index.use_io_process()
     return index
 
 
 def test_an_offloaded_index_re_derives_in_the_helper(live_store, clock, fs_calls, tmp_path):
     db = str(tmp_path / "idx.sqlite")
-    first = _offloaded(live_store, db)
+    first = _offloaded(live_store, db, clock)
     first.refresh()
     want = {row["verstr"]: dict(row) for row in first.snapshot().rows}
     first.close()
     _as_older_derived(db)
 
-    index = _offloaded(live_store, db)
+    index = _offloaded(live_store, db, clock)
     try:
         fs_calls["on"] = True
         index.refresh()

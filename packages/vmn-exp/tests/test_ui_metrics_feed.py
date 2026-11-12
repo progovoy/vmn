@@ -11,7 +11,6 @@ import yaml
 from prometheus_parse import label_sets, parse, value
 
 pytest.importorskip("fastapi")
-import vmn_exp.core.status as status_mod
 from fakes.clock import FakeClock
 from fastapi.testclient import TestClient
 from unit_deps import fake_deps
@@ -213,8 +212,6 @@ def test_label_values_are_escaped(server):
 def test_an_apps_gauges_are_computed_once_per_snapshot_and_minute(server, clock, monkeypatch):
     from vmn_exp.ui import metrics_feed
 
-    # The feed's memo key minute() still reads status._now (G11 Part B set-aside).
-    monkeypatch.setattr(status_mod, "_now", lambda now=None: now or clock.now())
     calls = []
     real = metrics_feed.app_samples
     monkeypatch.setattr(metrics_feed, "app_samples", lambda *a: calls.append(1) or real(*a))

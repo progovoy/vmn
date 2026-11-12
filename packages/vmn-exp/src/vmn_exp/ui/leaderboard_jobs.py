@@ -107,7 +107,7 @@ class JobsView:
         if f.sort not in JOB_SORTS:
             return cache._ordered(snapshot, schema, last, f)
         base, bucket = cache._base(snapshot)
-        key = (base.token, bucket, minute(), cache.schema_key(schema),
+        key = (base.token, bucket, minute(cache.now()), cache.schema_key(schema),
                cache.jobs.progress_names(snapshot), last, attention) + f
         return self._orders.get(key, lambda: job_sorted(
             cache._ordered(snapshot, schema, last, f._replace(sort=None, order=None)),
@@ -126,7 +126,7 @@ class JobsView:
         counted = bool(attention or sort == ATTENTION_SORT)
         job_agg = job_agg or board_job_agg(cache, snapshot)
         base, bucket = cache._base(snapshot)
-        key = (base.token, bucket, minute(), cache.schema_key(schema),
+        key = (base.token, bucket, minute(cache.now()), cache.schema_key(schema),
                cache.jobs.progress_names(snapshot), attention, counted, job_agg)
         return self._rolled.get(key, lambda: _with_rolled(
             cache.attention.summaries(snapshot, schema, attention) if counted

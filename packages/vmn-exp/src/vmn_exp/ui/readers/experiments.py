@@ -117,7 +117,7 @@ def list_apps(root_path, clock):
     return rows
 
 
-def apply_filters(rows, status=None, query=None, snapshot=None):
+def apply_filters(rows, status=None, query=None, snapshot=None, now=None):
     """Both row filters, ANDed: the status whitelist then the query language.
 
     Runs after status derivation and before :func:`sort_rows`, which owns
@@ -126,8 +126,10 @@ def apply_filters(rows, status=None, query=None, snapshot=None):
     the API turns that into a 400. *snapshot*: the index snapshot the lean
     *rows* came from, whose ``outputs``, run tree, intents and similar-runs
     documents a query may read (:func:`~vmn_exp.core.query_extra.lean_extra`).
+    An ``ago()`` in *query* compares with the time that long before *now*.
     """
-    return filter_rows(filter_by_status(rows, status), query, extra=lean_extra(snapshot))
+    return filter_rows(filter_by_status(rows, status), query, extra=lean_extra(snapshot),
+                       now=now)
 
 
 ORDERS = ("asc", "desc")
@@ -169,18 +171,20 @@ def leaderboard(
     order=None,
     observed_at=None,
     split=None,
+    now=None,
 ):
     """The one list pipeline: derive status (and ``duration_ratio`` against
     siblings sharing a value of *split*), filter, then order and page.
 
-    Status is derived from the current time and ``query`` is per request, so
-    neither is ever cached — callers pass freshly fetched rows. *observed_at*
-    is ``{verstr: run_state.yml store write time}``.
+    Status is derived at *now* and ``query`` is per request, so neither is
+    ever cached — callers pass freshly fetched rows. *observed_at* is
+    ``{verstr: run_state.yml store write time}``.
     """
-    annotated = [signed(row) for row in annotate_rows(rows, run_states, observed_at=observed_at)]
+    annotated = [signed(row) for row in annotate_rows(rows, run_states, observed_at=observed_at,
+                                                      now=now)]
     SiblingDurations.stamping(annotated, split)
     return sort_rows(
-        apply_filters(annotated, status, query),
+        apply_filters(annotated, status, query, now=now),
         schema,
         sort=sort,
         last=last,

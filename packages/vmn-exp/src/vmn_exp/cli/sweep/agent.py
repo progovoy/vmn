@@ -9,7 +9,6 @@ import copy
 import json
 import os
 import threading
-import time
 
 from vmn_exp.cli.run import _create_experiment, _Supervision
 from vmn_exp.cli.supervised_env import adopt_requested
@@ -97,7 +96,7 @@ def _run_trial(vcs, storage, args, sweep, spec, claim, base_name, repo_lock, io)
 
     env = {"VMN_SWEEP_ID": sweep, "VMN_SWEEP_TRIAL": str(trial),
            SWEEP_PARAMS_ENV: json.dumps(params)}
-    check = _EarlyStopCheck(spec, storage, vcs.name, sweep, verstr) \
+    check = _EarlyStopCheck(spec, storage, vcs.name, sweep, verstr, io.clock) \
         if spec.get("early_terminate") else None
     supervision = trial_supervision(storage, vcs.name, verstr, trial_args,
                                     experiment_conf(vcs), env, check, vcs.vmn_root_path,
@@ -127,14 +126,15 @@ class _EarlyStopCheck:
     on a background worker: the supervision loop only schedules it and acts on
     its verdict, and never waits for storage between heartbeats. Siblings'
     points are cached (:class:`PeerPoints`): a finished one is read once.
+    *clock* times the checks and the index the rows come from.
     """
 
-    def __init__(self, spec, storage, app_name, sweep, verstr):
+    def __init__(self, spec, storage, app_name, sweep, verstr, clock):
         self._spec = spec
         self._stopper = stopper_for(spec)
         self._points = PeerPoints(storage, app_name, spec["metric"]["name"])
         self._storage, self._app_name = storage, app_name
-        self._sweep, self._verstr = sweep, verstr
+        self._sweep, self._verstr, self._clock = sweep, verstr, clock
         self._verdict = threading.Event()
         self._worker = Coalescing(self._check, "vmn-sweep-early-stop")
 
@@ -145,7 +145,7 @@ class _EarlyStopCheck:
             rule = self._spec["early_terminate"]["type"]
             VMN_LOGGER.info(f"Sweep {self._sweep}: stopping {self._verstr} early ({rule} rule)")
             supervision.request_stop()
-        elif self._stopper.due(time.monotonic()):
+        elif self._stopper.due(self._clock.monotonic()):
             self._worker.submit()
 
     def close(self):
@@ -158,7 +158,7 @@ class _EarlyStopCheck:
         # check interval asks; a refresh in between is not waited for.
         interval = self._spec["early_terminate"]["check_interval_sec"]
         rows = trial_rows(self._storage, self._app_name, self._sweep, self._spec,
-                          wait=False, max_age_sec=interval)
+                          wait=False, max_age_sec=interval, clock=self._clock)
         own_row = next((r for r in rows if r["verstr"] == self._verstr), None)
         own = self._points.of(own_row["metric_source"] if own_row else self._verstr)
         if not self._stopper.past_min_iter(own):

@@ -2,6 +2,7 @@
 ``as_of``, the wall time its last completed refresh started, persists in the
 index file, so a restarted server knows how old the rows it serves are; while
 a refresh runs, its ``phase`` and ``progress`` say what it is doing."""
+import datetime
 import threading
 
 import pytest
@@ -10,7 +11,6 @@ moto = pytest.importorskip("moto")
 import boto3  # noqa: E402
 
 import vmn_exp.core.index as index_module  # noqa: E402
-import vmn_exp.core.index_freshness as freshness_module  # noqa: E402
 from vmn_exp.core.index import ExperimentIndex  # noqa: E402
 from vmn_exp.core.index_freshness import listing_progress  # noqa: E402
 from vmn_exp.storage.s3 import S3SnapshotStorage  # noqa: E402
@@ -35,11 +35,23 @@ def s3(monkeypatch):
         yield
 
 
+class Wall(list):
+    """``[epoch seconds]``, which the test moves, and the index's clock that
+    reads it; monotonic time stands still."""
+
+    def now(self):
+        return datetime.datetime.fromtimestamp(self[0], datetime.timezone.utc)
+
+    def time(self):
+        return self[0]
+
+    def monotonic(self):
+        return 1000.0
+
+
 @pytest.fixture
-def wall(monkeypatch):
-    now = [OCT_22]
-    monkeypatch.setattr(freshness_module, "_wall", lambda: now[0])
-    return now
+def wall():
+    return Wall([OCT_22])
 
 
 def _storage():
@@ -63,7 +75,7 @@ def test_an_index_never_refreshed_is_idle_and_has_no_as_of(s3, tmp_path):
 
 
 def test_as_of_is_when_the_last_refresh_started(s3, tmp_path, wall):
-    index = ExperimentIndex(_storage(), APP, str(tmp_path / "i.sqlite")).refresh()
+    index = ExperimentIndex(_storage(), APP, str(tmp_path / "i.sqlite"), clock=wall).refresh()
     assert index.freshness()["as_of"] == OCT_22
     wall[0] += 30
     index.refresh()
@@ -72,27 +84,27 @@ def test_as_of_is_when_the_last_refresh_started(s3, tmp_path, wall):
 
 def test_as_of_survives_a_restart(s3, tmp_path, wall):
     cache = str(tmp_path / "i.sqlite")
-    ExperimentIndex(_storage(), APP, cache).refresh()
+    ExperimentIndex(_storage(), APP, cache, clock=wall).refresh()
     wall[0] += 4 * 86400
 
-    reopened = ExperimentIndex(_storage(), APP, cache)
+    reopened = ExperimentIndex(_storage(), APP, cache, clock=wall)
 
     assert reopened.freshness()["as_of"] == OCT_22
 
 
 def test_as_of_is_persisted_at_most_once_a_minute(s3, tmp_path, wall):
     cache = str(tmp_path / "i.sqlite")
-    index = ExperimentIndex(_storage(), APP, cache).refresh()
+    index = ExperimentIndex(_storage(), APP, cache, clock=wall).refresh()
     wall[0] += 30
     index.refresh()
-    assert ExperimentIndex(_storage(), APP, cache).freshness()["as_of"] == OCT_22
+    assert ExperimentIndex(_storage(), APP, cache, clock=wall).freshness()["as_of"] == OCT_22
     wall[0] += 31
     index.refresh()
-    assert ExperimentIndex(_storage(), APP, cache).freshness()["as_of"] == OCT_22 + 61
+    assert ExperimentIndex(_storage(), APP, cache, clock=wall).freshness()["as_of"] == OCT_22 + 61
 
 
 def test_a_failed_refresh_leaves_as_of_alone(s3, tmp_path, wall, monkeypatch):
-    index = ExperimentIndex(_storage(), APP, str(tmp_path / "i.sqlite")).refresh()
+    index = ExperimentIndex(_storage(), APP, str(tmp_path / "i.sqlite"), clock=wall).refresh()
     wall[0] += 600
 
     def broken(*args, **kwargs):

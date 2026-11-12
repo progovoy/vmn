@@ -12,7 +12,6 @@ from leaderboard_fleet import T0, Fleet
 from vmn_exp.ui.job_aggregate import JobAgg
 from vmn_exp.ui.leaderboard_cache import LeaderboardCache
 
-from vmn_exp.core import status as status_mod
 from vmn_exp.ui import job_rollup
 
 SCHEMA = {"loss": {"goal": "min", "primary": True}, "acc": {"goal": "max"}}
@@ -39,11 +38,6 @@ class DateFleet(Fleet):
     def redate(self, count):
         for i in self.rng.sample(range(len(self.specs)), count):
             self.edit(i, date=self.rng.choice(DATES), kind=self.rng.choice(KINDS))
-
-
-def _at(monkeypatch, when):
-    """The module clock at *when*, for test_ui_job_aggregate_nested_generations."""
-    monkeypatch.setattr(status_mod, "_now", lambda now=None: now or when)
 
 
 def _move(clock, when):

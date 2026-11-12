@@ -59,6 +59,22 @@ def _hints(err):
     return [line for line in err.splitlines() if "similar run" in line]
 
 
+def _hinted(app_layout, capfd, clock):
+    """The stderr of the hint for a new run, printed on *clock*."""
+    new = extract_dev_verstr(_create(app_layout, capfd, "--no-similar").out)
+    similar_hint.print_hint(_storage(app_layout), app_layout.app_name, new,
+                            argparse.Namespace(), {}, clock=clock)
+    return capfd.readouterr()
+
+
+class _Ticking(FakeClock):
+    """One second passes per monotonic reading."""
+
+    def monotonic(self):
+        self.advance(1)
+        return super().monotonic()
+
+
 def test_create_names_the_closest_past_run_on_stderr(app_layout, capfd):
     prior = _prior_and_dirty_tree(app_layout)
     _warm(app_layout)
@@ -123,9 +139,7 @@ def test_no_hint_past_the_time_budget(app_layout, capfd, monkeypatch):
     _prior_and_dirty_tree(app_layout)
     _warm(app_layout)
     monkeypatch.setattr(similar_hint, "BUDGET_SEC", 0.3)
-    ticks = iter(range(0, 10000, 1))  # one second per reading
-    monkeypatch.setattr(similar_hint, "_clock", lambda: float(next(ticks)))
-    assert _hints(_create(app_layout, capfd).err) == []
+    assert _hints(_hinted(app_layout, capfd, _Ticking()).err) == []
 
 
 def test_a_failing_hint_never_fails_the_run(app_layout, capfd, monkeypatch):
@@ -192,17 +206,16 @@ def test_the_hint_reads_the_runs_it_shows_and_never_loads_the_index(app_layout, 
 def test_a_hint_past_its_budget_stops_before_searching(app_layout, capfd, monkeypatch):
     _prior_and_dirty_tree(app_layout)
     _warm(app_layout)
-    now, read, searched = [0.0], [], []
-    monkeypatch.setattr(similar_hint, "_clock", lambda: now[0])
+    clock, read, searched = FakeClock(), [], []
     real = similar_hint.record_target
 
     def read_spending_the_budget(*args, **kwargs):
         read.append(args)
-        now[0] += similar_hint.BUDGET_SEC
+        clock.advance(similar_hint.BUDGET_SEC)
         return real(*args, **kwargs)
 
     monkeypatch.setattr(similar_hint, "record_target", read_spending_the_budget)
     monkeypatch.setattr(similar_hint, "search", lambda *a, **k: searched.append(a) or [])
 
-    assert _hints(_create(app_layout, capfd).err) == []
+    assert _hints(_hinted(app_layout, capfd, clock).err) == []
     assert len(read) == 1 and searched == []

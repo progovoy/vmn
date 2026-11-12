@@ -54,12 +54,11 @@ class Fleet:
 
 @pytest.fixture(scope="module")
 def fleet():
-    with pytest.MonkeyPatch.context() as patch:
-        at = fgm_records.freeze_clock(patch, NOW)
-        built = time.perf_counter()
-        fleet = Fleet(*fgm_records.snapshot(fgm_tree.get_profile(PROFILE), NOW))
-        print(f"\n{PROFILE}: {len(fleet.snap.rows)} runs built in {time.perf_counter() - built:.1f}s")
-        yield fleet, at
+    at = fgm_records.frozen_now(NOW)
+    built = time.perf_counter()
+    fleet = Fleet(*fgm_records.snapshot(fgm_tree.get_profile(PROFILE), NOW))
+    print(f"\n{PROFILE}: {len(fleet.snap.rows)} runs built in {time.perf_counter() - built:.1f}s")
+    yield fleet, at
 
 
 def _warm(cache, snap):
@@ -69,7 +68,7 @@ def _warm(cache, snap):
 
 @pytest.fixture(scope="module")
 def board(fleet):
-    return _warm(LeaderboardCache(), fleet[0].snap)
+    return _warm(LeaderboardCache(now=lambda: fleet[1]), fleet[0].snap)
 
 
 @pytest.fixture
@@ -165,7 +164,7 @@ def test_split_tallies_memory_per_outer_run(fleet):
     """P3: the split rollups' memory over the plain ones, per run with
     children (a board of its own: the shared one may hold the split)."""
     fleet, at = fleet
-    views, snap, schema = JobViews(_warm(LeaderboardCache(), fleet.snap)), fleet.snap, fleet.schema
+    views, snap, schema = JobViews(_warm(LeaderboardCache(now=lambda: at), fleet.snap)), fleet.snap, fleet.schema
     views.summary(snap, schema, fleet.live)
     tracemalloc.start()
     try:

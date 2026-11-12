@@ -11,11 +11,11 @@ from vmn_exp.ui.leaderboard_cache import LeaderboardCache
 from vmn_exp.ui.leaderboard_group_fields import key_text
 
 NOW = 1_800_000_000.0
+AT = fgm_records.frozen_now(NOW)
 
 
 @pytest.fixture
-def tiny(monkeypatch):
-    fgm_records.freeze_clock(monkeypatch, NOW)
+def tiny():
     snap, specs = fgm_records.snapshot(fgm_tree.get_profile("fgm-tiny"), NOW)
     return snap, {s["verstr"]: s for s in specs}
 
@@ -23,7 +23,7 @@ def tiny(monkeypatch):
 def test_every_row_derives_its_planned_status_and_keeps_its_tags(tiny):
     snap, specs = tiny
     assert len(snap.rows) == len(specs)
-    rows = LeaderboardCache().rows(snap)
+    rows = LeaderboardCache(now=lambda: AT).rows(snap)
     for row in rows:
         spec = specs[row["verstr"]]
         assert row["status"] == fgm_tree.derived_status(spec["fate"]), spec
@@ -36,7 +36,7 @@ def test_every_row_derives_its_planned_status_and_keeps_its_tags(tiny):
 
 def test_released_rows_carry_why_and_when(tiny):
     snap, specs = tiny
-    released = [r for r in LeaderboardCache().rows(snap)
+    released = [r for r in LeaderboardCache(now=lambda: AT).rows(snap)
                 if specs[r["verstr"]]["fate"] == "released"]
     assert released
     for row in released:
@@ -55,7 +55,7 @@ def test_the_declared_schema_ranks_value_and_hides_health(tiny):
 def test_a_live_launch_summary_reads_its_declared_progress_split_by_kind(tiny):
     snap, specs = tiny
     live = specs[fgm_tree.launches(specs.values())[0]]
-    views = JobViews(LeaderboardCache())
+    views = JobViews(LeaderboardCache(now=lambda: AT))
     summary = views.summary(snap, snap.declared_schema(), live["verstr"], split="tags.kind")
     declared = summary["declared_progress"]
     assert (declared["done"], declared["total"], declared["unit"]) == (
@@ -69,7 +69,7 @@ def test_a_live_launch_summary_reads_its_declared_progress_split_by_kind(tiny):
 
 def test_an_ended_launch_settles_its_leftovers(tiny):
     snap, specs = tiny
-    rows = LeaderboardCache().rows(snap)
+    rows = LeaderboardCache(now=lambda: AT).rows(snap)
     settled = collections.Counter(r.get("settled") for r in rows)
     fates = collections.Counter(specs[r["verstr"]]["fate"] for r in rows if r.get("settled"))
     assert settled["lost"] == fates["released"] + fates["stuck"]

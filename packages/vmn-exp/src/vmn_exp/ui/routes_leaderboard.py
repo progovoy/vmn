@@ -133,7 +133,7 @@ def register(app, api_prefix, inputs, cache, comments_of=None, aggregate_of=None
                       top=top, top_query=top_q, **aggregate)
         # A Jobs view's summaries (throughput, ETA) follow the minute; the
         # etag carries the live bucket already.
-        clock = dict(minute=minute()) if live else {}
+        clock = dict(minute=minute(cache.now())) if live else {}
         counts, generation = comments_of(ws_name, app_tag)
         if mode.shape == TREE:
             _scope(tree.children_of)
@@ -287,7 +287,7 @@ def register(app, api_prefix, inputs, cache, comments_of=None, aggregate_of=None
 
     def _pinned(q):
         try:
-            return pinned(q)
+            return pinned(q, cache.now())
         except QueryError as e:
             raise HTTPException(400, str(e))
 

@@ -157,11 +157,11 @@ def test_a_helper_listing_that_fails_is_followed_by_no_full_listing(
     monkeypatch.setattr(watch, "files", files)
     real_full = watch.full_changes
     monkeypatch.setattr(watch, "full_changes", lambda: fulls.append(1) or real_full())
-    clock.now += 1
+    clock.advance(1)
     with pytest.raises(IOProcessError):
         offloaded.refresh()
 
-    clock.now += 1
+    clock.advance(1)
     offloaded.refresh()
 
     assert fulls == []
