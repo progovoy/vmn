@@ -107,6 +107,10 @@ class ElectedIndex:
     def clock(self):
         return self._current().clock
 
+    @property
+    def min_stale_sec(self):
+        return self._current().min_stale_sec
+
     def snapshot(self):
         return self._current().snapshot()
 

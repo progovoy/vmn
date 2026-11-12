@@ -155,3 +155,14 @@ def test_a_cli_list_turns_stuck_at_the_given_envs_floor(tmp_path, monkeypatch):
 
     assert listed(FakeEnv(), "default") == status.STUCK
     assert listed(WIDE, "wide") == status.RUNNING
+
+
+def test_an_elected_index_answers_its_current_indexs_floor():
+    """A Postgres replica's resync builds its fresh index on the floor of the
+    live (elected) one, so that index tells its floor like ExperimentIndex does."""
+    from vmn_exp.ui.elected_index import ElectedIndex
+    elected = ElectedIndex.__new__(ElectedIndex)
+    elected._leader = SimpleNamespace(min_stale_sec=600.0)
+    elected._follower = SimpleNamespace(min_stale_sec=600.0)
+    elected.leading = False
+    assert elected.min_stale_sec == 600.0
