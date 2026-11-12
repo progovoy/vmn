@@ -22,6 +22,7 @@ from vmn_exp.cli.pushing.push_metrics import push_metrics
 from vmn_exp.core.status import RUN_STATE_FILE
 from vmn_exp.core.writer import own_stream
 from vmn_exp.storage.local import LocalSnapshotStorage
+from writer_args import process_writer
 
 FINISHED = "state: finished\nexit_code: 0\n"
 
@@ -40,7 +41,7 @@ def test_pushing_metrics_from_a_copy_keeps_the_points_the_original_pushed(tmp_pa
     s3_storage().create_exclusive(APP, V, meta(V), {})
     a = _local(tmp_path, "a")
     assert a.create_exclusive(APP, V, meta(V), {})
-    own = own_stream(a, APP, V)
+    own = own_stream(a, APP, V, writer=process_writer())
     a.append_metric_block(APP, V, own, block(1.0, start=1))
     shutil.copytree(tmp_path / "a", tmp_path / "a2")
     a.append_metric_block(APP, V, own, block(2.0, start=2))
@@ -79,7 +80,7 @@ def test_a_moved_offline_root_pushes_its_log_and_metrics(tmp_path):
     s3_storage().create_exclusive(APP, V, meta(V), {})
     a = _local(tmp_path, "a")
     assert a.create_exclusive(APP, V, meta(V), {})
-    own = own_stream(a, APP, V)
+    own = own_stream(a, APP, V, writer=process_writer())
     a.append_log_entry(APP, V, own, tag(1, "k1"))
     a.append_metric_block(APP, V, own, block(1.0, start=1))
     shutil.move(str(tmp_path / "a"), str(tmp_path / "b"))

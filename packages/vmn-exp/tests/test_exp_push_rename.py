@@ -29,6 +29,7 @@ from vmn_exp.cli.pushing.push_run import FAILED, NEW, UP_TO_DATE, UPDATE, push_r
 from vmn_exp.core.status import RUN_STATE_FILE
 from vmn_exp.core.writer import own_stream
 from vmn_exp.core.real_io import RealClock
+from writer_args import process_writer
 
 FOREIGN = "2025-05-05T00:00:00Z"
 CHILD = X + ".2"
@@ -169,7 +170,7 @@ def test_rename_ledger_entry_moves(local, target, tmp_path):
 
 def test_a_renamed_run_pushes_its_own_log_and_metric_streams(local, target, tmp_path):
     make_run(local, tmp_path)
-    own = own_stream(local, APP, X)
+    own = own_stream(local, APP, X, writer=process_writer())
     local.append_log_entry(APP, X, own, {"type": "tags", "set": {"k": "v"},
                                          "timestamp": "2026-01-01T00:00:09Z"})
     assert local.append_metric_block(APP, X, own, block(1.0))

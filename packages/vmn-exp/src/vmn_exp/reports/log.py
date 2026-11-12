@@ -44,24 +44,27 @@ def fold_header(entries):
     return {field: value for field, (_, value) in latest.items()}
 
 
-def _append(storage, rid, entry_type, actor=None, **fields):
+def _append(storage, rid, entry_type, actor, env, host, **fields):
+    """Append an *entry_type* header entry by the writer of *env* and *host*."""
     area = reports_area(storage)
-    entry = _build_entry(read_header_entries(storage, rid), entry_type, actor, **fields)
-    area.append_log_entry(rid, HEADER, own_stream(area, rid, HEADER), entry)
-    flush_log(area, rid, HEADER)
+    entry = _build_entry(read_header_entries(storage, rid), entry_type, actor, env=env,
+                         host=host, **fields)
+    writer = entry["writer"]
+    area.append_log_entry(rid, HEADER, own_stream(area, rid, HEADER, writer), entry)
+    flush_log(area, rid, HEADER, writer)
 
 
-def set_title(storage, rid, title, *, actor=None):
-    _append(storage, rid, "title", actor, title=title)
+def set_title(storage, rid, title, *, actor=None, env, host):
+    _append(storage, rid, "title", actor, env, host, title=title)
 
 
-def set_archived(storage, rid, archived, *, actor=None):
-    _append(storage, rid, "archived", actor, archived=bool(archived))
+def set_archived(storage, rid, archived, *, actor=None, env, host):
+    _append(storage, rid, "archived", actor, env, host, archived=bool(archived))
 
 
-def set_pinned(storage, rid, pinned, *, actor=None):
-    _append(storage, rid, "pinned", actor, pinned=bool(pinned))
+def set_pinned(storage, rid, pinned, *, actor=None, env, host):
+    _append(storage, rid, "pinned", actor, env, host, pinned=bool(pinned))
 
 
-def set_published(storage, rid, rev, *, actor=None):
-    _append(storage, rid, "published", actor, rev=rev)
+def set_published(storage, rid, rev, *, actor=None, env, host):
+    _append(storage, rid, "published", actor, env, host, rev=rev)

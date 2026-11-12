@@ -8,6 +8,7 @@ from moto import mock_aws
 from vmn_exp.core.writer import create_run as core_create_run
 from vmn_exp.sdk import RunExistsError, create_run
 from vmn_exp.storage.s3 import S3SnapshotStorage
+from writer_args import process_suffix, process_writer
 
 BUCKET = "vmn-bucket"
 APP = "app"
@@ -103,9 +104,9 @@ def test_core_create_run_takes_the_exact_run_id(snapshot_meta):
     storage, listed = _storage_with_listing_spy()
     run_id = f"{CODE}.pod-3"
 
-    got = core_create_run(storage, APP, CODE, {"timestamp": "t"}, {}, run_id=run_id)
+    got = core_create_run(storage, APP, CODE, {"timestamp": "t"}, {}, run_id=run_id, writer=process_writer(), suffix=process_suffix())
 
     assert got == run_id
     assert storage.load_metadata(APP, run_id)["code_verstr"] == CODE
     with pytest.raises(RunExistsError):
-        core_create_run(storage, APP, CODE, {"timestamp": "t"}, {}, run_id=run_id)
+        core_create_run(storage, APP, CODE, {"timestamp": "t"}, {}, run_id=run_id, writer=process_writer(), suffix=process_suffix())

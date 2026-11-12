@@ -34,10 +34,11 @@ def build_storage(vcs):
     return conf_storage(vcs)
 
 
-def checkout_source(app_name, parent, nested, storage, capture_env=None, python_exe=None, *,
-                    env):
+def checkout_source(app_name, parent, nested, storage, env, host, capture_env=None,
+                    python_exe=None):
     """The normal mode's :data:`RecordSource`: cold-start if needed, capture
-    (from the Env *env*); its lock is the repo lock, held only to claim."""
+    (from the Env *env*); its lock is the repo lock, held only to claim. The
+    run's author is as *env* and *host* say."""
     app_name = _resolve_app_name(app_name, stamped_apps, env)
     root_path = resolve_root_path()
     os.makedirs(os.path.join(root_path, ".vmn"), exist_ok=True)
@@ -55,7 +56,7 @@ def checkout_source(app_name, parent, nested, storage, capture_env=None, python_
     # too: it is keyed by content, so it needs no lock.
     run_env = _maybe_capture_env(vcs, capture_env, env, python_exe=python_exe)
     code = capture.ensure_code(storage, vcs, captured)
-    features = capture_features(vcs, captured)
+    features = capture_features(vcs, captured, env, host)
     # The claim itself is atomic (create_exclusive); the lock keeps a run from
     # being created while another vmn command holds the repo.
     return RecordSource(
@@ -81,8 +82,9 @@ def record_template(vcs, captured, code, note=None):
 
 
 def record_run(vcs, storage, captured, code, note, create_data, parent, name=None,
-               env=None, features=None):
-    """Claim a verstr for *captured* and write the record and its create entry.
+               env=None, features=None, *, writer, suffix):
+    """Claim a verstr for *captured* and write the record and its create entry,
+    as *writer*, the name with *suffix* (``core.writer.create_run``).
 
     *code* is :func:`capture.ensure_code`'s ``(key, summary)``: the record
     references the stored code object instead of carrying the patches. The
@@ -102,4 +104,6 @@ def record_run(vcs, storage, captured, code, note, create_data, parent, name=Non
         name=name,
         env=env,
         features=features,
+        writer=writer,
+        suffix=suffix,
     )

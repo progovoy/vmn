@@ -11,6 +11,7 @@ import vmn_exp.gitmode.features as gitmode_features
 from version_stamp.core import logging as vmn_logging
 from vmn_exp.core import identity
 from vmn_exp.core import writer as experiment_writer
+from vmn_exp.core.real_io import real_io
 
 HANG_SEC = 8
 WT = "diff --git a/train.py b/train.py\n--- a/train.py\n+++ b/train.py\n@@ -1 +1 @@\n-a\n+b\n"
@@ -57,7 +58,7 @@ def test_capture_takes_the_untracked_paths_the_snapshot_listed(tmp_path, hanging
     captured = SimpleNamespace(identity={"working_tree": WT, "untracked_hash": b"h"},
                                untracked_paths=["notes/b.md", "a.md"])
 
-    entry, took = _timed(lambda: gitmode_features.capture_features(_vcs(tmp_path), captured))
+    entry, took = _timed(lambda: gitmode_features.capture_features(_vcs(tmp_path), captured, env=real_io().env, host=real_io().host))
 
     assert took < 4
     assert entry["changed"] == {"files": ["train.py"], "untracked": ["a.md", "notes/b.md"]}
@@ -73,7 +74,7 @@ def test_capture_never_walks_the_tree_when_the_snapshot_listed_it(tmp_path, monk
     monkeypatch.setattr(identity, "_git_user_email", lambda cwd=None: "")
     captured = SimpleNamespace(identity={"untracked_hash": b"h"}, untracked_paths=["a.md"])
 
-    entry = gitmode_features.capture_features(_vcs(tmp_path), captured)
+    entry = gitmode_features.capture_features(_vcs(tmp_path), captured, env=real_io().env, host=real_io().host)
 
     assert entry["changed"] == {"untracked": ["a.md"]}
 
@@ -84,6 +85,6 @@ def test_a_capture_without_its_listing_walks_the_tree(tmp_path, monkeypatch):
     monkeypatch.setattr(identity, "_git_user_email", lambda cwd=None: "")
     captured = SimpleNamespace(identity={"untracked_hash": b"h"})
 
-    entry = gitmode_features.capture_features(_vcs(tmp_path), captured)
+    entry = gitmode_features.capture_features(_vcs(tmp_path), captured, env=real_io().env, host=real_io().host)
 
     assert entry["changed"] == {"untracked": ["a.py", "z.py"]}

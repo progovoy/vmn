@@ -12,6 +12,7 @@ from vmn_exp._base import now_iso
 from vmn_exp.storage.local import LocalSnapshotStorage
 from version_stamp.core.logging import init_stamp_logger
 from vmn_exp.core.real_io import RealClock
+from writer_args import process_writer
 
 APP = "app"
 RUNS = [f"0.0.1-dev.abc1234.r{i}" for i in range(4)]
@@ -117,7 +118,7 @@ def test_targeted_ignores_a_marker_whose_child_is_gone(st):
 
 
 def test_targeted_honours_protect_tag_from_the_run_log(st, capfd):
-    assert tag_run(st, APP, RUNS[3], {"stage": "prod"})
+    assert tag_run(st, APP, RUNS[3], {"stage": "prod"}, writer=process_writer())
     args = _args(RUNS[3], protect_tag=["stage"])
     assert prune_mod.experiment_prune(None, {}, st, args, APP, clock=RealClock()) == 0
     assert RUNS[3] in _left(st)

@@ -5,6 +5,7 @@ import os
 from vmn_exp.registry.log import record_use, set_alias
 from vmn_exp.registry.store import ensure_model, list_models, list_versions, register_version
 from vmn_exp.storage.local import LocalSnapshotStorage
+from vmn_exp.core.real_io import real_io
 
 
 def _runs(tmp_path):
@@ -15,8 +16,8 @@ def test_model_records_live_under_registry_scope(tmp_path):
     storage = _runs(tmp_path)
     ensure_model(storage, "resnet")
     register_version(storage, "resnet", {"app": "app", "verstr": "1.0.0"})
-    set_alias(storage, "resnet", "prod", 1)
-    record_use(storage, "resnet", 1, "app", "1.0.0")
+    set_alias(storage, "resnet", "prod", 1, env=real_io().env, host=real_io().host)
+    record_use(storage, "resnet", 1, "app", "1.0.0", env=real_io().env, host=real_io().host)
     scope = tmp_path / "registry" / "resnet"
     assert sorted(os.listdir(scope)) == ["header", "uses", "v1"]
     assert not (tmp_path / "runs").exists() or not os.listdir(tmp_path / "runs")

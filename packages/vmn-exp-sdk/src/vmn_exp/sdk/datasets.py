@@ -23,6 +23,7 @@ Usage::
 """
 from __future__ import annotations
 
+from vmn_exp.core.real_io import real_io
 from vmn_exp.registry.datasets import copied_fields, reference_fields, register_dataset_version
 from vmn_exp.registry.log import set_alias as _log_set_alias
 from vmn_exp.registry.view import resolve_ref
@@ -65,7 +66,8 @@ def register_dataset(
 
     n = register_dataset_version(storage, name, fields, description=description, dedupe=dedupe)
     if alias:
-        _log_set_alias(storage, name, alias, n)
+        io = real_io()
+        _log_set_alias(storage, name, alias, n, env=io.env, host=io.host)
     return resolve_ref(storage, f"{name}@{n}")
 
 

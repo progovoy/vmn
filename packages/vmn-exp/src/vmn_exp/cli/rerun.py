@@ -28,7 +28,7 @@ from vmn_exp.core.env import capture_env_safe, should_capture
 from vmn_exp.core.fork import resolve_run
 from vmn_exp.core.status import load_run_state
 from vmn_exp.core.storage_resolve import experiment_dir
-from vmn_exp.core.writer import create_run
+from vmn_exp.core.writer import create_run, get_writer_id, new_run_ids
 from vmn_exp.gitmode.features import rerun_features
 from version_stamp.api import VMN_LOGGER, now_iso
 
@@ -153,7 +153,7 @@ def _execute(vcs, params, storage, args, source, repo_lock, io):
             if err:
                 return _refuse(source, err)
             captured = _capture_env(vcs, storage, args, source, io.clock.now(), io.env)
-            verstr, err = _claim(vcs, storage, args, source, captured, io.env)
+            verstr, err = _claim(vcs, storage, args, source, captured, io.env, io.host)
             if err is not None:
                 return err
         if repo_lock is not None:
@@ -192,9 +192,10 @@ def _child_dir(workdir, rel_cwd):
     return path, None
 
 
-def _claim(vcs, storage, args, source, captured, env):
+def _claim(vcs, storage, args, source, captured, env, host):
     """``(new verstr, None)`` or ``(None, exit code)``; *captured* is the
-    environment the rerun records, *env* the one it runs in."""
+    environment the rerun records, *env* the one it runs in (with *host*,
+    whose writer writes it)."""
     import vmn_exp.cli.experiment as cli
 
     parent, err = cli._resolve_parent(storage, source.app_name, args, env)
@@ -209,9 +210,10 @@ def _claim(vcs, storage, args, source, captured, env):
         storage, source.app_name, source.code_verstr, template, {}, note=note,
         create_data=_create_data(source, args), parent=parent,
         name=args.run_name, env=captured,
-        features=rerun_features(vcs, source.log, source.metadata, source.patches),
+        features=rerun_features(vcs, source.log, source.metadata, source.patches, env, host),
+        **new_run_ids(env, host),
     )
-    cli._append_inputs(storage, source.app_name, verstr, args.inputs)
+    cli._append_inputs(storage, source.app_name, verstr, args.inputs, get_writer_id(env, host))
     return verstr, None
 
 

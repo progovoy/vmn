@@ -44,9 +44,9 @@ def read_intent(args):
     return entry, None
 
 
-def append_intent(storage, app_name, verstr, entry):
+def append_intent(storage, app_name, verstr, entry, writer):
     """Append *entry* (from :func:`read_intent`) to the run, stamped now."""
-    append_to_log(storage, app_name, verstr, stamped_entry(entry))
+    append_to_log(storage, app_name, verstr, stamped_entry(entry), writer)
 
 
 def _intent_entry(args):

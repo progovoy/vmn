@@ -54,7 +54,7 @@ def test_a_servers_startup_warm_up_sorts_a_store_app_by_its_settings(tmp_path, m
     storage = LocalSnapshotStorage(str(tmp_path / "store"), area="runs")
     storage.save("app", "1.0.0-dev.a", {"verstr": "1.0.0-dev.a",
                                         "timestamp": "2026-01-01T00:00:00Z"}, {})
-    write_settings(storage, "app", "metrics: {loss: {goal: min}}\n")
+    write_settings(storage, "app", "metrics: {loss: {goal: min}}\n", env=real_io().env, host=real_io().host)
     built = []
     static_of = LeaderboardCache._static_of
     monkeypatch.setattr(LeaderboardCache, "_static_of",

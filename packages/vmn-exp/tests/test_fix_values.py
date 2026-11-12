@@ -15,6 +15,7 @@ import pytest
 from vmn_exp.core.log import latest_metrics, sort_by_metric
 from vmn_exp.core.series_reader import stream_entries
 from vmn_exp.core.writer import append_to_log
+from writer_args import process_writer
 
 
 class _Storage:
@@ -46,7 +47,7 @@ class _TensorLike:
 
 def _metrics(values):
     storage = _Storage()
-    append_to_log(storage, "app", "v", {"type": "metrics", "values": values})
+    append_to_log(storage, "app", "v", {"type": "metrics", "values": values}, writer=process_writer())
     return storage.entries
 
 
@@ -108,7 +109,7 @@ def test_entry_with_nothing_numeric_is_skipped():
 
 def test_caller_entry_is_not_mutated():
     entry = {"type": "metrics", "values": {"x": np.float32(1.0), "t": "s"}}
-    append_to_log(_Storage(), "app", "v", entry)
+    append_to_log(_Storage(), "app", "v", entry, writer=process_writer())
     assert set(entry["values"]) == {"x", "t"}
 
 
@@ -118,7 +119,7 @@ def test_params_entries_are_kept_verbatim_but_json_safe():
         storage,
         "app",
         "v",
-        {"type": "params", "params": {"depth": np.int64(3), "opt": "adam", "on": True}},
+        {"type": "params", "params": {"depth": np.int64(3), "opt": "adam", "on": True}}, writer=process_writer()
     )
     params = storage.entries[0]["params"]
     assert params == {"depth": 3, "opt": "adam", "on": True}
@@ -128,14 +129,14 @@ def test_params_entries_are_kept_verbatim_but_json_safe():
 def test_create_entry_params_are_json_safe():
     storage = _Storage()
     append_to_log(
-        storage, "app", "v", {"type": "create", "params": {"lr": np.float32(0.5)}}
+        storage, "app", "v", {"type": "create", "params": {"lr": np.float32(0.5)}}, writer=process_writer()
     )
     assert storage.entries[0]["params"] == {"lr": 0.5}
 
 
 def test_other_entry_types_pass_through():
     storage = _Storage()
-    append_to_log(storage, "app", "v", {"type": "note", "text": "hi"})
+    append_to_log(storage, "app", "v", {"type": "note", "text": "hi"}, writer=process_writer())
     assert storage.entries == [{"type": "note", "text": "hi"}]
 
 

@@ -8,6 +8,7 @@ from s3_helpers import cached_host, meta, mocked_bucket, raw_keys, s3_storage
 from vmn_exp.core.status import RUN_STATE_FILE
 from vmn_exp.core.writer import own_stream
 from vmn_exp.storage import buffered, cached_logs
+from writer_args import process_writer
 
 APP = "app"
 V = "0.0.1-dev.aaa1111.bbb2222"
@@ -27,7 +28,7 @@ def _note(i):
 
 
 def _ship(host, start, stop):
-    stream = own_stream(host, APP, V)
+    stream = own_stream(host, APP, V, writer=process_writer())
     for i in range(start, stop):
         assert host.append_log_entry(APP, V, stream, _note(i))
         host.sync_log_to_remote(APP, V, stream)

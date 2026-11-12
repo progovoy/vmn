@@ -20,6 +20,8 @@ from vmn_exp.core.writer import (
     compute_artifact_info,
     create_log_entry,
     flush_log,
+    get_writer_id,
+    new_run_ids,
     save_artifact,
 )
 from vmn_exp.gitmode import capture
@@ -29,11 +31,12 @@ from version_stamp.api import VMN_LOGGER, measure_runtime_decorator
 
 
 @measure_runtime_decorator
-def experiment_create(vcs, params, storage, args, repo_lock=None, *, clock, env):
+def experiment_create(vcs, params, storage, args, repo_lock=None, *, clock, env, host):
     """Create a run; ``repo_lock`` is the per-repo lock the CLI entry point
     acquired, handed back once the run is written (see :func:`experiment_run`);
     the similar-runs hint runs on *clock*; the snapshot and parent default to
-    *env*'s ``VMN_SNAPSHOT_METADATA`` and ``VMN_EXPERIMENT_ID``."""
+    *env*'s ``VMN_SNAPSHOT_METADATA`` and ``VMN_EXPERIMENT_ID``; the writer
+    id, run suffix and author are *env*'s and *host*'s."""
     from vmn_exp.cli import experiment as _exp
 
     extra = {}
@@ -62,12 +65,14 @@ def experiment_create(vcs, params, storage, args, repo_lock=None, *, clock, env)
         name=getattr(args, "run_name", None),
         capture_env=getattr(args, "capture_env", None),
         env=env,
+        host=host,
     )
     if err is not None:
         return err
-    fork.seed(storage, app_name, verstr, source)
+    writer = get_writer_id(env, host)
+    fork.seed(storage, app_name, verstr, source, writer)
     if intent:
-        append_intent(storage, app_name, verstr, intent)
+        append_intent(storage, app_name, verstr, intent, writer)
 
     if getattr(args, "metrics", None):
         append_to_log(
@@ -75,12 +80,13 @@ def experiment_create(vcs, params, storage, args, repo_lock=None, *, clock, env)
             app_name,
             verstr,
             create_log_entry("metrics", values=_parse_metrics(args.metrics)),
+            writer,
         )
 
-    _exp._append_inputs(storage, app_name, verstr, getattr(args, "inputs", None))
+    _exp._append_inputs(storage, app_name, verstr, getattr(args, "inputs", None), writer)
 
     # One-shot command: nothing else will flush this to the remote later.
-    flush_log(storage, app_name, verstr)
+    flush_log(storage, app_name, verstr, writer)
 
     # The run is written: the hint below only reads, so other vmn commands
     # need not wait for it.
@@ -105,8 +111,10 @@ def _experiment_create_core(
     python_exe=None,
     *,
     env,
+    host,
 ):
-    """Create the experiment record (snapshot + initial log entry).
+    """Create the experiment record (snapshot + initial log entry) as the
+    writer of *env* and *host* (its author, writer id and run suffix).
 
     Returns (verstr, error_code). error_code is None on success.
     When from_snapshot is set, reads identity from vmn_metadata.yml (no git needed).
@@ -136,6 +144,8 @@ def _experiment_create_core(
             parent=parent,
             name=name,
             env=captured_env,
+            environ=env,
+            host=host,
         )
 
     captured, err = capture.capture_snapshot(vcs)
@@ -149,7 +159,8 @@ def _experiment_create_core(
     code = capture.ensure_code(storage, vcs, captured)
     verstr = record_run(
         vcs, storage, captured, code, note, extra_create_data, parent, name, env=captured_env,
-        features=capture_features(vcs, captured),
+        features=capture_features(vcs, captured, env, host),
+        **new_run_ids(env, host),
     )
     return verstr, None
 
@@ -176,18 +187,19 @@ def experiment_add(vcs, params, storage, args, io):
     intent, err = read_intent(args)
     if err is not None:
         return err
+    writer = get_writer_id(io.env, io.host)
     if definition:
-        append_to_log(storage, app_name, verstr, definition)
+        append_to_log(storage, app_name, verstr, definition, writer)
         VMN_LOGGER.info(f"Defined metric {definition['name']} for {verstr}")
 
     if args.metrics:
         entry = create_log_entry("metrics", values=_parse_metrics(args.metrics))
-        append_to_log(storage, app_name, verstr, entry)
+        append_to_log(storage, app_name, verstr, entry, writer)
         VMN_LOGGER.info(f"Added metrics to {verstr}")
 
     if args.note:
         entry = create_log_entry("note", text=args.note)
-        append_to_log(storage, app_name, verstr, entry)
+        append_to_log(storage, app_name, verstr, entry, writer)
         VMN_LOGGER.info(f"Added note to {verstr}")
 
     if args.attach:
@@ -197,22 +209,22 @@ def experiment_add(vcs, params, storage, args, io):
         info = compute_artifact_info(args.attach)
         save_artifact(storage, app_name, verstr, args.attach)
         entry = create_log_entry("artifact", **info)
-        append_to_log(storage, app_name, verstr, entry)
+        append_to_log(storage, app_name, verstr, entry, writer)
         VMN_LOGGER.info(f"Attached {info['path']} to {verstr}")
 
     if args.file:
         notes_data = _exp._parse_notes_file(args.file)
         entry = create_log_entry("structured", **notes_data)
-        append_to_log(storage, app_name, verstr, entry)
+        append_to_log(storage, app_name, verstr, entry, writer)
         VMN_LOGGER.info(f"Added structured entry to {verstr}")
 
-    _exp._append_inputs(storage, app_name, verstr, getattr(args, "inputs", None))
+    _exp._append_inputs(storage, app_name, verstr, getattr(args, "inputs", None), writer)
 
     if intent:
-        append_intent(storage, app_name, verstr, intent)
+        append_intent(storage, app_name, verstr, intent, writer)
         VMN_LOGGER.info(f"Added intent to {verstr}")
 
     # One-shot command: nothing else will flush this to the remote later.
-    flush_log(storage, app_name, verstr)
+    flush_log(storage, app_name, verstr, writer)
 
     return apply_finish(storage, app_name, verstr, args, io)

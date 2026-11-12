@@ -20,6 +20,7 @@ from vmn_exp.core.fold import fold_features, fold_log
 from vmn_exp.core.from_snapshot import create_from_snapshot
 from vmn_exp.snapshot import open_storage
 from vmn_exp.core.real_io import RealClock
+from vmn_exp.core.real_io import real_io
 
 TRAIN = "def train_step():\n    a = 1\n    b = 2\n    c = 3\n    d = 4\n    return {}\n"
 
@@ -53,7 +54,7 @@ def _exported(app_layout, capfd, tmp_path):
 
 def _git_free_run(tree, tmp_path, meta_path=None):
     storage = open_storage(root=str(tmp_path / "pod-store"), area="runs", clock=RealClock(), env=os.environ)
-    verstr, err = create_from_snapshot(storage, None, meta_path or tree)
+    verstr, err = create_from_snapshot(storage, None, meta_path or tree, environ=real_io().env, host=real_io().host)
     assert err is None
     app = yaml.safe_load(open(os.path.join(tree, "vmn_metadata.yml")))["app_name"]
     return storage.load_merged_log(app, verstr)

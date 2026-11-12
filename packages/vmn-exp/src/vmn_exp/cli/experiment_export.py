@@ -37,7 +37,7 @@ def experiment_restore(vcs, params, storage, args, clock, env):
 
 
 @measure_runtime_decorator
-def experiment_export(vcs, params, storage, args, console):
+def experiment_export(vcs, params, storage, args, console, env, host):
     from vmn_exp.cli import experiment as _exp
 
     verstr, err = _exp._resolve_experiment_version(storage, vcs, args, default_latest=True)
@@ -57,7 +57,7 @@ def experiment_export(vcs, params, storage, args, console):
 
     log = load_log(storage, app_name, verstr)
     # Who exported: a git-free run of the tree may name no one else.
-    exported_by = known_identity(vcs.backend.repo_path)
+    exported_by = known_identity(env, host, vcs.backend.repo_path)
 
     def write_experiment_files(dest):
         with open(os.path.join(dest, EXPERIMENT_FILE), "w") as f:

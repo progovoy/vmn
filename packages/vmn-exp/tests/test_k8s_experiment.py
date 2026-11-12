@@ -15,6 +15,7 @@ from vmn_exp.storage.cached import CachedSnapshotStorage
 from vmn_exp.storage.s3 import S3SnapshotStorage
 from version_stamp.core.logging import init_stamp_logger
 from vmn_exp.core.real_io import RealClock, real_io
+from writer_args import process_suffix
 
 
 @pytest.fixture(autouse=True)
@@ -429,7 +430,7 @@ def test_allocate_verstr_with_writer_id(exp_storage, monkeypatch):
 
     from vmn_exp.core.writer import allocate_run_verstr
 
-    verstr = allocate_run_verstr(exp_storage, "app", "1.0.0-dev.aaa.bbb")
+    verstr = allocate_run_verstr(exp_storage, "app", "1.0.0-dev.aaa.bbb", suffix=process_suffix())
     assert verstr == "1.0.0-dev.aaa.bbb.pod-abc"
     experiment_writer._WRITER_ID = None
 
@@ -445,7 +446,7 @@ def test_allocate_verstr_writer_id_collision(exp_storage, monkeypatch):
 
     from vmn_exp.core.writer import allocate_run_verstr
 
-    verstr = allocate_run_verstr(exp_storage, "app", "1.0.0-dev.aaa.bbb")
+    verstr = allocate_run_verstr(exp_storage, "app", "1.0.0-dev.aaa.bbb", suffix=process_suffix())
     assert verstr == "1.0.0-dev.aaa.bbb.pod-abc.2"
     experiment_writer._WRITER_ID = None
 
@@ -455,7 +456,7 @@ def test_allocate_verstr_single_user_first_run(exp_storage, monkeypatch):
 
     from vmn_exp.core.writer import allocate_run_verstr
 
-    verstr = allocate_run_verstr(exp_storage, "app", "1.0.0-dev.aaa.bbb")
+    verstr = allocate_run_verstr(exp_storage, "app", "1.0.0-dev.aaa.bbb", suffix=process_suffix())
     assert verstr == "1.0.0-dev.aaa.bbb"
 
 
@@ -465,7 +466,7 @@ def test_allocate_verstr_single_user_second_run(exp_storage, monkeypatch):
 
     from vmn_exp.core.writer import allocate_run_verstr
 
-    verstr = allocate_run_verstr(exp_storage, "app", "1.0.0-dev.aaa.bbb")
+    verstr = allocate_run_verstr(exp_storage, "app", "1.0.0-dev.aaa.bbb", suffix=process_suffix())
     assert verstr == "1.0.0-dev.aaa.bbb.r2"
 
 
@@ -498,7 +499,7 @@ def test_create_from_snapshot_reads_metadata(tmp_path, monkeypatch):
 
     from vmn_exp.cli.experiment import _experiment_create_from_snapshot
 
-    verstr, err = _experiment_create_from_snapshot(storage, "myapp", str(meta_path))
+    verstr, err = _experiment_create_from_snapshot(storage, "myapp", str(meta_path), environ=real_io().env, host=real_io().host)
     assert err is None
     assert verstr is not None
 
@@ -532,7 +533,7 @@ def test_create_from_snapshot_directory_path(tmp_path, monkeypatch):
 
     from vmn_exp.cli.experiment import _experiment_create_from_snapshot
 
-    verstr, err = _experiment_create_from_snapshot(storage, "myapp", str(snap_dir))
+    verstr, err = _experiment_create_from_snapshot(storage, "myapp", str(snap_dir), environ=real_io().env, host=real_io().host)
     assert err is None
     assert verstr is not None
     experiment_writer._WRITER_ID = None
@@ -543,7 +544,7 @@ def test_create_from_snapshot_missing_file(tmp_path):
     from vmn_exp.cli.experiment import _experiment_create_from_snapshot
 
     verstr, err = _experiment_create_from_snapshot(
-        storage, "myapp", str(tmp_path / "nonexistent.yml")
+        storage, "myapp", str(tmp_path / "nonexistent.yml"), environ=real_io().env, host=real_io().host
     )
     assert verstr is None
     assert err == 1
@@ -561,7 +562,7 @@ def test_create_from_snapshot_missing_verstr(tmp_path, monkeypatch):
 
     from vmn_exp.cli.experiment import _experiment_create_from_snapshot
 
-    verstr, err = _experiment_create_from_snapshot(storage, "myapp", str(meta_path))
+    verstr, err = _experiment_create_from_snapshot(storage, "myapp", str(meta_path), environ=real_io().env, host=real_io().host)
     assert verstr is None
     assert err == 1
     experiment_writer._WRITER_ID = None
@@ -596,7 +597,7 @@ def test_create_from_snapshot_with_note_and_extra(tmp_path, monkeypatch):
         "myapp",
         str(meta_path),
         note="my note",
-        extra_create_data={"hypothesis": "test hypothesis"},
+        extra_create_data={"hypothesis": "test hypothesis"}, environ=real_io().env, host=real_io().host
     )
     assert err is None
 
@@ -634,7 +635,7 @@ def test_create_from_snapshot_app_name_from_metadata(tmp_path, monkeypatch):
     verstr, err = _experiment_create_from_snapshot(
         storage,
         None,
-        str(meta_path),
+        str(meta_path), environ=real_io().env, host=real_io().host
     )
     assert err is None
 

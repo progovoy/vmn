@@ -17,6 +17,7 @@ from vmn_exp.core.status import derive_status, load_run_state
 from vmn_exp.core.writer import allocate_run_verstr
 from version_stamp.core.logging import init_stamp_logger
 from vmn_exp.core.real_io import RealClock
+from writer_args import process_suffix
 
 BUCKET = "vmn-bucket"
 
@@ -59,8 +60,8 @@ def _record(host):
 
 def test_two_hosts_on_the_same_commit_get_distinct_verstrs(tmp_path):
     a, b = _host(tmp_path, "a"), _host(tmp_path, "b")
-    va = allocate_run_verstr(a, "app", "0.0.1-dev.abc", make_record=_record("A"))
-    vb = allocate_run_verstr(b, "app", "0.0.1-dev.abc", make_record=_record("B"))
+    va = allocate_run_verstr(a, "app", "0.0.1-dev.abc", make_record=_record("A"), suffix=process_suffix())
+    vb = allocate_run_verstr(b, "app", "0.0.1-dev.abc", make_record=_record("B"), suffix=process_suffix())
     assert va != vb
     hosts = {m["verstr"]: m["host"] for m in _s3().list_snapshots("app")}
     assert hosts == {va: "A", vb: "B"}
@@ -72,7 +73,7 @@ def test_allocation_lists_names_only(tmp_path, monkeypatch):
     monkeypatch.setattr(
         type(a), "list_snapshots", lambda *x: (_ for _ in ()).throw(AssertionError)
     )
-    assert allocate_run_verstr(a, "app", "c", make_record=_record("A")) == "c.r2"
+    assert allocate_run_verstr(a, "app", "c", make_record=_record("A"), suffix=process_suffix()) == "c.r2"
 
 
 def test_s3_create_exclusive_is_conditional():

@@ -13,6 +13,7 @@ from vmn_exp.storage.journal import journaled
 from vmn_exp.storage.local import LocalSnapshotStorage
 from vmn_exp.core.real_io import RealClock
 import time
+from writer_args import process_writer
 
 APP, V, W = "app", "1.0.0-dev.abc.0001", "w"
 
@@ -117,13 +118,13 @@ def test_local_first_ships_the_blocks_appended_after_a_seal_to_the_next_stream(h
     from vmn_exp.core.metric_compact import seal_writer
     from vmn_exp.core.writer import own_stream
 
-    sealed = own_stream(host, APP, V)
+    sealed = own_stream(host, APP, V, writer=process_writer())
     host.append_metric_block(APP, V, sealed, _block(1.0))
     host.append_metric_block(APP, V, sealed, _block(2.0))
     host.sync_metrics_to_remote(APP, V, sealed)
     assert seal_writer(host, APP, V, sealed)
     assert _metric_keys() == [indexed_name(sealed)]
-    following = own_stream(host, APP, V)
+    following = own_stream(host, APP, V, writer=process_writer())
     host.append_metric_block(APP, V, following, _block(3.0))
     host.sync_metrics_to_remote(APP, V, following)
     assert following != sealed

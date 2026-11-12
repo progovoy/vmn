@@ -14,6 +14,7 @@ from vmn_exp.core.writer import (
     sync_to_remote,
 )
 from vmn_exp.core.real_io import real_io
+from writer_args import process_writer
 
 GUEST = guest_writer_id("host")
 
@@ -31,7 +32,7 @@ def _metrics(**values):
 def test_supervisor_and_guest_on_one_copy_append_to_different_streams(host):
     copy = StreamRecorder(owner="o1")
 
-    append_metric_entries(copy, APP, V, [_metrics(loss=1.0)])
+    append_metric_entries(copy, APP, V, [_metrics(loss=1.0)], writer=process_writer())
     append_metric_entries(copy, APP, V, [_metrics(loss=0.5)], writer=GUEST)
 
     assert copy.metric_blocks == ["host~o1", "host-sdk~o1"]
@@ -47,7 +48,7 @@ def test_own_stream_asks_the_storage_for_the_given_writers_owner(host):
 def test_own_stream_without_a_writer_is_unchanged(host):
     copy = StreamRecorder(owner="o7")
 
-    assert own_stream(copy, APP, V) == "host~o7"
+    assert own_stream(copy, APP, V, writer=process_writer()) == "host~o7"
     assert copy.owner_asked == ["host"]
 
 

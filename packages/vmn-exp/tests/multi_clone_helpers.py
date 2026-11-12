@@ -10,6 +10,7 @@ from vmn_exp.core.metric_block import encode_block
 from vmn_exp.core.metric_columns import Columns
 from vmn_exp.core.series_reader import SeriesReader
 from vmn_exp.core.writer import own_stream
+from writer_args import process_writer
 
 APP = "app"
 V = "0.0.1-dev.aaa1111.bbb2222"
@@ -38,7 +39,7 @@ def one_host_bucket(monkeypatch):
 
 def stream(host):
     """The stream *host* appends to in run V: the one a command over it would."""
-    return own_stream(host, APP, V)
+    return own_stream(host, APP, V, writer=process_writer())
 
 
 def flaky(host, rng, p, names, lost_responses=True):

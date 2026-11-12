@@ -11,6 +11,7 @@ from vmn_exp.sdk import start_run
 from vmn_exp.storage.cached import CachedSnapshotStorage
 from vmn_exp.storage.local import LocalSnapshotStorage
 from vmn_exp.storage.areas import local_store_root
+from writer_args import process_writer
 
 APP = "app"
 X = "0.0.1-dev.abc1234.0000001"
@@ -36,7 +37,7 @@ def _meta(timestamp="2026-01-01T00:00:00Z"):
 
 
 def _write_everything(host, tmp_path):
-    assert tag_run(host, APP, X, tags={"k": "v"})
+    assert tag_run(host, APP, X, tags={"k": "v"}, writer=process_writer())
     save_run_state(host, APP, X, {"state": "finished", "exit_code": 0})
     artifact = tmp_path / "model.bin"
     artifact.write_bytes(b"weights")

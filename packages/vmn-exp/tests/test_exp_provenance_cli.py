@@ -7,7 +7,7 @@ import types
 import pytest
 from empty_storage import EmptyStorage
 from version_stamp.core.logging import init_stamp_logger
-from vmn_exp.core.real_io import RealClock, RealConsole
+from vmn_exp.core.real_io import RealClock, RealConsole, real_io
 
 
 @pytest.fixture(autouse=True)
@@ -298,7 +298,8 @@ def test_export_imported_refuses(monkeypatch, caplog):
     )
 
     with caplog.at_level(logging.DEBUG, logger="vmn"):
-        ret = exp_mod.experiment_export(None, {}, storage, _args(), RealConsole())
+        ret = exp_mod.experiment_export(None, {}, storage, _args(), RealConsole(),
+                                        real_io().env, real_io().host)
 
     assert ret == 1
     combined = caplog.text

@@ -21,6 +21,8 @@ import types
 import pytest
 import yaml
 from vmn_exp.core.real_io import RealClock
+from writer_args import process_suffix, process_writer
+from vmn_exp.core.real_io import real_io
 
 
 # ---------------------------------------------------------------------------
@@ -78,7 +80,7 @@ def test_writes_env_yml_and_summary():
     storage = _FakeStorage()
     template = {"app_name": "myapp", "timestamp": "2026-01-01T00:00:00Z"}
     verstr = create_run(
-        storage, "myapp", "0.0.1-dev.abc.def", template, {}, env=env
+        storage, "myapp", "0.0.1-dev.abc.def", template, {}, env=env, writer=process_writer(), suffix=process_suffix()
     )
 
     # Full env.yml must be written next to the record.
@@ -126,7 +128,7 @@ def test_capture_failure_never_fails_create(monkeypatch):
     template = {"app_name": "myapp", "timestamp": "2026-01-01T00:00:00Z"}
     # Must not raise.
     verstr = create_run(
-        storage, "myapp", "0.0.1-dev.abc.def", template, {}, env=env
+        storage, "myapp", "0.0.1-dev.abc.def", template, {}, env=env, writer=process_writer(), suffix=process_suffix()
     )
     assert verstr is not None
     assert verstr in storage.saved
@@ -351,7 +353,7 @@ def test_snapshot_meta_mode_captures(tmp_path, monkeypatch):
 
     env = capture_env()
     verstr, err = create_from_snapshot(
-        storage, "testapp", str(meta_path), env=env
+        storage, "testapp", str(meta_path), env=env, environ=real_io().env, host=real_io().host
     )
     assert err is None, f"create_from_snapshot failed: {err}"
     assert verstr is not None

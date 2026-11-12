@@ -94,9 +94,10 @@ class BulkSpec:
             logs.append(output)
         return "".join(logs)
 
-    def apply(self, storage, batch, hint, now):
-        """Act on *batch* in a store, judging runs at *now*; the log text."""
-        actions = [build_store_action(self.action, self.app_name, body)
+    def apply(self, storage, batch, hint, now, env, host):
+        """Act on *batch* in a store, judging runs at *now*, as the writer of
+        *env* and *host*; the log text."""
+        actions = [build_store_action(self.action, self.app_name, body, env, host)
                    for body in self._bodies(batch)]
         return "\n".join(_built(action, err).run(storage, hint, now) for action, err in actions)
 

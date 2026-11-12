@@ -7,6 +7,7 @@ after the add's other entries, so a ``--note`` lands before the run reads finish
 """
 from vmn_exp._base import VMN_LOGGER
 from vmn_exp.core.run_finish import LIVE, FinishRefusedError, finish_run
+from vmn_exp.core.writer import get_writer_id
 
 
 def add_finish_flags(parser):
@@ -38,7 +39,7 @@ def apply_finish(storage, app_name, verstr, args, io):
     try:
         finish_run(storage, app_name, verstr, args.finish, error=args.finish_error,
                    end_reason=args.end_reason, force=_force(args), random=io.random,
-                   now=io.clock.now())
+                   now=io.clock.now(), writer=get_writer_id(io.env, io.host))
     except FinishRefusedError as exc:
         VMN_LOGGER.error(str(exc))
         return 1

@@ -19,6 +19,7 @@ from vmn_exp.registry.log import set_version_status
 from vmn_exp.registry.store import ensure_model, register_version
 from vmn_exp.core.real_io import RealClock
 from vmn_exp.registry.lineage import app_indexes
+from vmn_exp.core.real_io import real_io
 
 
 # ---------------------------------------------------------------------------
@@ -146,7 +147,7 @@ def test_deleted_model_version_no_longer_protects(app_layout, capfd):
     st = _storage(app_layout)
     ensure_model(st, "mymodel")
     n = register_version(st, "mymodel", {"app": app_layout.app_name, "verstr": run})
-    set_version_status(st, "mymodel", n, "deleted")
+    set_version_status(st, "mymodel", n, "deleted", env=real_io().env, host=real_io().host)
 
     err, out = _prune(app_layout, capfd, keep=0)
     assert err == 0, out
@@ -224,7 +225,7 @@ def test_prune_consumer_run_allowed_version_lineage_marks_missing(app_layout, ca
     producer = _create(app_layout)
     consumer = _create(app_layout)
     _register(app_layout, producer)
-    record_use(_storage(app_layout), "mymodel", 1, app_layout.app_name, consumer)
+    record_use(_storage(app_layout), "mymodel", 1, app_layout.app_name, consumer, env=real_io().env, host=real_io().host)
 
     err, out = _prune(app_layout, capfd, keep=0)
     assert err == 0, out

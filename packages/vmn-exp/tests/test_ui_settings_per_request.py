@@ -42,7 +42,7 @@ def _client(tmp_path):
     verstr = "0.0.1-dev.abc1234.def5678.r1"
     storage.save(APP, verstr, {"verstr": verstr, "timestamp": "2026-01-01T00:00:01Z"}, {})
     storage.save_file(APP, verstr, "run_state.yml", "state: finished\nexit_code: 0\n")
-    write_settings(storage, APP, "metrics: {loss: {goal: min}}\nui: {group_aggregate: min}\n")
+    write_settings(storage, APP, "metrics: {loss: {goal: min}}\nui: {group_aggregate: min}\n", env=real_io().env, host=real_io().host)
     manager = WorkspaceManager(str(tmp_path / "data"))
     manager.add_store("ws", uri)
     return TestClient(create_app(manager, io=real_io()))
@@ -62,7 +62,7 @@ def test_a_zero_window_cache_reads_once_per_request_scope(tmp_path, reads):
     cache = SettingsCache(recheck_sec=0, clock=time.monotonic)
     with request_scope():
         cache.get("ws", storage, APP)
-        write_settings(storage, APP, "ui: {stale_after_min: 2}\n")
+        write_settings(storage, APP, "ui: {stale_after_min: 2}\n", env=real_io().env, host=real_io().host)
         assert cache.get("ws", storage, APP) == {}
         cache.forget("ws", APP)
         assert cache.get("ws", storage, APP) == {"ui": {"stale_after_min": 2}}

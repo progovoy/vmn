@@ -12,6 +12,7 @@ from vmn_exp.core.writer import append_to_log, create_log_entry, flush_log  # no
 from vmn_exp.snapshot import LocalSnapshotStorage  # noqa: E402
 from vmn_exp.ui import routes_search  # noqa: E402
 from vmn_exp.core.real_io import RealClock
+from writer_args import process_writer
 
 APP = "app"
 V = "0.0.1-dev.abc.r1"
@@ -42,8 +43,8 @@ class _Manager:
 def client(tmp_path):
     storage = LocalSnapshotStorage(str(tmp_path / "store"), area="runs")
     storage.save(APP, V, {"verstr": V, "timestamp": "2026-01-01T00:00:00Z"}, {})
-    append_to_log(storage, APP, V, create_log_entry("artifact", path="m.bin", sha256="ab", size=2))
-    flush_log(storage, APP, V)
+    append_to_log(storage, APP, V, create_log_entry("artifact", path="m.bin", sha256="ab", size=2), writer=process_writer())
+    flush_log(storage, APP, V, writer=process_writer())
     snap = direct_snapshot(storage, APP)
     app = FastAPI()
     app.state.manager = _Manager()

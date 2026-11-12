@@ -256,5 +256,5 @@ def test_from_snapshot_is_read_from_the_given_env(monkeypatch):
                         lambda vcs, storage, **kw: (got.update(kw), (VERSTR, None))[1])
     args = argparse.Namespace(note=None, from_snapshot=None)
     run_mod._create_experiment(None, EmptyStorage(), args,
-                               env=FakeEnv({"VMN_SNAPSHOT_METADATA": "/snap.yml"}))
+                               env=FakeEnv({"VMN_SNAPSHOT_METADATA": "/snap.yml"}), host=FakeHost())
     assert got["from_snapshot"] == "/snap.yml"

@@ -83,7 +83,7 @@ def test_the_status_counts_it_running_and_names_it(store):
 
 def test_the_built_in_part_comes_before_configured_ones(store):
     storage, client_of = store
-    write_settings(storage, APP, "ui:\n  attention:\n    - {key: all, query: 'idx > 0'}\n")
+    write_settings(storage, APP, "ui:\n  attention:\n    - {key: all, query: 'idx > 0'}\n", env=real_io().env, host=real_io().host)
     keys = [p["key"] for p in _get(client_of(), "/experiments-status")["attention"]]
     assert keys == ["outlived", "all"]
 

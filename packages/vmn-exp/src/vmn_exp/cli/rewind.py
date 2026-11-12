@@ -20,7 +20,8 @@ def _ref(args):
     return "latest" if getattr(args, "latest", False) else None
 
 
-def experiment_rewind(storage, app_name, args, clock):
+def experiment_rewind(storage, app_name, args, clock, writer):
+    """Rewind the run *args* name, its marker written as *writer*."""
     ref, step = _ref(args), getattr(args, "step", None)
     if ref is None or step is None:
         VMN_LOGGER.error("exp rewind needs a run (-v or --latest) and --step N")
@@ -29,12 +30,13 @@ def experiment_rewind(storage, app_name, args, clock):
         verstr = resolve_run(storage, app_name, ref, "rewind")
         hidden = count_hidden(storage.load_merged_log(app_name, verstr), step)
         rewind_run(storage, app_name, verstr, step,
-                   load_run_state(storage, app_name, verstr) or {}, clock.now())
+                   load_run_state(storage, app_name, verstr) or {}, clock.now(),
+                   writer=writer)
     except (ValueError, RuntimeError) as exc:
         VMN_LOGGER.error(str(exc))
         return 1
     # One-shot command: no heartbeat will ship the marker to a remote later.
-    flush_log(storage, app_name, verstr)
+    flush_log(storage, app_name, verstr, writer)
     rebuild_compacted(storage, app_name, verstr)
     print(f"rewound {verstr} to step {step} (hid {hidden} entries)")
     return 0

@@ -33,6 +33,7 @@ from vmn_exp.core.storage_resolve import try_repo_root
 from vmn_exp.core.values import sanitize_entry
 from vmn_exp.core.writer import (
     append_entries_to_log,
+    get_writer_id,
     split_for_append,
     stamped_entry,
     sync_to_remote,
@@ -255,7 +256,7 @@ def start_run(
         now = io.clock.now()
         resume.check_reopenable(app_name, verstr, prior_state, reopen, not run_id, now)
         if rewind_to_step is not None:
-            start_step = fork.rewind(storage, app_name, verstr, prior_state, rewind_to_step, now)
+            start_step = fork.rewind(storage, app_name, verstr, prior_state, rewind_to_step, now, io)
     elif adopted:
         app_name, storage, verstr, exp_conf = adopted
     else:
@@ -264,10 +265,9 @@ def start_run(
                 app_name, fork_from, fork_step, storage, io.env)
         app_name, storage, verstr, exp_conf = create_record(
             app_name, note, params, parent, nested, storage, name,
-            capture_env=capture_env, code=code, env=io.env,
-        )
+            capture_env=capture_env, code=code, env=io.env, host=io.host)
         if fork_from:
-            start_step = fork.seed(storage, app_name, verstr, source, fork_step)
+            start_step = fork.seed(storage, app_name, verstr, source, fork_step, io)
 
     run = _run_class(adopted)(
         storage,
@@ -376,8 +376,8 @@ class Run(RunMetrics, MetricDefinitions, RunArtifacts, RunMedia, RunAlerts, RunB
         self._clock = clock
         self._host = host
         self._env = env  # what its alert config, output cap and timeouts read
-        # The writer id of this run's own streams; None: the process's.
-        self._writer = writer
+        self._writer = writer  # a writer id of its own for its streams, or None
+        self._stream_writer = writer or get_writer_id(env, host)  # None: the process's, resolved now
         # Installs the process's excepthook and atexit finalizer at open;
         # None installs none.
         self._install_hooks = install_hooks
@@ -420,7 +420,7 @@ class Run(RunMetrics, MetricDefinitions, RunArtifacts, RunMedia, RunAlerts, RunB
             abandon=threading.Event())
         self._refused_warned = False
         self._log_buffer = LogBuffer(
-            functools.partial(append_entries_to_log, storage, app_name, verstr, writer=writer),
+            functools.partial(append_entries_to_log, storage, app_name, verstr, writer=self._stream_writer),
             self._gate,
             split=split_for_append,
             on_refused=self._warn_refused_once,

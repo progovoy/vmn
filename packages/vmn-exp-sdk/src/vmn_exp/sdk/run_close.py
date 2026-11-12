@@ -192,7 +192,7 @@ class RunClose:
             for what, error in self._close_writers(deadline):
                 _LOGGER.warning(self._not_uploaded(what, error))
             self._compact_by(self._storage, self.app_name, self.id,
-                             own_stream(self._storage, self.app_name, self.id, self._writer),
+                             own_stream(self._storage, self.app_name, self.id, self._stream_writer),
                              deadline)
         finally:
             context.closed(self)

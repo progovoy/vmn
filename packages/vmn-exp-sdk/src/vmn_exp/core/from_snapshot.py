@@ -11,7 +11,7 @@ import os
 import yaml
 from vmn_exp._base import VMN_LOGGER, now_iso
 from vmn_exp.core.snapshot_features import export_features
-from vmn_exp.core.writer import create_run
+from vmn_exp.core.writer import create_run, new_run_ids
 
 SNAPSHOT_METADATA_FILE = "vmn_metadata.yml"
 # create_from_snapshot reads the run's features from the tree itself.
@@ -25,9 +25,11 @@ def _meta_file(snapshot_meta_path):
     return snapshot_meta_path
 
 
-def exported_features(snapshot_meta_path):
-    """The ``features`` entry of a run of the exported tree, or None."""
-    return export_features(os.path.dirname(os.path.abspath(_meta_file(snapshot_meta_path))))
+def exported_features(snapshot_meta_path, env, host):
+    """The ``features`` entry of a run of the exported tree, its author as
+    *env* and *host* say, or None."""
+    return export_features(os.path.dirname(os.path.abspath(_meta_file(snapshot_meta_path))),
+                           env, host)
 
 
 def _load_snapshot_meta(snapshot_meta_path):
@@ -95,8 +97,13 @@ def create_from_snapshot(
     name=None,
     env=None,
     features=_READ_FEATURES,
+    *,
+    environ,
+    host,
 ):
-    """Create an experiment from an exported snapshot directory or metadata file.
+    """Create an experiment from an exported snapshot directory or metadata file,
+    as the writer of the process Env *environ* and *host*, named with their
+    run suffix (``writer.create_run``).
 
     Returns ``(verstr, error_code)``; *error_code* is None on success.
 
@@ -124,6 +131,8 @@ def create_from_snapshot(
         parent=parent,
         name=name,
         env=env,
-        features=exported_features(meta_file) if features is _READ_FEATURES else features,
+        features=(exported_features(meta_file, environ, host) if features is _READ_FEATURES
+                  else features),
+        **new_run_ids(environ, host),
     )
     return verstr, None

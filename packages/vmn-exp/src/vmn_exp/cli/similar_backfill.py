@@ -54,14 +54,15 @@ _PATCH_DERIVED = ("features_version", "source", "changed", "commits", "truncated
 _RESTATED = ("features_version", "source")
 
 
-def experiment_similar_backfill(storage, app_name, args, clock):
+def experiment_similar_backfill(storage, app_name, args, clock, writer):
     dry_run = bool(getattr(args, "dry_run", False))
     all_apps = bool(getattr(args, "all_apps", False))
     counts = Counter()
     for app in storage.list_apps() if all_apps else [app_name]:
         if all_apps:
             print(f"{app}:")
-        for verstr, status, detail in backfill_app(storage, app, dry_run, clock=clock):
+        for verstr, status, detail in backfill_app(storage, app, dry_run, clock=clock,
+                                                   writer=writer):
             print(f"{verstr}  {status}" + (f" ({detail})" if detail else ""))
             counts[status] += 1
     summary = ", ".join(f"{s} {counts[s]}" for s in (BACKFILLED, PARTIAL, SKIPPED, FAILED))
@@ -69,7 +70,7 @@ def experiment_similar_backfill(storage, app_name, args, clock):
     return 1 if counts[FAILED] else 0
 
 
-def backfill_app(storage, app_name, dry_run=False, *, clock):
+def backfill_app(storage, app_name, dry_run=False, *, clock, writer):
     """``(verstr, status, detail)`` per run of *app_name*, in storage order;
     *dry_run* derives every entry and appends none. *clock* (a
     :class:`~vmn_exp.core.ports.Clock`): the index's and the statuses'."""
@@ -77,7 +78,8 @@ def backfill_app(storage, app_name, dry_run=False, *, clock):
     code = _CodeFeatures(storage, app_name)
     appended = []
     try:
-        yield from _backfill_rows(storage, app_name, snap, code, dry_run, appended, clock.now())
+        yield from _backfill_rows(storage, app_name, snap, code, dry_run, appended, clock.now(),
+                                  writer)
     finally:
         _refile(storage, app_name, appended, clock)
 
@@ -95,7 +97,7 @@ def _refile(storage, app_name, verstrs, clock):
         VMN_LOGGER.debug("Refreshing the backfilled runs failed", exc_info=True)
 
 
-def _backfill_rows(storage, app_name, snap, code, dry_run, appended, now):
+def _backfill_rows(storage, app_name, snap, code, dry_run, appended, now, writer):
     for row in snap.rows:
         verstr = row["verstr"]
         try:
@@ -107,7 +109,7 @@ def _backfill_rows(storage, app_name, snap, code, dry_run, appended, now):
                                             snap.features_of(verstr), code,
                                             snap.run_states.get(verstr))
             if not dry_run:
-                _append(storage, app_name, verstr, entry)
+                _append(storage, app_name, verstr, entry, writer)
                 appended.append(verstr)
         except Exception as exc:
             VMN_LOGGER.debug(f"Backfilling {verstr} failed", exc_info=True)
@@ -184,12 +186,13 @@ def _counts(entry):
     return ", ".join(plural(n, noun) for n, noun in parts)
 
 
-def _append(storage, app_name, verstr, entry):
+def _append(storage, app_name, verstr, entry, writer):
     log_entry = stamped_entry(entry)
-    if storage.append_log_entry(app_name, verstr, own_stream(storage, app_name, verstr), log_entry) is False:
+    stream = own_stream(storage, app_name, verstr, writer)
+    if storage.append_log_entry(app_name, verstr, stream, log_entry) is False:
         raise RuntimeError("the record is gone")
     # One-shot command: no heartbeat will ship the entry to a remote later.
-    flush_log(storage, app_name, verstr)
+    flush_log(storage, app_name, verstr, writer)
 
 
 class _CodeFeatures:

@@ -36,24 +36,25 @@ def new_rid(random):
     return "r" + base64.b32encode(random.token_bytes(10)).decode().lower()[-12:]
 
 
-def create(storage, title, body, *, random, actor=None):
-    """Claim a new report's header and v1; return its rid."""
+def create(storage, title, body, *, random, actor=None, env, host):
+    """Claim a new report's header and v1 as *actor* (default: the identity of
+    *env* and *host*); return its rid."""
     area = reports_area(storage)
-    actor = actor or actor_identity()
+    actor = actor or actor_identity(env, host)
     rid = new_rid(random)
     while not area.create_exclusive(rid, HEADER, _header_metadata(actor), {}):
         rid = new_rid(random)
-    set_title(storage, rid, title, actor=actor)
+    set_title(storage, rid, title, actor=actor, env=env, host=host)
     _claim_revision(area, rid, 1, 0, body, "", actor)
     return rid
 
 
-def save(storage, rid, base, body, message="", *, actor=None):
+def save(storage, rid, base, body, message="", *, actor=None, env, host):
     """Save *body* on top of revision *base*: the new revision's number
     (``base + 1``, or past claims abandoned unfinished), or a :class:`Conflict`
     carrying the latest revision when a complete revision above *base* exists."""
     area = reports_area(storage)
-    actor = actor or actor_identity()
+    actor = actor or actor_identity(env, host)
     n = base + 1
     while not _claim_revision(area, rid, n, base, body, message, actor):
         newer = _settled_newer(storage, rid, base)

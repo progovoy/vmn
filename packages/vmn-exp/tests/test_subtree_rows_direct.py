@@ -13,6 +13,7 @@ from vmn_exp.core.subtree_direct import subtree_rows_direct
 from vmn_exp.core.tree import annotate_rows
 from vmn_exp.core.writer import create_run, save_run_state
 from vmn_exp.storage.local import LocalSnapshotStorage
+from writer_args import process_suffix, process_writer
 
 APP = "my_app"
 OUTER = "0.0.1-dev.abc.def"
@@ -165,8 +166,8 @@ def test_a_missing_outer_has_no_rows(outer24):
 def test_a_real_local_store(tmp_path):
     storage = LocalSnapshotStorage(str(tmp_path / "root"), area="runs")
     template = {"timestamp": "2026-01-01T00:00:00Z"}
-    outer = create_run(storage, APP, OUTER, template, {})
-    kids = [create_run(storage, APP, OUTER, template, {}, parent=outer) for _ in range(3)]
+    outer = create_run(storage, APP, OUTER, template, {}, writer=process_writer(), suffix=process_suffix())
+    kids = [create_run(storage, APP, OUTER, template, {}, parent=outer, writer=process_writer(), suffix=process_suffix()) for _ in range(3)]
     save_run_state(storage, APP, kids[0], {"state": "finished"}, exit_code=1)
 
     found = subtree_rows_direct(storage, APP, outer)

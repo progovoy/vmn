@@ -19,6 +19,7 @@ from vmn_exp.storage import s3_stats  # noqa: E402
 from vmn_exp.storage.s3 import S3SnapshotStorage  # noqa: E402
 from vmn_exp.ui.store_upkeep import AppUpkeep  # noqa: E402
 from vmn_exp.core.real_io import RealClock
+from writer_args import process_suffix, process_writer
 
 APP = "my_app"
 CODE = "0.0.1-dev.abc.def"
@@ -50,7 +51,7 @@ def _now():
 
 def _dead_run(storage, segments=3):
     """A failed run with *segments* log segments and as many metric segments."""
-    verstr = create_run(storage, APP, CODE, {"timestamp": _now()}, {})
+    verstr = create_run(storage, APP, CODE, {"timestamp": _now()}, {}, writer=process_writer(), suffix=process_suffix())
     for seq in range(1, segments + 1):
         line = json.dumps({"type": "params", "timestamp": _now(), "params": {f"p{seq}": seq}})
         storage.put_log_segment(APP, verstr, "w", seq, (line + "\n").encode())

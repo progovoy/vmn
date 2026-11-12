@@ -9,6 +9,7 @@ from vmn_exp.core.lineage import artifact_ref_uri
 from vmn_exp.registry.log import record_use
 from vmn_exp.registry.names import registry_uri
 from vmn_exp.registry.store import ensure_model, register_version
+from vmn_exp.core.real_io import real_io
 
 pytest.importorskip("fastapi")
 
@@ -48,8 +49,8 @@ def test_run_lineage_lists_reference_datasets(client, app_layout):  # noqa: F811
 
 def test_version_lineage_endpoint(client, app_layout):  # noqa: F811
     storage = _clf(app_layout)
-    record_use(storage, "clf", 1, app_layout.app_name, "0.0.1-exp.eval")
-    record_use(storage, "clf", 1, app_layout.app_name, "0.0.1-exp.gone")
+    record_use(storage, "clf", 1, app_layout.app_name, "0.0.1-exp.eval", env=real_io().env, host=real_io().host)
+    record_use(storage, "clf", 1, app_layout.app_name, "0.0.1-exp.gone", env=real_io().env, host=real_io().host)
 
     resp = client.get(f"{MODELS}/clf/versions/1/lineage")
     assert resp.status_code == 200

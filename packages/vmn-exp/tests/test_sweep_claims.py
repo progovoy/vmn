@@ -15,6 +15,7 @@ from vmn_exp.core.sweep.spec import parse_spec
 from vmn_exp.core.sweep.suggest import grid_point
 from vmn_exp.snapshot import open_storage
 from vmn_exp.core.real_io import RealClock
+from writer_args import process_writer
 
 APP = "my_app"
 SWEEP = "0.0.1-dev.aaaaaaa.bbbbbbb"
@@ -45,7 +46,7 @@ def _drain(storage, spec, agent, out, sweep=SWEEP):
 
 def test_slots_live_in_the_sweeps_area_scoped_by_app_key_and_sweep(tmp_path):
     storage = _local(tmp_path)
-    claim_next_trial(storage, "root/svc", SWEEP, _grid())
+    claim_next_trial(storage, "root/svc", SWEEP, _grid(), agent=process_writer())
     slot = tmp_path / "sweeps" / f"root-svc~{SWEEP}" / "t0" / "metadata.yml"
     assert os.path.isfile(slot)
     assert storage.list_apps() == []
@@ -57,7 +58,7 @@ def test_sequential_claims_walk_the_grid_then_stop(tmp_path):
     _drain(storage, spec, "a", claims)
     assert [c["trial"] for c in claims] == list(range(6))
     assert [c["params"] for c in claims] == [grid_point(spec, n) for n in range(6)]
-    assert claim_next_trial(storage, APP, SWEEP, spec) is None
+    assert claim_next_trial(storage, APP, SWEEP, spec, agent=process_writer()) is None
 
 
 def test_run_cap_bounds_the_claims(tmp_path):
@@ -138,7 +139,7 @@ def test_parallel_agents_on_a_shared_bucket_never_duplicate_a_trial(monkeypatch)
 
 def test_a_retry_is_claimed_once_and_keeps_the_trial_params(tmp_path):
     storage, spec = _local(tmp_path), _grid(run_cap=2)
-    original = claim_next_trial(storage, APP, SWEEP, spec)
+    original = claim_next_trial(storage, APP, SWEEP, spec, agent=process_writer())
     retry = claim_retry(storage, APP, SWEEP, original["trial"], agent="b")
     assert retry["trial"] == original["trial"]
     assert retry["attempt"] == 1
@@ -147,4 +148,4 @@ def test_a_retry_is_claimed_once_and_keeps_the_trial_params(tmp_path):
     again = claim_retry(storage, APP, SWEEP, original["trial"], agent="c")
     assert again["attempt"] == 2
     # Retries never consume a new trial slot.
-    assert claim_next_trial(storage, APP, SWEEP, spec)["trial"] == 1
+    assert claim_next_trial(storage, APP, SWEEP, spec, agent=process_writer())["trial"] == 1

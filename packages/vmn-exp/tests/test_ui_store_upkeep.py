@@ -17,6 +17,7 @@ from vmn_exp.core.writer import create_run
 from vmn_exp.storage.local import LocalSnapshotStorage
 from vmn_exp.ui.store_upkeep import AppUpkeep, StoreUpkeep
 from vmn_exp.core.real_io import RealClock, real_io
+from writer_args import process_suffix, process_writer
 
 APP = "my_app"
 CODE = "0.0.1-dev.abc.def"
@@ -28,7 +29,7 @@ def _now():
 
 def _run(storage, parent=None, exit_code="none", points=True):
     """A run; *exit_code* None = running, an int = finished, "none" = no state."""
-    verstr = create_run(storage, APP, CODE, {"timestamp": _now()}, {}, parent=parent)
+    verstr = create_run(storage, APP, CODE, {"timestamp": _now()}, {}, parent=parent, writer=process_writer(), suffix=process_suffix())
     if points:
         w = MetricWriter(storage, APP, verstr, "w", clock=time.time)
         for step in range(1, 4):

@@ -6,6 +6,7 @@ from vmn_exp.core.sweep.peer_points import PeerPoints, metric_points
 from vmn_exp.core.writer import append_to_log, create_log_entry
 from vmn_exp.storage.open import open_storage
 from vmn_exp.core.real_io import RealClock
+from writer_args import process_writer
 
 APP = "my_app"
 
@@ -15,7 +16,7 @@ def _storage(tmp_path):
 
 
 def _log(storage, verstr, step, **values):
-    append_to_log(storage, APP, verstr, create_log_entry("metrics", step=step, values=values))
+    append_to_log(storage, APP, verstr, create_log_entry("metrics", step=step, values=values), writer=process_writer())
 
 
 def _counting_loads(monkeypatch):

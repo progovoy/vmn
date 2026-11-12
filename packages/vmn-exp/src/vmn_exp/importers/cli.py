@@ -16,6 +16,8 @@ import os
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any, Iterator
 
+from vmn_exp.core.writer import get_writer_id
+
 _LOG = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
@@ -78,6 +80,7 @@ def _import_one(
     skip_artifacts: bool,
     refresh_features: bool = False,
     commit_changes=None,
+    writer=None,
 ) -> tuple[str, str]:
     """Import a single run; return (outcome, run_id).
 
@@ -90,7 +93,7 @@ def _import_one(
     try:
         outcome = import_run(storage, app_name, run, skip_artifacts=skip_artifacts,
                              refresh_features=refresh_features,
-                             commit_changes=commit_changes)
+                             commit_changes=commit_changes, writer=writer)
         return outcome, run_id
     except Exception:
         _LOG.exception("import-mlflow: failed to import run %s", run_id)
@@ -166,7 +169,8 @@ def import_mlflow_run_without_repo(args, io) -> int | None:
         # objects as futures complete.
         futures: dict[Any, str] = {
             pool.submit(_import_one, storage, app_name, run, skip_artifacts,
-                        refresh_features, commit_changes): run.get("run_id", "unknown")
+                        refresh_features, commit_changes,
+                        get_writer_id(io.env, io.host)): run.get("run_id", "unknown")
             for run in runs
         }
         for future in as_completed(futures):

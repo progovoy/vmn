@@ -17,6 +17,7 @@ from vmn_exp.storage.uri import s3_uri
 from vmn_exp.storage.areas import local_store_root
 from vmn_exp.core.real_io import RealClock
 from vmn_exp.core.real_io import real_io
+from writer_args import process_suffix
 
 URI = s3_uri(BUCKET, PREFIX)
 CODE = "0.0.1-dev.abc1234.0000001"
@@ -114,6 +115,7 @@ def _claim_run(storage, suffix_kw):
         return {"verstr": verstr, "timestamp": "2026-01-01T00:00:00Z"}, {}
 
     return allocate_run_verstr(storage, "app", CODE, make_record=make_record,
+                               **({} if "suffix" in suffix_kw else {"suffix": process_suffix()}),
                                **suffix_kw)
 
 

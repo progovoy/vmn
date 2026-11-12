@@ -10,6 +10,7 @@ from vmn_exp.core.writer import create_run
 from vmn_exp.storage.cached import CachedSnapshotStorage
 from vmn_exp.storage.local import LocalSnapshotStorage
 from vmn_exp.core.real_io import RealClock
+from writer_args import process_suffix, process_writer
 
 APP = "my_app"
 CODE = "0.0.1-dev.abc.def"
@@ -17,7 +18,7 @@ CODE = "0.0.1-dev.abc.def"
 
 def _run(storage, parent=None):
     return create_run(storage, APP, CODE, {"timestamp": "2026-01-01T00:00:00Z"}, {},
-                      parent=parent)
+                      parent=parent, writer=process_writer(), suffix=process_suffix())
 
 
 @pytest.fixture

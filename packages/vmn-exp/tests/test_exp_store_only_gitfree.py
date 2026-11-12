@@ -10,6 +10,7 @@ from vmn_exp.cli.main import vmn_exp_run
 from vmn_exp.core.writer import create_run
 from vmn_exp.storage.open import open_storage
 from vmn_exp.core.real_io import RealClock, real_io
+from writer_args import process_suffix, process_writer
 
 APP = "trainer"
 CODE = "1.2.0-dev.abc1234.def5678"
@@ -25,9 +26,9 @@ def store_root(tmp_path, monkeypatch):
     """An outer run whose child lost its marker, in a store next to no checkout."""
     root = tmp_path / "exps"
     storage = open_storage(None, str(root), area="runs", clock=RealClock(), env=os.environ)
-    outer = create_run(storage, APP, CODE, {"timestamp": "2026-01-01T00:00:00Z"}, {})
+    outer = create_run(storage, APP, CODE, {"timestamp": "2026-01-01T00:00:00Z"}, {}, writer=process_writer(), suffix=process_suffix())
     kid = create_run(storage, APP, CODE, {"timestamp": "2026-01-01T00:00:01Z"}, {},
-                     parent=outer)
+                     parent=outer, writer=process_writer(), suffix=process_suffix())
     storage.unmark_child(APP, outer, kid)
     for verstr in (outer, kid):
         storage.save_file(APP, verstr, "run_state.yml", yaml.dump(_finished()))

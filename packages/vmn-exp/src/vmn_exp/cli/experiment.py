@@ -28,7 +28,7 @@ from vmn_exp.storage.store_marker import require_store
 from vmn_exp.gitmode.coldstart import cold_start_notice, init_tracking
 import vmn_exp.core.writer as experiment_writer
 from vmn_exp.core.refs import resolve_experiment, resolve_parent
-from vmn_exp.core.writer import append_to_log, merge_conf_into_params
+from vmn_exp.core.writer import append_to_log, get_writer_id, merge_conf_into_params
 from version_stamp.api import VMN_LOGGER, measure_runtime_decorator, now_iso
 from vmn_exp.cli.inputs_arg import parse_input_arg
 from vmn_exp.core.inputs import create_input_entry
@@ -69,15 +69,15 @@ from vmn_exp.cli.list_layout import (  # noqa: F401
 )
 
 
-def _append_inputs(storage, app_name, verstr, inputs_list):
-    """Append one input log entry per ``--input`` argument."""
+def _append_inputs(storage, app_name, verstr, inputs_list, writer):
+    """Append one input log entry per ``--input`` argument, as *writer*."""
     if not inputs_list:
         return
     ts = now_iso()
     for raw in inputs_list:
         name, uri, digest = parse_input_arg(raw)
         entry = create_input_entry(uri, name=name, digest=digest, ts=ts)
-        append_to_log(storage, app_name, verstr, entry)
+        append_to_log(storage, app_name, verstr, entry, writer)
 
 
 @dataclass
@@ -309,11 +309,11 @@ def handle_experiment(vmn_ctx, io):
         return 1
 
     if action in MANAGE_ACTIONS:
-        return experiment_manage(_app_name(vcs, args), storage, args)
+        return experiment_manage(_app_name(vcs, args), storage, args, get_writer_id(io.env, io.host))
     if action == "create":
         return experiment_create(vcs, params, storage, args,
                                  repo_lock=getattr(vmn_ctx, "repo_lock", None), clock=io.clock,
-                                 env=io.env)
+                                 env=io.env, host=io.host)
     elif action == "run":
         return experiment_run(
             vcs, params, storage, args, repo_lock=getattr(vmn_ctx, "repo_lock", None), io=io
@@ -337,7 +337,7 @@ def handle_experiment(vmn_ctx, io):
     elif action == "restore":
         return experiment_restore(vcs, params, storage, args, io.clock, io.env)
     elif action == "export":
-        return experiment_export(vcs, params, storage, args, io.console)
+        return experiment_export(vcs, params, storage, args, io.console, io.env, io.host)
     elif action == "prune":
         return experiment_prune(vcs, params, storage, args, io.clock)
     elif action == "importance":
@@ -349,7 +349,7 @@ def handle_experiment(vmn_ctx, io):
 
         return experiment_watch(vcs, storage, _app_name(vcs, args), args, io.clock, io.env)
     elif action == "rewind":
-        return experiment_rewind(vcs, params, storage, args, io.clock)
+        return experiment_rewind(vcs, params, storage, args, io)
     elif action == "export-metrics":
         from vmn_exp.cli.export_metrics import experiment_export_metrics
 
@@ -365,7 +365,7 @@ def handle_experiment(vmn_ctx, io):
     elif action == "similar":
         return experiment_similar(vcs, params, storage, args, io.clock)
     elif action == "similar-backfill":
-        return experiment_similar_backfill(vcs, params, storage, args, io.clock)
+        return experiment_similar_backfill(vcs, params, storage, args, io)
     elif action == "backfill-children":
         return experiment_backfill_children(vcs, params, storage, args)
     else:
@@ -374,10 +374,10 @@ def handle_experiment(vmn_ctx, io):
 
 
 
-def experiment_rewind(vcs, params, storage, args, clock):
+def experiment_rewind(vcs, params, storage, args, io):
     from vmn_exp.cli.rewind import experiment_rewind as rewind
 
-    return rewind(storage, _app_name(vcs, args), args, clock)
+    return rewind(storage, _app_name(vcs, args), args, io.clock, get_writer_id(io.env, io.host))
 
 
 def experiment_similar(vcs, params, storage, args, clock):
@@ -386,10 +386,10 @@ def experiment_similar(vcs, params, storage, args, clock):
     return similar(vcs, storage, _app_name(vcs, args), args, clock)
 
 
-def experiment_similar_backfill(vcs, params, storage, args, clock):
+def experiment_similar_backfill(vcs, params, storage, args, io):
     from vmn_exp.cli.similar_backfill import experiment_similar_backfill as backfill
 
-    return backfill(storage, _app_name(vcs, args), args, clock)
+    return backfill(storage, _app_name(vcs, args), args, io.clock, get_writer_id(io.env, io.host))
 
 
 def experiment_backfill_children(vcs, params, storage, args):

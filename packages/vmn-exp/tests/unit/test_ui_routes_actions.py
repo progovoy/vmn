@@ -9,6 +9,7 @@ from vmn_exp.ui.memo import TTLCache
 from vmn_exp.ui.server_context import ServerContext
 from fakes.clock import FakeClock
 from fakes.env import FakeEnv
+from fakes.host import FakeHost
 
 PREFIX = "/api/v1"
 RUN = "0.0.1-dev.a"
@@ -79,7 +80,8 @@ def _client(ws, jobs, read_only=False, rows=()):
                         open_edit_storage=_refuse, probe_store=_refuse, app_exists=_refuse, clock=FakeClock(),
                         env=FakeEnv())
     app = FastAPI()
-    routes_actions.register(app, PREFIX, ctx, jobs, FakeLeaderboards(list(rows)), read_only)
+    routes_actions.register(app, PREFIX, ctx, jobs, FakeLeaderboards(list(rows)), read_only,
+                            SimpleNamespace(env=FakeEnv(), host=FakeHost()))
     return TestClient(app)
 
 

@@ -88,7 +88,7 @@ def _grouped(client):
 def test_a_store_workspace_takes_the_schema_from_its_settings(store):
     client_of, storage = store
     runs = _runs(storage)
-    write_settings(storage, APP, "metrics: {loss: {goal: max, primary: true}}\n")
+    write_settings(storage, APP, "metrics: {loss: {goal: max, primary: true}}\n", env=real_io().env, host=real_io().host)
     client = client_of()
     assert client.get(f"{BASE}/metrics-schema").json() == {
         "loss": {"goal": "max", "primary": True}}
@@ -101,7 +101,7 @@ def test_a_store_setting_beats_a_run_declaration(store):
     low = _run(storage, 1, [_loss(0.1)])
     high = _run(storage, 2, [{"type": "define_metric", "name": "loss", "goal": "max"},
                              _loss(0.9)])
-    write_settings(storage, APP, "metrics: {loss: {goal: min}}\n")
+    write_settings(storage, APP, "metrics: {loss: {goal: min}}\n", env=real_io().env, host=real_io().host)
     client = client_of()
     assert client.get(f"{BASE}/metrics-schema").json() == {"loss": {"goal": "min"}}
     rows = client.get(f"{BASE}/experiments", params={"sort": "loss"}).json()
@@ -111,7 +111,7 @@ def test_a_store_setting_beats_a_run_declaration(store):
 def test_a_store_workspace_takes_the_group_aggregate_from_its_settings(store):
     client_of, storage = store
     runs = _runs(storage)
-    write_settings(storage, APP, "metrics: {loss: {goal: min}}\nui: {group_aggregate: min}\n")
+    write_settings(storage, APP, "metrics: {loss: {goal: min}}\nui: {group_aggregate: min}\n", env=real_io().env, host=real_io().host)
     body = _grouped(client_of())
     assert body["aggregate"] == "min"
     assert [g["key"] for g in body["groups"]] == [runs[1], runs[4]]
@@ -120,7 +120,7 @@ def test_a_store_workspace_takes_the_group_aggregate_from_its_settings(store):
 def test_a_settings_summary_policy_summarizes_store_rows(store):
     client_of, storage = store
     verstr = _run(storage, 1, [_loss(5.0), _loss(1.0), _loss(3.0)])
-    write_settings(storage, APP, "metrics: {loss: {summary: min}}\n")
+    write_settings(storage, APP, "metrics: {loss: {summary: min}}\n", env=real_io().env, host=real_io().host)
     (row,) = client_of().get(f"{BASE}/experiments").json()
     assert row["verstr"] == verstr and row["metrics"]["loss"] == 1.0
 
@@ -129,7 +129,7 @@ def test_a_git_workspace_reads_settings_below_its_conf(repo):
     client, root, storage = repo
     runs = _runs(storage)
     write_settings(storage, APP, "metrics: {loss: {goal: max}, acc: {goal: max}}\n"
-                                 "ui: {group_aggregate: min}\n")
+                                 "ui: {group_aggregate: min}\n", env=real_io().env, host=real_io().host)
     _conf(root, {"metrics": {"loss": {"goal": "min"}}})
     assert client.get(f"{BASE}/metrics-schema").json() == {
         "loss": {"goal": "min"}, "acc": {"goal": "max"}}
@@ -190,7 +190,7 @@ def test_a_store_workspace_takes_the_default_split_from_its_settings(store):
     outer = _run(storage, 1, [])
     for n, kind in [(2, "trial"), (3, "trial"), (4, "refit")]:
         _run(storage, n, [{"type": "tags", "set": {"kind": kind}}], parent=1)
-    write_settings(storage, APP, "ui: {split_by: tags.kind}\n")
+    write_settings(storage, APP, "ui: {split_by: tags.kind}\n", env=real_io().env, host=real_io().host)
     body = client_of().get(f"{BASE}/experiments/{outer}/summary").json()
     assert body["split"] == "tags.kind"
     assert [(e["key"], e["total"]) for e in body["by"]] == [("trial", 2), ("refit", 1)]

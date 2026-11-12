@@ -47,14 +47,14 @@ def _stored(comment):
 
 
 def comment_run_without_repo(args, io):
-    return comment_run(_get_storage(args, io.clock, io.env), args, io.random)
+    return comment_run(_get_storage(args, io.clock, io.env), args, io.random, io.env, io.host)
 
 
-def comment_run(storage, args, random):
+def comment_run(storage, args, random, env, host):
     target = _target(storage, args)
     if target is None:
         return 1
-    comment_id = comments.add(storage, target, args.text, random=random)
+    comment_id = comments.add(storage, target, args.text, random=random, env=env, host=host)
     print(dumps({"id": comment_id}) if args.json else comment_id)
     return 0
 

@@ -137,9 +137,11 @@ def test_settings_are_rechecked_after_recheck_sec_on_the_given_clock(tmp_path):
     clock = FakeClock()
     source, ws = _source(tmp_path, clock), types.SimpleNamespace(name="ws", kind="s3")
     storage = LocalSnapshotStorage(str(tmp_path / "store"), "runs")
-    write_settings(storage, APP, "ui: {stale_after_min: 1}\n", actor="t")
+    write_settings(storage, APP, "ui: {stale_after_min: 1}\n", actor="t", env=FakeEnv(),
+                   host=FakeHost())
     source.app_settings(ws, APP, storage)
-    write_settings(storage, APP, "ui: {stale_after_min: 2}\n", actor="t")
+    write_settings(storage, APP, "ui: {stale_after_min: 2}\n", actor="t", env=FakeEnv(),
+                   host=FakeHost())
 
     clock.advance(59)
     assert source.app_settings(ws, APP, storage)["ui"]["stale_after_min"] == 1

@@ -83,9 +83,12 @@ class _JournalState:
 
 
 def _writer_id():
-    from vmn_exp.core.writer import process_writer_id
+    """The writer id this process resolved (``get_writer_id``), else its
+    stream owner id: a journal key only needs a name unique to its writer."""
+    from vmn_exp.core.streams import process_owner
+    from vmn_exp.core.writer import resolved_writer_id
 
-    return process_writer_id()
+    return resolved_writer_id() or process_owner()
 
 
 def _is_heartbeat(filename, data):

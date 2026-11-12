@@ -6,6 +6,7 @@ from vmn_exp.reports import store as rstore
 from vmn_exp.storage.areas import REPORTS
 from vmn_exp.storage.local import LocalSnapshotStorage
 from vmn_exp.core.real_io import RealRandom
+from vmn_exp.core.real_io import real_io
 
 
 @pytest.fixture(autouse=True)
@@ -30,34 +31,34 @@ def _abandon(storage, rid, n):
 
 
 def test_abandoned_v1_does_not_block_first_save(storage):
-    rid = rstore.create(storage, "t", "lost", random=RealRandom())
+    rid = rstore.create(storage, "t", "lost", random=RealRandom(), env=real_io().env, host=real_io().host)
     _abandon(storage, rid, 1)
     report = rstore.get(storage, rid)
     assert report["rev"] == 0
-    rev = rstore.save(storage, rid, report["rev"], "saved")
+    rev = rstore.save(storage, rid, report["rev"], "saved", env=real_io().env, host=real_io().host)
     assert isinstance(rev, int) and rev > 1
     got = rstore.get(storage, rid)
     assert got["rev"] == rev and got["body"] == "saved"
-    assert rstore.save(storage, rid, rev, "next") == rev + 1
+    assert rstore.save(storage, rid, rev, "next", env=real_io().env, host=real_io().host) == rev + 1
 
 
 def test_abandoned_later_claim_does_not_block_save(storage):
-    rid = rstore.create(storage, "t", "one", random=RealRandom())
-    assert rstore.save(storage, rid, 1, "two") == 2
-    rstore.save(storage, rid, 2, "lost")
+    rid = rstore.create(storage, "t", "one", random=RealRandom(), env=real_io().env, host=real_io().host)
+    assert rstore.save(storage, rid, 1, "two", env=real_io().env, host=real_io().host) == 2
+    rstore.save(storage, rid, 2, "lost", env=real_io().env, host=real_io().host)
     _abandon(storage, rid, 3)
     report = rstore.get(storage, rid)
     assert report["rev"] == 2 and report["body"] == "two"
-    rev = rstore.save(storage, rid, 2, "mine")
+    rev = rstore.save(storage, rid, 2, "mine", env=real_io().env, host=real_io().host)
     assert isinstance(rev, int) and rev > 3
     assert rstore.revision(storage, rid, rev)["base"] == 2
     assert rstore.get(storage, rid)["body"] == "mine"
 
 
 def test_complete_revision_past_abandoned_claim_is_a_conflict(storage):
-    rid = rstore.create(storage, "t", "one", random=RealRandom())
+    rid = rstore.create(storage, "t", "one", random=RealRandom(), env=real_io().env, host=real_io().host)
     _abandon(storage, rid, 1)
-    winner = rstore.save(storage, rid, 0, "theirs")
-    result = rstore.save(storage, rid, 0, "mine")
+    winner = rstore.save(storage, rid, 0, "theirs", env=real_io().env, host=real_io().host)
+    result = rstore.save(storage, rid, 0, "mine", env=real_io().env, host=real_io().host)
     assert isinstance(result, rstore.Conflict)
     assert result.rev == winner and result.body == "theirs"

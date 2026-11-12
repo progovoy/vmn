@@ -7,7 +7,6 @@ snapshots the checkout) and supervised without it — the same split as
 """
 import copy
 import json
-import os
 import threading
 
 from vmn_exp.cli.run import _create_experiment, _Supervision
@@ -21,7 +20,7 @@ from vmn_exp.core.sweep.early_stop import stopper_for
 from vmn_exp.core.sweep.peer_points import PeerPoints
 from vmn_exp.core.sweep.spec import metric_definition
 from vmn_exp.core.sweep.summary import history, retry_slots, trial_rows
-from vmn_exp.core.writer import append_to_log, process_writer_id
+from vmn_exp.core.writer import append_to_log, get_writer_id
 from vmn_exp.sdk.sweep import SWEEP_PARAMS_ENV
 from version_stamp.api import VMN_LOGGER
 
@@ -33,7 +32,7 @@ def run_agent(vcs, storage, args, sweep, spec, repo_lock=None, *, io):
     require_command(spec, getattr(args, "run_cmd", None))
     if repo_lock is not None:
         repo_lock.release()  # re-taken only around each trial's creation
-    agent = f"{process_writer_id()}:{os.getpid()}"
+    agent = agent_id(io.env, io.host)
     base_name = (storage.load_metadata(vcs.name, sweep) or {}).get("name") or "sweep"
     ran = 0
     while args.count is None or ran < args.count:
@@ -51,6 +50,11 @@ def run_agent(vcs, storage, args, sweep, spec, repo_lock=None, *, io):
             break
     VMN_LOGGER.info(f"Sweep {sweep}: agent ran {ran} trial(s)")
     return 0
+
+
+def agent_id(env, host):
+    """A claim's agent: the writer id of *env* and *host*, and the host's pid."""
+    return f"{get_writer_id(env, host)}:{host.pid()}"
 
 
 def _next_claim(storage, app_name, sweep, spec, agent, retry_failed, clock):
@@ -84,7 +88,7 @@ def _run_trial(vcs, storage, args, sweep, spec, claim, base_name, repo_lock, io)
     try:
         _, verstr, err = _create_experiment(
             vcs, storage, trial_args, extra_create_data={"params": params, "tags": tags},
-            env=io.env,
+            env=io.env, host=io.host,
         )
     finally:
         if repo_lock is not None:
@@ -92,7 +96,8 @@ def _run_trial(vcs, storage, args, sweep, spec, claim, base_name, repo_lock, io)
     if err is not None:
         return None
     attach_run(storage, claim, verstr)
-    append_to_log(storage, vcs.name, verstr, metric_definition(spec))
+    append_to_log(storage, vcs.name, verstr, metric_definition(spec),
+                  get_writer_id(io.env, io.host))
 
     env = {"VMN_SWEEP_ID": sweep, "VMN_SWEEP_TRIAL": str(trial),
            SWEEP_PARAMS_ENV: json.dumps(params)}

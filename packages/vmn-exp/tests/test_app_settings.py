@@ -15,6 +15,7 @@ from vmn_exp.storage.cached import CachedSnapshotStorage
 from vmn_exp.storage.journal import journaled
 from vmn_exp.storage.local import LocalSnapshotStorage
 import time
+from vmn_exp.core.real_io import real_io
 
 APP = "root_app/svc"
 TEXT = """\
@@ -94,30 +95,30 @@ def test_conf_beats_settings_per_metric_and_per_ui_key():
 def test_settings_round_trip_keeps_the_text(tmp_path):
     storage = _store(tmp_path)
     assert read_settings(storage, APP) == {} and read_settings_text(storage, APP) is None
-    write_settings(storage, APP, TEXT, actor={"name": "ann"})
+    write_settings(storage, APP, TEXT, actor={"name": "ann"}, env=real_io().env, host=real_io().host)
     assert read_settings_text(storage, APP) == TEXT
     assert read_settings(storage, APP) == parse_settings(TEXT)
-    write_settings(storage, APP, "ui: {group_aggregate: min}\n")
+    write_settings(storage, APP, "ui: {group_aggregate: min}\n", env=real_io().env, host=real_io().host)
     assert read_settings(storage, APP) == {"ui": {"group_aggregate": "min"}}
 
 
 def test_settings_live_in_the_settings_area(tmp_path):
-    write_settings(_store(tmp_path), APP, TEXT)
+    write_settings(_store(tmp_path), APP, TEXT, env=real_io().env, host=real_io().host)
     path = tmp_path / "store" / "settings" / "root_app-svc" / "app" / "experiment.yml"
     assert path.read_text() == TEXT
 
 
 def test_an_invalid_write_changes_nothing(tmp_path):
     storage = _store(tmp_path)
-    write_settings(storage, APP, TEXT)
+    write_settings(storage, APP, TEXT, env=real_io().env, host=real_io().host)
     with pytest.raises(SettingsError):
-        write_settings(storage, APP, "ui: {group_aggregate: sum}\n")
+        write_settings(storage, APP, "ui: {group_aggregate: sum}\n", env=real_io().env, host=real_io().host)
     assert read_settings_text(storage, APP) == TEXT
 
 
 def test_a_broken_stored_file_reads_as_no_settings(tmp_path):
     storage = _store(tmp_path)
-    write_settings(storage, APP, TEXT)
+    write_settings(storage, APP, TEXT, env=real_io().env, host=real_io().host)
     (tmp_path / "store" / "settings" / "root_app-svc" / "app" / "experiment.yml").write_text(
         "metrics: [\n")
     assert read_settings(storage, APP) == {}
@@ -125,7 +126,7 @@ def test_a_broken_stored_file_reads_as_no_settings(tmp_path):
 
 def test_a_write_puts_a_settings_journal_entry(tmp_path):
     sink = RecordingSink()
-    write_settings(_store(tmp_path, sink), APP, TEXT)
+    write_settings(_store(tmp_path, sink), APP, TEXT, env=real_io().env, host=real_io().host)
     scopes = {(k.area, k.app_key) for k in map(decode_key, sink.keys)}
     assert scopes == {("settings", "root_app-svc")}
 
@@ -133,15 +134,15 @@ def test_a_write_puts_a_settings_journal_entry(tmp_path):
 def test_a_local_first_storage_reads_and_writes_the_remote(tmp_path):
     remote = LocalSnapshotStorage(str(tmp_path / "remote"), "runs")
     cached = CachedSnapshotStorage(LocalSnapshotStorage(str(tmp_path / "local"), "runs"), remote)
-    write_settings(cached, APP, TEXT)
+    write_settings(cached, APP, TEXT, env=real_io().env, host=real_io().host)
     assert read_settings_text(remote, APP) == TEXT
-    write_settings(remote, APP, "ui: {stale_after_min: 9}\n")  # another host
+    write_settings(remote, APP, "ui: {stale_after_min: 9}\n", env=real_io().env, host=real_io().host)  # another host
     assert read_settings(cached, APP) == {"ui": {"stale_after_min": 9}}
 
 
 def test_a_root_holding_settings_is_not_taken_for_a_v1_store(tmp_path):
     from vmn_exp.storage.store_marker import forget_checked, require_store
 
-    write_settings(_store(tmp_path), APP, TEXT)
+    write_settings(_store(tmp_path), APP, TEXT, env=real_io().env, host=real_io().host)
     forget_checked()
     require_store(_store(tmp_path))

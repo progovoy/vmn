@@ -36,22 +36,23 @@ def write_features_file(dest, log, exported_by):
                        f, sort_keys=False)
 
 
-def export_features(tree_dir):
-    """The ``features`` entry of a run created from the tree at *tree_dir*, or None."""
+def export_features(tree_dir, env, host):
+    """The ``features`` entry of a run created from the tree at *tree_dir*, its
+    author as *env* and *host* say, or None."""
     try:
-        return _entry(tree_dir, _exported(tree_dir))
+        return _entry(tree_dir, _exported(tree_dir), env, host)
     except Exception as exc:
         VMN_LOGGER.warning(f"Could not record the run's features ({exc}); "
                            "the run is created without them")
         return None
 
 
-def _entry(tree_dir, exported):
+def _entry(tree_dir, exported, env, host):
     source = exported.get("features")
     source = source if isinstance(source, dict) else None
     exporter = exported.get("exported_by")
     exporter_email = exporter.get("git_user_email") if isinstance(exporter, dict) else None
-    author = run_author(tree_dir, [("export", exporter_email), env_author()])
+    author = run_author(env, host, tree_dir, [("export", exporter_email), env_author(env)])
     entry = build_features_entry("export", author=author, **code_facts(source))
     entry["features_version"] = source["features_version"] if source else AUTHOR_ONLY_VERSION
     return entry

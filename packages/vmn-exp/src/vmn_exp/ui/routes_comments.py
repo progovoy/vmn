@@ -30,9 +30,10 @@ def parse_target(raw):
     raise HTTPException(400, f"Invalid comment target {raw!r}")
 
 
-def register(app, api_prefix, any_exp_storage, random):
+def register(app, api_prefix, any_exp_storage, io):
     """*any_exp_storage(ws_name)* returns the workspace's experiment storage;
-    *random* draws new comment ids."""
+    *io*'s random draws new comment ids; the server's writes are the writer's
+    of its env and host."""
     base = f"{api_prefix}/workspaces/{{ws_name}}/comments"
 
     def _require_rw():
@@ -58,8 +59,9 @@ def register(app, api_prefix, any_exp_storage, random):
             raise HTTPException(400, "text must be a non-empty string")
         reply_to, anchor = comment_links(body)
         comment_id = comments.add(any_exp_storage(ws_name), target, text,
-                                  reply_to=reply_to, anchor=anchor, author=author_of(request),
-                                  random=random)
+                                  reply_to=reply_to, anchor=anchor,
+                                  author=author_of(request, io.env, io.host), random=io.random,
+                                  env=io.env, host=io.host)
         return {"id": comment_id}
 
     @app.patch(f"{base}/{{target:path}}/{{comment_id}}", dependencies=[require(EDITOR)])
@@ -71,9 +73,9 @@ def register(app, api_prefix, any_exp_storage, random):
         storage = any_exp_storage(ws_name)
         require_author_or_admin(request, ws_name, _existing(storage, parsed, comment_id)["author"])
         if isinstance(body.get("text"), str):
-            comments.edit(storage, parsed, comment_id, body["text"])
+            comments.edit(storage, parsed, comment_id, body["text"], env=io.env, host=io.host)
         if "resolved" in body:
-            comments.resolve(storage, parsed, comment_id, body["resolved"])
+            comments.resolve(storage, parsed, comment_id, body["resolved"], env=io.env, host=io.host)
         return {}
 
     @app.delete(f"{base}/{{target:path}}/{{comment_id}}", dependencies=[require(EDITOR)])
@@ -81,5 +83,5 @@ def register(app, api_prefix, any_exp_storage, random):
         _require_rw()
         parsed, storage = parse_target(target), any_exp_storage(ws_name)
         require_author_or_admin(request, ws_name, _existing(storage, parsed, comment_id)["author"])
-        comments.delete(storage, parsed, comment_id)
+        comments.delete(storage, parsed, comment_id, env=io.env, host=io.host)
         return {}

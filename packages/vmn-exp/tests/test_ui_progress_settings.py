@@ -71,7 +71,7 @@ def test_a_progress_mapping_is_validated():
 
 def test_the_settings_mapping_drives_an_outer_runs_declared_progress(store):
     client, storage, outer = store
-    write_settings(storage, APP, MAPPING)
+    write_settings(storage, APP, MAPPING, env=real_io().env, host=real_io().host)
     body = _summary(client, outer)
     assert body["declared_progress"]["done"] == 20
     assert body["declared_progress"]["total"] == 60

@@ -67,8 +67,9 @@ class FinishRefusedError(RunRefusedError):
 
 
 def finish_run(storage, app_name, verstr, exit_code, error=None, end_reason=None,
-               force=False, *, random, now):
+               force=False, *, random, now, writer):
     """Write *verstr*'s final run state; False when there is no such record.
+    Its ``error`` entry goes to *writer*'s stream.
 
     *error* — a message or an exception — becomes the state's ``error`` and an
     ``error`` log entry. *force* is False, ``"live"`` or True (see the module
@@ -90,8 +91,8 @@ def finish_run(storage, app_name, verstr, exit_code, error=None, end_reason=None
     recorded = None if error is None else _error_mapping(error)
     if recorded is not None:
         append_to_log(storage, app_name, verstr,
-                      create_log_entry("error", message=recorded["message"]))
-        flush_log(storage, app_name, verstr)
+                      create_log_entry("error", message=recorded["message"]), writer)
+        flush_log(storage, app_name, verstr, writer)
     _save_final(storage, app_name, verstr, lambda prior: final_state(
         finishable(prior), exit_code, recorded, end_reason, random=random))
     return True

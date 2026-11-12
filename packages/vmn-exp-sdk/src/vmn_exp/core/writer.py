@@ -29,7 +29,6 @@ from vmn_exp.core.metric_entries import (
     split_metric_entries,
 )
 from vmn_exp.core.metric_stream import MetricWriter
-from vmn_exp.core.real_io import real_io
 from vmn_exp.core import run_hint
 from vmn_exp.core.record_format import stamped
 from vmn_exp.core.status import RUN_STATE_FILE
@@ -75,24 +74,22 @@ def get_writer_id(env, host, conf_writer_id=None):
     return _WRITER_ID
 
 
-def process_writer_id():
-    """:func:`get_writer_id` for callers handed no env or host (stream
-    owners, journals, registry and comment logs): resolved, on first use,
-    from the process's real environment and host."""
-    if _WRITER_ID is not None:
-        return _WRITER_ID
-    io = real_io()
-    return get_writer_id(io.env, io.host)
+def resolved_writer_id():
+    """The writer id :func:`get_writer_id` or :func:`set_default_writer_id`
+    resolved for this process, None before either did. Reads no IO."""
+    return _WRITER_ID
 
 
-def own_stream(storage, app_name, verstr, writer=None):
-    """The stream this process appends to in *verstr*: ``<writer id>~<owner>``,
-    the owner the one *storage* names for the record (its local copy's), else
+def own_stream(storage, app_name, verstr, writer):
+    """The stream *writer* appends to in *verstr*: ``<writer>~<owner>``, the
+    owner the one *storage* names for the record (its local copy's), else
     this process's. Resolved per call — a compacted stream is never appended
-    to again, so its owner moves on. *writer* (default: this process's
-    writer id) names another writer of the same process, such as an adopted
-    run's own stream (:func:`vmn_exp.core.streams.guest_writer_id`)."""
-    writer = writer or process_writer_id()
+    to again, so its owner moves on. *writer* is the process's writer id
+    (:func:`get_writer_id` of the caller's env and host) or another writer of
+    the same process, such as an adopted run's own stream
+    (:func:`vmn_exp.core.streams.guest_writer_id`)."""
+    if not writer:
+        raise ValueError("own_stream needs a writer id: get_writer_id(env, host)")
     owner_for = getattr(storage, "stream_owner", None)
     owner = owner_for(app_name, verstr, writer) if owner_for else None
     return stream_key(writer, owner or process_owner())
@@ -141,9 +138,9 @@ def create_tags_entry(tags=None, remove=None):
     return entry
 
 
-def append_to_log(storage, app_name, verstr, entry):
-    """Append an entry to the experiment log using per-writer JSONL files —
-    or, for a ``metrics`` entry, to the writer's metric stream.
+def append_to_log(storage, app_name, verstr, entry, writer):
+    """Append an entry to *writer*'s JSONL log of the record — or, for a
+    ``metrics`` entry, to *writer*'s metric stream.
 
     Metric values are coerced to floats first (numpy/torch scalars, numeric
     strings); non-numeric ones are dropped, and an entry left with nothing to
@@ -153,14 +150,15 @@ def append_to_log(storage, app_name, verstr, entry):
     if entry is None:
         return
     if is_metric_entry(entry):
-        append_metric_entries(storage, app_name, verstr, [entry])
+        append_metric_entries(storage, app_name, verstr, [entry], writer)
     else:
-        storage.append_log_entry(app_name, verstr, own_stream(storage, app_name, verstr), entry)
+        storage.append_log_entry(app_name, verstr, own_stream(storage, app_name, verstr, writer),
+                                 entry)
 
 
-def append_metric_entries(storage, app_name, verstr, entries, inherited=False, writer=None):
-    """Record sanitized ``metrics`` *entries* as one block of this writer's
-    (or *writer*'s) metric stream (plan 12 §4.1); True when stored."""
+def append_metric_entries(storage, app_name, verstr, entries, writer, inherited=False):
+    """Record sanitized ``metrics`` *entries* as one block of *writer*'s
+    metric stream (plan 12 §4.1); True when stored."""
     stream = own_stream(storage, app_name, verstr, writer)
     writer = MetricWriter(storage, app_name, verstr, stream, clock=None)  # entries carry their time
     if not record_metric_entries(writer, entries, inherited=inherited):
@@ -182,15 +180,14 @@ def split_for_append(entries):
     return [part for part in split_metric_entries(entries) if part]
 
 
-def append_entries_to_log(storage, app_name, verstr, entries, writer=None):
-    """Append already-sanitized *entries* in one write where the backend can;
-    ``metrics`` entries go to the metric stream (*writer*'s streams, when given).
+def append_entries_to_log(storage, app_name, verstr, entries, writer):
+    """Append already-sanitized *entries* to *writer*'s streams, in one write
+    where the backend can; ``metrics`` entries go to the metric stream.
 
     A duck-typed backend without ``append_log_entries`` gets them one by one.
     """
     metrics, entries = split_metric_entries(entries)
-    if metrics and not append_metric_entries(storage, app_name, verstr, metrics,
-                                             writer=writer):
+    if metrics and not append_metric_entries(storage, app_name, verstr, metrics, writer):
         return False
     if not entries:
         return True
@@ -203,8 +200,8 @@ def append_entries_to_log(storage, app_name, verstr, entries, writer=None):
     return True
 
 
-def flush_log(storage, app_name, verstr):
-    """Ship this writer's just-appended log entries to the remote right away.
+def flush_log(storage, app_name, verstr, writer):
+    """Ship *writer*'s just-appended log entries to the remote right away.
 
     Storage such as :class:`CachedSnapshotStorage` only ships new log bytes
     when something calls ``sync_log_to_remote`` -- ordinarily a live run's
@@ -214,14 +211,14 @@ def flush_log(storage, app_name, verstr):
     this right after appending. Backends without the method (a plain S3
     remote, which has nothing to sync) are left alone.
     """
-    sync_to_remote(storage, app_name, verstr)
+    sync_to_remote(storage, app_name, verstr, writer=writer)
 
 
 def sync_to_remote(storage, app_name, verstr, stream=None, writer=None):
     """Ship the record copy's new log lines, then its new metric blocks,
-    where the backend syncs them (*stream*: this process's, or *writer*'s,
-    by default)."""
-    stream = stream or own_stream(storage, app_name, verstr, writer)
+    where the backend syncs them (*stream*: *writer*'s, by default, else the
+    one of the writer id this process resolved — :func:`resolved_writer_id`)."""
+    stream = stream or own_stream(storage, app_name, verstr, writer or resolved_writer_id())
     for method in ("sync_log_to_remote", "sync_metrics_to_remote"):
         sync = getattr(storage, method, None)
         if sync is not None:
@@ -318,11 +315,10 @@ def default_run_suffix(env, host):
     return get_writer_id(env, host) if offline_mode(env) else None
 
 
-def process_run_suffix():
-    """:func:`default_run_suffix` of the process's real environment and host,
-    for the run-name allocators, which are handed neither."""
-    io = real_io()
-    return default_run_suffix(io.env, io.host)
+def new_run_ids(env, host):
+    """:func:`create_run`'s ``writer`` and ``suffix`` for a run created as
+    *env* and *host* say."""
+    return {"writer": get_writer_id(env, host), "suffix": default_run_suffix(env, host)}
 
 
 def _run_verstr_candidates(code_verstr, taken, suffix):
@@ -389,16 +385,12 @@ def claim_exact(storage, app_name, run_id, make_record):
     return run_id
 
 
-_DEFAULT_SUFFIX = object()
-
-
-def allocate_run_verstr(storage, app_name, code_verstr, make_record=None,
-                        suffix=_DEFAULT_SUFFIX):
+def allocate_run_verstr(storage, app_name, code_verstr, make_record=None, *, suffix):
     """Return the verstr for a new experiment run.
 
     *suffix*: ``<code_verstr>.<suffix>[.N]`` names, listing only the names
-    under ``<code_verstr>.<suffix>``; None for plain ``.rN`` names whatever
-    the environment says; by default :func:`default_run_suffix`.
+    under ``<code_verstr>.<suffix>``; None for plain ``.rN`` names. The
+    caller's default is :func:`default_run_suffix` of its env and host.
 
     With *make_record* — ``verstr -> (metadata, patches)`` — the name is also
     claimed: the record is created atomically under it, and a name another
@@ -410,8 +402,6 @@ def allocate_run_verstr(storage, app_name, code_verstr, make_record=None,
     (:mod:`vmn_exp.core.run_hint`) while that run still exists, and list
     again after :data:`_HINT_MISSES` names in a row were taken.
     """
-    if suffix is _DEFAULT_SUFFIX:
-        suffix = process_run_suffix()
     hint = None if suffix or make_record is None else run_hint.hint_key(
         storage, app_name, code_verstr)
     if hint is not None:
@@ -483,8 +473,15 @@ def create_run(
     env=None,
     features=None,
     run_id=None,
+    *,
+    writer,
+    suffix,
 ):
     """Claim a run verstr for *template* and write the record and its create entry.
+
+    *writer* is the writer id whose stream gets the create entry, *suffix*
+    the run name's (:func:`allocate_run_verstr`); a caller resolves both from
+    its env and host (:func:`get_writer_id`, :func:`default_run_suffix`).
 
     *run_id* names the run exactly (``<code_verstr>.<suffix>``): it is created
     with one exclusive create and no listing, RunExistsError when taken.
@@ -504,13 +501,14 @@ def create_run(
     make_record = record_maker(template_with_env(template, env), code_verstr, parent,
                                name, patches)
     if run_id is None:
-        verstr = allocate_run_verstr(storage, app_name, code_verstr, make_record=make_record)
+        verstr = allocate_run_verstr(storage, app_name, code_verstr, make_record=make_record,
+                                     suffix=suffix)
     else:
         check_run_id(code_verstr, run_id)
         verstr = claim_exact(storage, app_name, run_id, make_record)
 
     write_env_file(storage, app_name, verstr, env_yaml(env))
-    write_create_entries(storage, app_name, verstr, create_data, note, features)
+    write_create_entries(storage, app_name, verstr, create_data, note, features, writer)
     return verstr
 
 
@@ -547,15 +545,15 @@ def write_env_file(storage, app_name, verstr, text):
         )
 
 
-def write_create_entries(storage, app_name, verstr, create_data, note, features):
+def write_create_entries(storage, app_name, verstr, create_data, note, features, writer):
     """The run's ``create`` entry (*create_data* merged in), then *features*
-    when given, in one write."""
+    when given, in one write to *writer*'s stream."""
     entry = create_log_entry("create", note=note)
     if create_data:
         entry.update(create_data)
     if features is None:
-        append_to_log(storage, app_name, verstr, entry)
+        append_to_log(storage, app_name, verstr, entry, writer)
     else:
         features = {"timestamp": entry["timestamp"], **features}
         append_entries_to_log(storage, app_name, verstr,
-                              [sanitize_entry(entry), sanitize_entry(features)])
+                              [sanitize_entry(entry), sanitize_entry(features)], writer)

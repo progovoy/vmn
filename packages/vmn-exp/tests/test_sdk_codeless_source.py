@@ -8,6 +8,7 @@ from memory_storage import MemoryStorage
 from vmn_exp.core.writer import create_run as record_run
 from vmn_exp.sdk.codeless import CODELESS_KEY, CODELESS_VERSTR, CodelessIO, codeless_source
 from vmn_exp.sdk.create import CHECKOUT, CODELESS, SNAPSHOT, source_kind
+from writer_args import process_suffix, process_writer
 
 NOW = "2026-11-11T10:00:00.000000Z"
 
@@ -78,7 +79,7 @@ def test_two_codeless_runs_get_distinct_verstrs():
     source = _source(FakeIO(LogStorage()), capture_env=True)
     made = [
         record_run(source.storage, source.app_name, source.code_verstr, source.template, {},
-                   parent=source.parent, env=source.env)
+                   parent=source.parent, env=source.env, writer=process_writer(), suffix=process_suffix())
         for _ in range(2)
     ]
     assert made == [CODELESS_VERSTR, f"{CODELESS_VERSTR}.r2"]

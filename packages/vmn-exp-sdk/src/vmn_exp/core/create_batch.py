@@ -18,7 +18,6 @@ from vmn_exp.core.writer import (
     _taken_verstrs,
     check_run_id,
     create_tags_entry,
-    process_run_suffix,
     env_yaml,
     flush_log,
     hinted_names,
@@ -53,9 +52,13 @@ def _spec(run):
     return spec
 
 
-def create_runs(storage, app_name, code_verstr, template, specs, *, parent=None,
-                env=None, features=None, workers=16, exist_ok=False):
+def create_runs(storage, app_name, code_verstr, template, specs, *, writer, suffix,
+                parent=None, env=None, features=None, workers=16, exist_ok=False):
     """Create a run per spec (:func:`run_specs`); their verstrs, in order.
+
+    *writer* is the writer id whose streams get the create entries, *suffix*
+    the run names' (``writer.allocate_run_verstr``); the caller resolves both
+    from its env and host.
 
     A ``run_id`` is claimed exactly: RunExistsError when another record holds
     it — unless *exist_ok* and that record has the same parent and name, then
@@ -65,10 +68,11 @@ def create_runs(storage, app_name, code_verstr, template, specs, *, parent=None,
     for spec in specs:
         if spec["run_id"]:
             check_run_id(code_verstr, spec["run_id"])
-    names = _Names(storage, app_name, code_verstr, {s["run_id"] for s in specs if s["run_id"]})
+    names = _Names(storage, app_name, code_verstr, {s["run_id"] for s in specs if s["run_id"]},
+                   suffix)
     planned = [s["run_id"] or names.next() for s in specs]
     batch = _Batch(storage, app_name, code_verstr, template_with_env(template, env),
-                   parent, env_yaml(env), features, exist_ok, names)
+                   parent, env_yaml(env), features, exist_ok, names, writer)
     results = fan_out(batch.register, list(zip(specs, planned)), workers,
                       "vmn-create-runs")
     errors = [r for r in results if isinstance(r, Exception)]
@@ -84,9 +88,9 @@ class _Names:
     while that run exists, else from one listing. The first name another host
     took meanwhile lists once more; later ones just take the next name."""
 
-    def __init__(self, storage, app_name, code_verstr, exclude):
+    def __init__(self, storage, app_name, code_verstr, exclude, suffix):
         self._scope = (storage, app_name, code_verstr)
-        self._suffix = process_run_suffix()
+        self._suffix = suffix
         self._exclude = set(exclude)  # the batch's run_ids, then every name handed out
         self._lock = threading.Lock()
         self._relisted = False
@@ -128,10 +132,11 @@ class _Batch:
     """What every run of a batch shares, and one run's registration."""
 
     def __init__(self, storage, app_name, code_verstr, template, parent, env_text,
-                 features, exist_ok, names):
+                 features, exist_ok, names, writer):
         self.storage, self.app_name, self.code_verstr = storage, app_name, code_verstr
         self.template, self.parent, self.env_text = template, parent, env_text
         self.features, self.exist_ok, self.names = features, exist_ok, names
+        self.writer = writer
 
     def register(self, item):
         """The run's verstr, or the RunExistsError its run id met."""
@@ -144,8 +149,9 @@ class _Batch:
             name = self.names.after_collision()
         write_env_file(self.storage, self.app_name, name, self.env_text)
         write_create_entries(self.storage, self.app_name, name,
-                             _create_data(spec), spec["note"], self.features)
-        flush_log(self.storage, self.app_name, name)  # a scratch dir's pods are elsewhere
+                             _create_data(spec), spec["note"], self.features, self.writer)
+        # a scratch dir's pods are elsewhere
+        flush_log(self.storage, self.app_name, name, self.writer)
         return name
 
     def _existing(self, spec):

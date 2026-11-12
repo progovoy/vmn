@@ -22,6 +22,7 @@ from multi_clone_helpers import (
 from s3_helpers import cached_host, meta, op_counts, record_calls, s3_storage
 from vmn_exp.core.adopt import missing_inherited
 from vmn_exp.core.metric_compact import compact_record
+from writer_args import process_writer
 
 
 @pytest.fixture(autouse=True)
@@ -143,7 +144,7 @@ def test_a_rewound_local_vmx_is_never_taken_as_covered_by_a_bigger_remote_one(tm
     remote.create_exclusive(APP, V, meta(V), {})
     a = LocalSnapshotStorage(str(tmp_path / "a"), "runs")
     assert a.create_exclusive(APP, V, meta(V), {})
-    own = own_stream(a, APP, V)
+    own = own_stream(a, APP, V, writer=process_writer())
     # the original rewound past step 1 and logged 9.0 anew: its .vmx has 2 points
     _put_vmx(a, own, tmp_path, [1.0, 9.0], rewinds_applied=True)
     # another clone compacted the 3 points the original had shipped before

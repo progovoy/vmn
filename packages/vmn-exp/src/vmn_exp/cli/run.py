@@ -46,6 +46,7 @@ from vmn_exp.core.writer import (
     append_entries_to_log,
     append_to_log,
     create_log_entry,
+    get_writer_id,
     own_stream,
     sync_to_remote,
 )
@@ -104,8 +105,8 @@ class _MetricsTailer(MetricsTailer):
         super().__init__(path, _parse_metric_line)
 
 
-def _ingest_metric_records(storage, app_name, verstr, records):
-    """Record the parsed (step, values) records as one block of this writer's
+def _ingest_metric_records(storage, app_name, verstr, records, writer):
+    """Record the parsed (step, values) records as one block of *writer*'s
     metric stream (plan 12 §4.1) — append-only, never a rewrite."""
     entries = []
     for step, values in records:
@@ -115,7 +116,7 @@ def _ingest_metric_records(storage, app_name, verstr, records):
                 entry["step"] = step
             entries.append(entry)
     if entries:
-        append_entries_to_log(storage, app_name, verstr, entries)
+        append_entries_to_log(storage, app_name, verstr, entries, writer)
 
 
 def _safe_unlink(path):
@@ -174,7 +175,7 @@ def _detect_python_exe(run_cmd):
     return None
 
 
-def _create_experiment(vcs, storage, args, extra_create_data=None, *, env):
+def _create_experiment(vcs, storage, args, extra_create_data=None, *, env, host):
     """Create the run's experiment record. Returns ``(app_name, verstr, err)``.
 
     *extra_create_data* (params, tags, ...) wins over what ``--file`` holds;
@@ -212,10 +213,11 @@ def _create_experiment(vcs, storage, args, extra_create_data=None, *, env):
         parent=parent,
         name=getattr(args, "run_name", None),
         capture_env=capture_env,
-        python_exe=python_exe, env=env,
+        python_exe=python_exe,
+        env=env, host=host,
     )
     if err is None:
-        fork.seed(storage, app_name, verstr, source)
+        fork.seed(storage, app_name, verstr, source, get_writer_id(env, host))
     return app_name, verstr, err
 
 
@@ -245,14 +247,15 @@ def experiment_run(vcs, params, storage, args, repo_lock=None, *, io):
     if err is not None:
         return err
 
-    app_name, verstr, err = _create_experiment(vcs, storage, args, env=io.env)
+    app_name, verstr, err = _create_experiment(vcs, storage, args, env=io.env, host=io.host)
     if err is not None:
         return err
+    writer = get_writer_id(io.env, io.host)
     if intent:
-        append_intent(storage, app_name, verstr, intent)
+        append_intent(storage, app_name, verstr, intent, writer)
 
     import vmn_exp.cli.experiment as cli
-    cli._append_inputs(storage, app_name, verstr, getattr(args, "inputs", None))
+    cli._append_inputs(storage, app_name, verstr, getattr(args, "inputs", None), writer)
 
     # The mutating phase is over: everything below writes only inside this run's
     # own experiment directory. Hand the repo back to other vmn commands - the
@@ -296,6 +299,7 @@ class _Supervision:
                  *, adopt=False, wait, io):
         self.storage = storage
         self.io = io
+        self.writer = get_writer_id(io.env, io.host)  # its env's and host's
         self.clock = io.clock.monotonic
         self.adopt = adopt
         self.state_extra = state_extra or {}
@@ -515,7 +519,7 @@ class _Supervision:
         self.guard(
             "output log entry",
             lambda: append_to_log(
-                self.storage, self.app_name, self.verstr, self.output.seal()
+                self.storage, self.app_name, self.verstr, self.output.seal(), self.writer
             ),
         )
 
@@ -598,26 +602,21 @@ class _Supervision:
     def _ingest(self, records):
         if records:
             self.appended_streams.add(self._own_stream())
-        _ingest_metric_records(self.storage, self.app_name, self.verstr, records)
+        _ingest_metric_records(self.storage, self.app_name, self.verstr, records, self.writer)
 
     def _own_stream(self):
-        return own_stream(self.storage, self.app_name, self.verstr)
+        return own_stream(self.storage, self.app_name, self.verstr, self.writer)
 
     def _sync_once(self):
         # The log first: a slow output PUT must not hold back liveness data.
-        self.guard(
-            "remote sync",
-            sync_to_remote,
-            self.storage,
-            self.app_name,
-            self.verstr,
-        )
+        self.guard("remote sync", sync_to_remote, self.storage, self.app_name, self.verstr,
+                   writer=self.writer)
         if self.output is not None:
             self.guard("output log upload", self.output.upload)
 
     def _sync_final(self):
         """The last sync, unguarded: a failure reaches the final retry. Both
         steps resume from what the remote holds, so a retry repeats nothing."""
-        sync_to_remote(self.storage, self.app_name, self.verstr)
+        sync_to_remote(self.storage, self.app_name, self.verstr, writer=self.writer)
         if self.output is not None:
             self.output.upload()

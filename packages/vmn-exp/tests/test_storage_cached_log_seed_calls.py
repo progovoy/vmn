@@ -18,6 +18,7 @@ from test_storage_cached_log_seed import (  # noqa: F401
 )
 from vmn_exp.core.writer import own_stream
 from vmn_exp.storage.files import log_object_name
+from writer_args import process_writer
 
 
 def _calls_of(obj, method):
@@ -37,9 +38,9 @@ def test_creating_and_shipping_a_new_run_lists_its_remote_log_once(tmp_path):
 
     assert host.create_exclusive(APP, V, meta(V), {})
     _append(host, "a0", 0)
-    host.sync_log_to_remote(APP, V, own_stream(host, APP, V))
+    host.sync_log_to_remote(APP, V, own_stream(host, APP, V, writer=process_writer()))
     _append(host, "a1", 1)
-    host.sync_log_to_remote(APP, V, own_stream(host, APP, V))
+    host.sync_log_to_remote(APP, V, own_stream(host, APP, V, writer=process_writer()))
 
     assert len(listings) == 1
     assert _remote_texts() == ["a0", "a1"]
@@ -50,7 +51,7 @@ def test_a_ship_reads_the_unshipped_local_tail_once(tmp_path):
     reads = _calls_of(host._local, "read_file_from")
 
     _append(host, "a3", 3)
-    stream = own_stream(host, APP, V)
+    stream = own_stream(host, APP, V, writer=process_writer())
     host.sync_log_to_remote(APP, V, stream)
 
     assert len([r for r in reads if r[2] == log_object_name(stream)]) == 1

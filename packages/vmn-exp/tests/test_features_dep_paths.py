@@ -9,6 +9,7 @@ import pytest
 from vmn_exp.core import identity
 from vmn_exp.core.code_patches import run_dep_paths
 from vmn_exp.gitmode.features import rerun_features
+from vmn_exp.core.real_io import real_io
 
 DEP_DIFF = (
     "diff --git a/util.py b/util.py\n"
@@ -44,5 +45,5 @@ def test_a_run_without_deps_has_no_dep_paths():
 def test_a_rerun_of_a_record_from_before_dep_base_commits_names_deps_by_changeset(vcs):
     metadata = {"changesets": {".": {"hash": "1"}, "../libs/dep": {"hash": "2"}}}
     patches = {"deps": {".._libs_dep": {"working_tree": DEP_DIFF}}}
-    entry = rerun_features(vcs, [], metadata, patches)
+    entry = rerun_features(vcs, [], metadata, patches, env=real_io().env, host=real_io().host)
     assert entry["changed"]["files"] == ["../libs/dep/util.py"]

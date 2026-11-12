@@ -53,7 +53,7 @@ def _get_storage(args, clock, env):
 # Individual command handlers
 # ---------------------------------------------------------------------------
 
-def _cmd_register(storage, args, out):
+def _cmd_register(storage, args, out, *, env, host):
     model_name = getattr(args, "model_name", None)
     if not model_name or not valid_model_name(model_name):
         _LOG.error("Invalid model name: %r", model_name)
@@ -74,7 +74,7 @@ def _cmd_register(storage, args, out):
         return 1
 
     if alias_name is not None:
-        _set_alias(storage, model_name, alias_name, n)
+        _set_alias(storage, model_name, alias_name, n, env=env, host=host)
 
     out(f"Registered {model_name} version {n} ({origin})")
     return 0
@@ -115,7 +115,7 @@ def _register_version(storage, model_name, args):
     return n, f"run_ref={verstr!r}"
 
 
-def _cmd_alias(storage, args, out):
+def _cmd_alias(storage, args, out, *, env, host):
     model_name = getattr(args, "model_name", None)
     alias = getattr(args, "alias", None)
     remove = getattr(args, "remove", False)
@@ -130,7 +130,7 @@ def _cmd_alias(storage, args, out):
 
     try:
         if remove:
-            _remove_alias(storage, model_name, alias, expect=expect)
+            _remove_alias(storage, model_name, alias, expect=expect, env=env, host=host)
             out(f"Removed alias {alias!r} from {model_name}")
         else:
             version_raw = getattr(args, "alias_version", None)
@@ -142,7 +142,7 @@ def _cmd_alias(storage, args, out):
             except (ValueError, TypeError):
                 _LOG.error("Version must be an integer, got %r", version_raw)
                 return 1
-            _set_alias(storage, model_name, alias, version, expect=expect)
+            _set_alias(storage, model_name, alias, version, expect=expect, env=env, host=host)
             out(f"Alias {alias!r} -> {model_name} version {version}")
     except ValueError as exc:
         _LOG.error("%s", exc)
@@ -227,8 +227,8 @@ def _cmd_resolve(storage, args, out):
     return 0
 
 
-def _cmd_set_status(storage, args, status: str, out):
-    """Shared body for deprecate and delete."""
+def _cmd_set_status(storage, args, status: str, out, env, host):
+    """Shared body for deprecate and delete, as the writer of *env* and *host*."""
     model_name = getattr(args, "model_name", None)
     version_raw = getattr(args, "version_ref", None)
     try:
@@ -237,7 +237,7 @@ def _cmd_set_status(storage, args, status: str, out):
         _LOG.error("Version must be an integer, got %r", version_raw)
         return 1
     try:
-        set_version_status(storage, model_name, version, status)
+        set_version_status(storage, model_name, version, status, env=env, host=host)
     except (ValueError, KeyError) as exc:
         _LOG.error("%s", exc)
         return 1
@@ -245,12 +245,12 @@ def _cmd_set_status(storage, args, status: str, out):
     return 0
 
 
-def _cmd_deprecate(storage, args, out):
-    return _cmd_set_status(storage, args, "deprecated", out)
+def _cmd_deprecate(storage, args, out, *, env, host):
+    return _cmd_set_status(storage, args, "deprecated", out, env, host)
 
 
-def _cmd_delete(storage, args, out):
-    rc = _cmd_set_status(storage, args, "deleted", out)
+def _cmd_delete(storage, args, out, *, env, host):
+    rc = _cmd_set_status(storage, args, "deleted", out, env, host)
     if rc == 0:
         _warn_consumers(storage, args.model_name, int(args.version_ref))
     return rc
@@ -277,14 +277,14 @@ def model_run_without_repo(args, io):
     """
     storage = _get_storage(args, io.clock, io.env)
 
-    dispatch = {
-        "register": _cmd_register,
-        "alias": _cmd_alias,
+    dispatch = {  # the actions that write, as the writer of io's env and host
+        "register": lambda *a: _cmd_register(*a, env=io.env, host=io.host),
+        "alias": lambda *a: _cmd_alias(*a, env=io.env, host=io.host),
         "list": _cmd_list,
         "show": _cmd_show,
         "resolve": _cmd_resolve,
-        "deprecate": _cmd_deprecate,
-        "delete": _cmd_delete,
+        "deprecate": lambda *a: _cmd_deprecate(*a, env=io.env, host=io.host),
+        "delete": lambda *a: _cmd_delete(*a, env=io.env, host=io.host),
     }
 
     handler = dispatch.get(getattr(args, "action", None))

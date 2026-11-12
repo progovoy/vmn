@@ -70,7 +70,7 @@ def store(tmp_path):
         if state:
             storage.save_file(APP, _v(n), "run_state.yml", yaml.dump(state()))
     write_settings(storage, APP,
-                   f"ui:\n  attention:\n    - {{key: waiting, query: '{WAITING}'}}\n")
+                   f"ui:\n  attention:\n    - {{key: waiting, query: '{WAITING}'}}\n", env=real_io().env, host=real_io().host)
     manager = WorkspaceManager(os.path.join(tmp_path, "ui_data"))
     manager.add_store("ws", uri)
     return TestClient(create_app(manager, io=real_io()))

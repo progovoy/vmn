@@ -24,10 +24,11 @@ def fork_source(storage, app_name, args):
         return None, 1
 
 
-def seed(storage, app_name, verstr, source):
-    """Seed the just-created *verstr* from *source* (a :func:`fork_source` result)."""
+def seed(storage, app_name, verstr, source, writer):
+    """Seed the just-created *verstr* from *source* (a :func:`fork_source`
+    result), as *writer*."""
     if source is not None:
-        seed_fork(storage, app_name, verstr, *source)
+        seed_fork(storage, app_name, verstr, *source, writer=writer)
 
 
 def print_lineage(metadata, log, out):

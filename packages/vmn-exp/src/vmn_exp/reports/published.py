@@ -15,14 +15,14 @@ def _data_file(panel_id):
     return f"{DATA_DIR}{panel_id}.json"
 
 
-def publish(storage, rid, rev, data, *, actor=None):
+def publish(storage, rid, rev, data, *, actor=None, env, host):
     """Write each panel's payload of *data* into revision *rev*, then mark it
     published (the header entry last, so readers never see partial data)."""
     area = reports_area(storage)
     for panel_id, payload in data.items():
         area.save_file(rid, f"v{rev}", _data_file(panel_id), _encode(payload))
     area.save_file(rid, f"v{rev}", INDEX_FILE, _encode(sorted(data)))
-    set_published(storage, rid, rev, actor=actor)
+    set_published(storage, rid, rev, actor=actor, env=env, host=host)
 
 
 def panel_ids(storage, rid, rev):

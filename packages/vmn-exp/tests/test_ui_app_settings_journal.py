@@ -48,7 +48,7 @@ def _poll(client, path, predicate, timeout=10.0):
 
 def test_the_stale_window_comes_from_the_store_settings(served):
     client, storage = served
-    write_settings(storage, APP, "ui: {stale_after_min: 30}\n")
+    write_settings(storage, APP, "ui: {stale_after_min: 30}\n", env=real_io().env, host=real_io().host)
     body = _poll(client, f"{BASE}/experiments-status",
                  lambda b: (b.get("freshness") or {}).get("stale_after_sec") == 1800)
     assert body["freshness"]["stale_after_sec"] == 1800
@@ -57,6 +57,6 @@ def test_the_stale_window_comes_from_the_store_settings(served):
 def test_another_hosts_write_reaches_the_server_through_the_journal(served):
     client, storage = served
     assert client.get(f"{BASE}/metrics-schema").json() == {}
-    write_settings(storage, APP, "metrics: {acc: {goal: max}}\n")
+    write_settings(storage, APP, "metrics: {acc: {goal: max}}\n", env=real_io().env, host=real_io().host)
     body = _poll(client, f"{BASE}/metrics-schema", lambda b: b != {})
     assert body == {"acc": {"goal": "max"}}

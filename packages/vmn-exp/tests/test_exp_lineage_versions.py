@@ -10,6 +10,7 @@ from vmn_exp.registry.log import set_version_status
 from vmn_exp.sdk.datasets import register_dataset
 from vmn_exp.sdk.reader import get_lineage
 from vmn_exp.sdk.usage import use_dataset, use_model
+from vmn_exp.core.real_io import real_io
 
 PRODUCER = ("trainer", "0.0.1-dev.aaa")
 
@@ -95,7 +96,7 @@ def test_version_lineage_pruned_consumer_marked_missing(tmp_path):
 def test_version_lineage_deleted_version_status(tmp_path):
     storage = _storage(tmp_path)
     _model(storage, "clf")
-    set_version_status(storage, "clf", 1, "deleted")
+    set_version_status(storage, "clf", 1, "deleted", env=real_io().env, host=real_io().host)
 
     found = version_lineage(storage, "clf", 1, app_indexes(storage, RealClock()))
     assert found["status"] == "deleted"

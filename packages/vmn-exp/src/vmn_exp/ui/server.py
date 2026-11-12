@@ -242,7 +242,7 @@ def build_app(
                                _forget)
     routes_experiment.register(app, API_PREFIX, ctx, job_views, leaderboards, refresher.background,
                                MAX_SERIES_POINTS, os.path.isfile)
-    routes_actions.register(app, API_PREFIX, ctx, jobs, leaderboards, read_only)
+    routes_actions.register(app, API_PREFIX, ctx, jobs, leaderboards, read_only, deps.io)
     routes_versions.register(app, API_PREFIX, ctx)
 
     group_aggregate = ctx.from_settings(source.group_aggregate)
@@ -331,16 +331,16 @@ def build_app(
                               *leaderboard_inputs(ws_name, app_tag), verstr), leaderboards.now)
     routes_run_code.register(app, API_PREFIX, _series_storage, leaderboard_inputs,
                              leaderboards, ctx.segment)
-    routes_models.register(app, API_PREFIX, ctx.ws_storage, model_lists)
-    routes_reports.register(app, API_PREFIX, ctx.ws_storage, _report_index, deps.io.random)
-    routes_comments.register(app, API_PREFIX, ctx.ws_storage, deps.io.random)
+    routes_models.register(app, API_PREFIX, ctx.ws_storage, model_lists, deps.io)
+    routes_reports.register(app, API_PREFIX, ctx.ws_storage, _report_index, deps.io)
+    routes_comments.register(app, API_PREFIX, ctx.ws_storage, deps.io)
 
     def _settings_target(ws_name, app_tag):
         app_name = ctx.app_name(app_tag)
         changed = lambda: source.settings_changed(ctx.workspace(ws_name), app_name)  # noqa: E731
         return ctx.ws_storage(ws_name), app_name, changed
 
-    routes_settings.register(app, API_PREFIX, _settings_target)
+    routes_settings.register(app, API_PREFIX, _settings_target, deps.io)
 
     def _search_scopes(ws_names):
         return ((ws, name, snap) for ws, name, snap, _ in ctx.app_scopes(ws_names))

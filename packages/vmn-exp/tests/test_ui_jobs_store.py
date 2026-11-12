@@ -22,6 +22,7 @@ from vmn_exp.storage.open import open_storage
 from vmn_exp.ui.jobs import MAX_ARCHIVE_BATCH, JobRunner, start_daemon
 from vmn_exp.ui.jobs_store import STORE_ACTIONS, build_store_action
 from vmn_exp.core.real_io import RealClock, RealProcesses, RealRandom, real_io
+from writer_args import process_writer
 
 APP = "my_app"
 V = "0.0.1-dev.abc.def"
@@ -33,9 +34,9 @@ def _store(tmp_path, name):
     storage = open_storage(uri, area=RUNS, clock=RealClock(), env=os.environ)
     storage.save(APP, V, {"verstr": V, "timestamp": "2026-01-01T00:00:00Z"}, {})
     for step in range(5):
-        append_to_log(storage, APP, V, create_log_entry("metrics", values={"loss": step}, step=step))
+        append_to_log(storage, APP, V, create_log_entry("metrics", values={"loss": step}, step=step), writer=process_writer())
     storage.save_file(APP, V, "model.bin", b"weights")
-    flush_log(storage, APP, V)
+    flush_log(storage, APP, V, writer=process_writer())
     return uri, storage
 
 
@@ -58,7 +59,7 @@ def _model_state(storage, model="m"):
 
 def _job(tmp_path, action, body):
     uri, storage = _store(tmp_path, "job")
-    job, err = build_store_action(action, APP, body)
+    job, err = build_store_action(action, APP, body, env=real_io().env, host=real_io().host)
     assert err is None
     touched = []
     job.run(storage, lambda app, verstr: touched.append((app, verstr)), RealClock().now())
@@ -78,7 +79,7 @@ def _model_cli(uri, *argv):
 
 def _manage(storage, action, refs, remove=None):
     args = SimpleNamespace(action=action, refs=refs, version=None, latest=False, remove=remove)
-    assert experiment_manage(APP, storage, args) == 0
+    assert experiment_manage(APP, storage, args, writer=process_writer()) == 0
 
 
 def test_tag_matches_the_cli(tmp_path):
@@ -92,8 +93,8 @@ def test_tag_matches_the_cli(tmp_path):
 def test_note_matches_the_cli(tmp_path):
     storage, _ = _job(tmp_path, "note", {"verstr": V, "note": "looks good"})
     _, cli = _cli_store(tmp_path)
-    append_to_log(cli, APP, V, create_log_entry("note", text="looks good"))
-    flush_log(cli, APP, V)
+    append_to_log(cli, APP, V, create_log_entry("note", text="looks good"), writer=process_writer())
+    flush_log(cli, APP, V, writer=process_writer())
     assert _run_state(storage) == _run_state(cli)
 
 
@@ -109,7 +110,7 @@ def test_rewind_matches_the_cli(tmp_path):
     storage, touched = _job(tmp_path, "exp_rewind", {"verstr": V, "step": 2})
     _, cli = _cli_store(tmp_path)
     args = SimpleNamespace(version=[V], latest=False, step=2)
-    assert experiment_rewind(cli, APP, args, RealClock()) == 0
+    assert experiment_rewind(cli, APP, args, RealClock(), writer=process_writer()) == 0
     assert _run_state(storage) == _run_state(cli)
     assert touched == [(APP, V)]
 
@@ -122,7 +123,7 @@ def test_model_register_alias_deprecate_match_the_cli(tmp_path):
         ("model_alias", {"model": "m", "alias": "staging", "version": 1}),
         ("model_deprecate", {"model": "m", "version": 1}),
     ]:
-        job, err = build_store_action(action, APP, body)
+        job, err = build_store_action(action, APP, body, env=real_io().env, host=real_io().host)
         assert err is None, err
         job.run(storage, lambda *_: None, RealClock().now())
     cli_uri, cli = _cli_store(tmp_path)
@@ -137,7 +138,7 @@ def test_model_register_alias_deprecate_match_the_cli(tmp_path):
                                     "model_delete", "exp_create"])
 def test_destructive_and_git_actions_are_not_offered(action):
     assert action not in STORE_ACTIONS
-    job, err = build_store_action(action, APP, {"verstr": V})
+    job, err = build_store_action(action, APP, {"verstr": V}, env=real_io().env, host=real_io().host)
     assert job is None and err
 
 
@@ -148,13 +149,13 @@ def test_destructive_and_git_actions_are_not_offered(action):
     ("model_alias", {"model": "m", "alias": "a", "version": 0}),
 ])
 def test_bad_bodies_are_rejected(action, body):
-    job, err = build_store_action(action, APP, body)
+    job, err = build_store_action(action, APP, body, env=real_io().env, host=real_io().host)
     assert job is None and err
 
 
 def test_failed_action_marks_the_job_failed(tmp_path):
     _, storage = _store(tmp_path, "job")
-    job, _ = build_store_action("exp_tag", APP, {"verstr": "0.0.9-dev.x.y", "set": {"k": "v"}})
+    job, _ = build_store_action("exp_tag", APP, {"verstr": "0.0.9-dev.x.y", "set": {"k": "v"}}, env=real_io().env, host=real_io().host)
     runner = JobRunner(processes=RealProcesses(), random=RealRandom(), start_thread=start_daemon)
     submitted, err = runner.submit_call("ws", job.command, lambda: job.run(storage, lambda *_: None, RealClock().now()))
     assert err is None

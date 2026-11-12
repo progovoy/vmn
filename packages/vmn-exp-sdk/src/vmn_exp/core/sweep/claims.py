@@ -17,7 +17,7 @@ import re
 from vmn_exp._base import now_iso
 from vmn_exp.core.sweep.spec import trial_limit
 from vmn_exp.core.sweep.suggest import suggest
-from vmn_exp.core.writer import claim_record, process_writer_id
+from vmn_exp.core.writer import claim_record
 from vmn_exp.storage.areas import SWEEPS, app_key
 from vmn_exp.storage.s3_base import parallel_map
 
@@ -34,7 +34,7 @@ def _area(storage):
     return storage.in_area(SWEEPS)
 
 
-def claim_next_trial(storage, app_name, sweep_verstr, spec, agent=None, history=None):
+def claim_next_trial(storage, app_name, sweep_verstr, spec, agent, history=None):
     """Claim the lowest free trial index: ``{trial, attempt, params, ...}``, or
     None once the sweep's trial limit is reached. *history* is a callable
     returning ``[(params, value)]``, read (once) only for bayes suggestions."""
@@ -54,7 +54,7 @@ def claim_next_trial(storage, app_name, sweep_verstr, spec, agent=None, history=
     raise RuntimeError(f"Could not claim a trial of sweep {sweep_verstr}")
 
 
-def claim_retry(storage, app_name, sweep_verstr, trial, agent=None, attempt=None):
+def claim_retry(storage, app_name, sweep_verstr, trial, agent, attempt=None):
     """Claim a new attempt at *trial*, with the original params.
 
     With *attempt*, claim exactly that one — None when another agent already
@@ -106,7 +106,7 @@ def _claim(storage, app_name, sweep_verstr, trial, attempt, params, agent):
         "trial": trial,
         "attempt": attempt,
         "params": params,
-        "agent": agent or process_writer_id(),
+        "agent": agent,
         "timestamp": now_iso(),
     }
     app = claims_scope(app_name, sweep_verstr)

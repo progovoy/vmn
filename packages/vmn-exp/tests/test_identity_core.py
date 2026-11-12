@@ -7,6 +7,7 @@ import subprocess
 from vmn_exp.core import identity
 from vmn_exp.core import writer as experiment_writer
 from vmn_exp.registry import log as registry_log
+from vmn_exp.core.real_io import real_io
 
 
 def _repo_with_email(path, email):
@@ -51,19 +52,19 @@ def test_actor_identity_combines_writer_email_and_os_user(tmp_path, monkeypatch)
     monkeypatch.setenv("USER", "alice")
     experiment_writer._WRITER_ID = None
     repo = _repo_with_email(tmp_path / "repo", "a@x.io")
-    assert identity.actor_identity(cwd=str(repo)) == {
+    assert identity.actor_identity(cwd=str(repo), env=real_io().env, host=real_io().host) == {
         "writer": "gpu-07", "git_user_email": "a@x.io", "os_user": "alice"}
 
 
 def test_actor_identity_defaults_to_the_process_cwd(tmp_path, monkeypatch):
     repo = _repo_with_email(tmp_path / "repo", "cwd@x.io")
     monkeypatch.chdir(repo)
-    assert identity.actor_identity()["git_user_email"] == "cwd@x.io"
-    assert registry_log.actor_identity()["git_user_email"] == "cwd@x.io"
+    assert identity.actor_identity(env=real_io().env, host=real_io().host)["git_user_email"] == "cwd@x.io"
+    assert registry_log.actor_identity(env=real_io().env, host=real_io().host)["git_user_email"] == "cwd@x.io"
 
 
 def test_os_user_falls_back_through_the_env_vars(monkeypatch):
     for key in ("USER", "LOGNAME", "USERNAME"):
         monkeypatch.delenv(key, raising=False)
     monkeypatch.setenv("LOGNAME", "bob")
-    assert identity._os_user() == "bob"
+    assert identity._os_user(real_io().env) == "bob"

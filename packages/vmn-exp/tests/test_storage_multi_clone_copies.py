@@ -24,6 +24,7 @@ from vmn_exp.core.streams import new_owner, stream_key
 from vmn_exp.reports import log as report_log
 from vmn_exp.reports import store as report_store
 from vmn_exp.core.real_io import RealRandom
+from vmn_exp.core.real_io import real_io
 
 FINISHED = "state: finished\nexit_code: 0\n"
 
@@ -143,11 +144,11 @@ def test_log_lines_a_copy_ships_for_the_original_land_once_after_it_compacts_the
 
 def test_report_header_edits_from_two_clones_are_all_kept(tmp_path):
     a = cached_host(tmp_path, "a")
-    rid = report_store.create(a, "t-a1", "body", random=RealRandom())
+    rid = report_store.create(a, "t-a1", "body", random=RealRandom(), env=real_io().env, host=real_io().host)
     b = cached_host(tmp_path, "b")
-    report_log.set_pinned(b, rid, True)
-    report_log.set_title(a, rid, "t-a2-longer-title")
-    report_log.set_archived(b, rid, True)
+    report_log.set_pinned(b, rid, True, env=real_io().env, host=real_io().host)
+    report_log.set_title(a, rid, "t-a2-longer-title", env=real_io().env, host=real_io().host)
+    report_log.set_archived(b, rid, True, env=real_io().env, host=real_io().host)
 
     entries = report_log.read_header_entries(cached_host(tmp_path, "c"), rid)
 

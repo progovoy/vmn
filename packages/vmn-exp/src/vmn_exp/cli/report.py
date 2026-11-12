@@ -103,19 +103,20 @@ def _title_of(body, path):
     return os.path.splitext(os.path.basename(path))[0]
 
 
-def _cmd_put(storage, args, random):
+def _cmd_put(storage, args, io):
     if args.new == bool(args.rid):
         return _error("Give a report id or --new (not both)")
     with open(args.file, encoding="utf-8") as f:
         body = f.read()
     if args.new:
         rid = store.create(storage, args.title or _title_of(body, args.file), body,
-                           random=random)
+                           random=io.random, env=io.env, host=io.host)
         print(f"{rid}  v1")
         return 0
     if store.get(storage, args.rid) is None:
         return _error(f"Report {args.rid!r} not found")
-    result = store.save(storage, args.rid, store.latest_rev(storage, args.rid), body, args.message)
+    result = store.save(storage, args.rid, store.latest_rev(storage, args.rid), body, args.message,
+                        env=io.env, host=io.host)
     if isinstance(result, store.Conflict):
         return _error(f"Revision {result.rev} was saved concurrently; retry")
     print(f"{args.rid}  v{result}")
@@ -135,5 +136,5 @@ _DISPATCH = {"list": _cmd_list, "show": _cmd_show, "export": _cmd_export, "delet
 def report_run_without_repo(args, io):
     storage = _get_storage(args, io.clock, io.env)
     if args.action == "put":
-        return _cmd_put(storage, args, io.random)
+        return _cmd_put(storage, args, io)
     return _DISPATCH[args.action](storage, args)

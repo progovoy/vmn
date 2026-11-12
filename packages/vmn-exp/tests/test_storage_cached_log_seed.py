@@ -17,6 +17,7 @@ from vmn_exp.storage import buffered
 from vmn_exp.storage.open import open_storage
 from vmn_exp.storage.uri import s3_uri
 from vmn_exp.core.real_io import RealClock
+from writer_args import process_writer
 
 APP = "app"
 V = "0.0.1-dev.aaa1111.bbb2222"
@@ -36,11 +37,11 @@ def _note(text, second):
 
 
 def _append(host, text, second):
-    assert host.append_log_entry(APP, V, own_stream(host, APP, V), _note(text, second))
+    assert host.append_log_entry(APP, V, own_stream(host, APP, V, writer=process_writer()), _note(text, second))
 
 
 def _sync(host):
-    host.sync_log_to_remote(APP, V, own_stream(host, APP, V))
+    host.sync_log_to_remote(APP, V, own_stream(host, APP, V, writer=process_writer()))
 
 
 def _remote_log(writer_id=None):
@@ -96,7 +97,7 @@ def test_a_fresh_root_appending_under_the_same_writer_keeps_the_remote_entries(t
 
 def test_remote_segments_survive_a_fresh_roots_append(tmp_path):
     a = _host_a_wrote_three(tmp_path, sync_each=True)
-    assert len(s3_storage().log_objects(APP, V, own_stream(a, APP, V))) == 3
+    assert len(s3_storage().log_objects(APP, V, own_stream(a, APP, V, writer=process_writer()))) == 3
 
     _fresh_host_appends(tmp_path)
 
@@ -107,7 +108,7 @@ def test_a_compacted_remote_log_survives_a_fresh_roots_append(tmp_path):
     a = _host_a_wrote_three(tmp_path, sync_each=True)
     a.save_file(APP, V, RUN_STATE_FILE, FINISHED)
     _sync(a)  # the run finished: one merged object
-    stream = own_stream(a, APP, V)
+    stream = own_stream(a, APP, V, writer=process_writer())
     assert [n for n, _ in s3_storage().log_objects(APP, V, stream)] == [
         compacted_log_name(stream, 2)
     ]
@@ -185,15 +186,15 @@ def same_writer(monkeypatch):
 def _run_logged_by_host_a(tmp_path):
     a = cached_host(tmp_path, "a")
     a.save(APP, V, meta(V), {})
-    append_to_log(a, APP, V, create_log_entry("create", note=None))
-    append_to_log(a, APP, V, create_log_entry("note", text="from a"))
-    flush_log(a, APP, V)
+    append_to_log(a, APP, V, create_log_entry("create", note=None), writer=process_writer())
+    append_to_log(a, APP, V, create_log_entry("note", text="from a"), writer=process_writer())
+    flush_log(a, APP, V, writer=process_writer())
 
 
 def test_tag_from_a_fresh_root_keeps_the_runs_log(tmp_path, same_writer):
     _run_logged_by_host_a(tmp_path)
 
-    assert tag_run(cached_host(tmp_path, "b"), APP, V, tags={"verdict": "keep"})
+    assert tag_run(cached_host(tmp_path, "b"), APP, V, tags={"verdict": "keep"}, writer=process_writer())
 
     log = _remote_log(W)
     assert [e["type"] for e in log] == ["create", "note", "tags"]
@@ -203,8 +204,8 @@ def test_add_note_from_a_fresh_root_keeps_the_runs_log(tmp_path, same_writer):
     _run_logged_by_host_a(tmp_path)
 
     b = cached_host(tmp_path, "b")
-    append_to_log(b, APP, V, create_log_entry("note", text="from b"))
-    flush_log(b, APP, V)
+    append_to_log(b, APP, V, create_log_entry("note", text="from b"), writer=process_writer())
+    flush_log(b, APP, V, writer=process_writer())
 
     log = _remote_log(W)
     assert [e["type"] for e in log] == ["create", "note", "note"]

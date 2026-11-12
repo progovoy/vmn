@@ -136,7 +136,8 @@ def _exp_run_without_repo(args):
     )
 
     dispatch = {
-        "create": functools.partial(experiment_create, clock=io.clock, env=io.env),
+        "create": functools.partial(experiment_create, clock=io.clock, env=io.env,
+                                    host=io.host),
         "run": functools.partial(experiment_run, io=io),
         "add": functools.partial(experiment_add, io=io),
         "list": functools.partial(experiment_list, console=io.console, clock=io.clock),
@@ -147,7 +148,7 @@ def _exp_run_without_repo(args):
         "rewind": functools.partial(experiment_rewind, clock=io.clock),
         "push": functools.partial(experiment_push, clock=io.clock, env=io.env),
         "similar": functools.partial(experiment_similar, clock=io.clock),
-        "similar-backfill": functools.partial(experiment_similar_backfill, clock=io.clock),
+        "similar-backfill": functools.partial(experiment_similar_backfill, io=io),
         "backfill-children": experiment_backfill_children,
     }
 

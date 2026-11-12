@@ -15,6 +15,7 @@ from vmn_exp.storage import buffered
 from vmn_exp.storage.buffered import BufferedRemoteStorage
 from vmn_exp.storage.local import LocalSnapshotStorage
 from vmn_exp.core.real_io import RealClock
+from writer_args import process_writer
 
 APP, V, W = "app", "v", "w"
 FINISHED = yaml.dump({"state": "finished"})
@@ -107,14 +108,14 @@ def test_the_warning_of_a_failed_close_names_the_kept_buffer(monkeypatch, pod, c
 def test_appends_after_a_failed_close_go_to_a_new_buffer(monkeypatch, pod):
     with monkeypatch.context() as outage:
         root = _pod_with_unshipped_lines(outage, pod)
-        pod.append_log_entry(APP, V, own_stream(pod, APP, V), entry(3))
-        kept_stream = own_stream(pod, APP, V)
+        pod.append_log_entry(APP, V, own_stream(pod, APP, V, writer=process_writer()), entry(3))
+        kept_stream = own_stream(pod, APP, V, writer=process_writer())
         pod.close()
 
-    pod.append_log_entry(APP, V, own_stream(pod, APP, V), entry(7))
+    pod.append_log_entry(APP, V, own_stream(pod, APP, V, writer=process_writer()), entry(7))
 
     assert pod._buffer_root != root
-    assert own_stream(pod, APP, V) != kept_stream
+    assert own_stream(pod, APP, V, writer=process_writer()) != kept_stream
     assert _buffered_steps(root) == [0, 1, 2, 3]
     assert _remote_steps() == [0, 7]
 

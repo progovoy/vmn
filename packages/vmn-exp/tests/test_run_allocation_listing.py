@@ -9,6 +9,7 @@ from moto import mock_aws
 from vmn_exp.core import run_hint
 from vmn_exp.core.writer import allocate_run_verstr
 from vmn_exp.storage.s3 import S3SnapshotStorage
+from writer_args import process_suffix
 
 BUCKET = "vmn-bucket"
 APP = "app"
@@ -63,7 +64,9 @@ def _seed(storage, names):
 
 
 def _allocate(storage, **kwargs):
-    return allocate_run_verstr(storage, APP, CODE, make_record=_record, **kwargs)
+    return allocate_run_verstr(storage, APP, CODE, make_record=_record,
+                               **({} if "suffix" in kwargs else {"suffix": process_suffix()}),
+                               **kwargs)
 
 
 def test_a_writer_suffix_lists_only_names_under_code_dot_suffix(listed, monkeypatch):

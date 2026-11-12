@@ -28,9 +28,10 @@ def _payload(storage, app_name):
                 error=error)
 
 
-def register(app, api_prefix, settings_target):
+def register(app, api_prefix, settings_target, io):
     """*settings_target(ws_name, app_tag)* -> ``(storage, app name, changed())``,
-    *changed* telling the server's caches the settings moved."""
+    *changed* telling the server's caches the settings moved; a write without
+    a principal is the identity's of *io*'s env and host."""
     path = f"{api_prefix}/workspaces/{{ws_name}}/apps/{{app_tag}}/settings"
 
     @app.get(path, dependencies=[require(VIEWER)])
@@ -48,7 +49,8 @@ def register(app, api_prefix, settings_target):
         storage, app_name, changed = settings_target(ws_name, app_tag)
         try:
             check_settings(text)
-            write_settings(storage, app_name, text, actor=author_of(request))
+            write_settings(storage, app_name, text, actor=author_of(request, io.env, io.host),
+                           env=io.env, host=io.host)
         except SettingsError as exc:
             raise HTTPException(400, str(exc))
         changed()

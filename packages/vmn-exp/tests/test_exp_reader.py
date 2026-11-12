@@ -11,6 +11,7 @@ from fakes.clock import FakeClock
 
 from vmn_exp.sdk.reader import get_run, list_runs
 from vmn_exp.core.real_io import RealClock
+from vmn_exp.core.real_io import real_io
 
 
 def _iso(dt):
@@ -572,7 +573,7 @@ def _git_free_run(tmp_path, app_name, exp_root):
 
     storage = open_storage(root=str(exp_root), area="runs", clock=RealClock(), env=os.environ)
     verstr, err = create_from_snapshot(
-        storage, app_name, _snapshot_meta(tmp_path, app_name)
+        storage, app_name, _snapshot_meta(tmp_path, app_name), environ=real_io().env, host=real_io().host
     )
     assert err is None, err
     return verstr, storage

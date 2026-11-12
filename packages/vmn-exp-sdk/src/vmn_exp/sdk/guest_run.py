@@ -12,7 +12,7 @@ supervisor sees it.
 import logging
 
 from vmn_exp.core.streams import guest_writer_id
-from vmn_exp.core.writer import process_writer_id
+from vmn_exp.core.writer import get_writer_id
 from vmn_exp.sdk import adoption
 from vmn_exp.sdk.run import Run
 
@@ -25,14 +25,16 @@ class GuestRun(Run):
     ``name`` comes from ``vmn-exp run --name`` and ``capture_output`` is the
     supervisor's: both are ignored here."""
 
-    def __init__(self, *args, name=None, capture_output=False, writer=None, **kwargs):
+    def __init__(self, *args, name=None, capture_output=False, writer=None, env, host,
+                 **kwargs):
         if name is not None:
             _LOGGER.warning("vmn: start_run(name=...) is ignored in the run vmn-exp run "
                             "started; name it with vmn-exp run --name")
         if capture_output:
             _LOGGER.debug("vmn: capture_output is ignored; vmn-exp run captures the output")
         super().__init__(*args, name=None, capture_output=False,
-                         writer=writer or guest_writer_id(process_writer_id()), **kwargs)
+                         writer=writer or guest_writer_id(get_writer_id(env, host)),
+                         env=env, host=host, **kwargs)
 
     def _publish(self, updates=(), final=False):
         pass  # the supervisor writes the run's state

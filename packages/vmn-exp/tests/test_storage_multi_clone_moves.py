@@ -36,6 +36,7 @@ from vmn_exp.storage import stream_owner
 from vmn_exp.storage.buffered import BufferedRemoteStorage
 from vmn_exp.storage.local import LocalSnapshotStorage
 from vmn_exp.core.real_io import RealClock
+from writer_args import process_writer
 
 
 @pytest.fixture(autouse=True)
@@ -120,7 +121,7 @@ def test_an_offline_copy_compacts_no_stream_it_inherited(tmp_path):
     s3_storage().create_exclusive(APP, V, meta(V), {})
     a = LocalSnapshotStorage(str(tmp_path / "a"), "runs")
     assert a.create_exclusive(APP, V, meta(V), {})
-    own = own_stream(a, APP, V)
+    own = own_stream(a, APP, V, writer=process_writer())
     a.append_metric_block(APP, V, own, block(1.0, start=1))
     shutil.copytree(tmp_path / "a", tmp_path / "b")
     a.append_metric_block(APP, V, own, block(2.0, start=2))

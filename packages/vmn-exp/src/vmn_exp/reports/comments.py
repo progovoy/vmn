@@ -10,7 +10,7 @@ from __future__ import annotations
 import base64
 
 from vmn_exp.core.record_format import stamped
-from vmn_exp.core.writer import claim_record, flush_log, process_writer_id, own_stream
+from vmn_exp.core.writer import claim_record, flush_log, get_writer_id, own_stream
 from vmn_exp.registry.fold import next_ts, now_iso
 from vmn_exp.registry.log import actor_identity
 from vmn_exp.storage.areas import COMMENTS, REPORTS
@@ -44,28 +44,29 @@ def new_comment_id(random):
     return "c" + base64.b32encode(random.token_bytes(10)).decode().lower()
 
 
-def add(storage, target, text, reply_to=None, anchor=None, author=None, *, random):
-    """Post a comment on *target*; returns its id."""
+def add(storage, target, text, reply_to=None, anchor=None, author=None, *, random, env, host):
+    """Post a comment on *target* as the writer of *env* and *host*; returns its id."""
     area, scope, name, target_dict = _location(storage, target)
     header = {"verstr": name, "type": "comment_thread", "target": target_dict, "timestamp": now_iso()}
     claim_record(area, scope, name, stamped(header))  # losing the race is fine
     comment_id = new_comment_id(random)
-    _append(area, scope, name, "comment", id=comment_id, text=text,
+    _append(area, scope, name, "comment", env, host, id=comment_id, text=text,
             reply_to=reply_to, anchor=anchor,
-            author=author if author is not None else actor_identity())
+            author=author if author is not None else actor_identity(env, host))
     return comment_id
 
 
-def edit(storage, target, comment_id, text):
-    _append(*_location(storage, target)[:3], "comment_edit", id=comment_id, text=text)
+def edit(storage, target, comment_id, text, *, env, host):
+    _append(*_location(storage, target)[:3], "comment_edit", env, host, id=comment_id,
+            text=text)
 
 
-def delete(storage, target, comment_id):
-    _append(*_location(storage, target)[:3], "comment_delete", id=comment_id)
+def delete(storage, target, comment_id, *, env, host):
+    _append(*_location(storage, target)[:3], "comment_delete", env, host, id=comment_id)
 
 
-def resolve(storage, target, comment_id, resolved=True):
-    _append(*_location(storage, target)[:3], "comment_resolve",
+def resolve(storage, target, comment_id, resolved=True, *, env, host):
+    _append(*_location(storage, target)[:3], "comment_resolve", env, host,
             id=comment_id, resolved=resolved)
 
 
@@ -74,19 +75,20 @@ def delete_thread(storage, target):
     area.delete(scope, name)
 
 
-def _append(area, scope, name, entry_type, **fields):
+def _append(area, scope, name, entry_type, env, host, **fields):
+    """Append an *entry_type* entry by the writer of *env* and *host*."""
     entries = _entries(area, scope, name)
-    writer = process_writer_id()
+    writer = get_writer_id(env, host)
     entry = {
         "type": entry_type,
         "ts": next_ts(max((e.get("ts", "") for e in entries), default=None), now_iso()),
         "writer": writer,
         "pos": sum(1 for e in entries if e.get("writer") == writer),
-        "actor": actor_identity(),
+        "actor": actor_identity(env, host),
         **fields,
     }
-    area.append_log_entry(scope, name, own_stream(area, scope, name), entry)
-    flush_log(area, scope, name)
+    area.append_log_entry(scope, name, own_stream(area, scope, name, writer), entry)
+    flush_log(area, scope, name, writer)
 
 
 def _order(entry):

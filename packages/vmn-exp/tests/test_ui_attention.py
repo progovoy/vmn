@@ -18,6 +18,7 @@ from vmn_exp.storage.areas import RUNS
 from vmn_exp.storage.local import LocalSnapshotStorage
 from vmn_exp.storage.open import open_storage
 from vmn_exp.core.real_io import RealClock
+from vmn_exp.core.real_io import real_io
 
 APP = "app"
 BASE = f"/api/v1/workspaces/ws/apps/{APP}"
@@ -89,7 +90,7 @@ def _client(store, settings=SETTINGS):
     client_of, storage = store
     _fleet(storage)
     if settings:
-        write_settings(storage, APP, settings)
+        write_settings(storage, APP, settings, env=real_io().env, host=real_io().host)
     return client_of()
 
 
@@ -206,7 +207,7 @@ def test_a_checkout_conf_names_attention_queries_too(tmp_path, clock):
     (root / ".git").mkdir(parents=True)
     storage = LocalSnapshotStorage(str(root / ".vmn" / "store"), "runs")
     _fleet(storage)
-    write_settings(storage, APP, SETTINGS)
+    write_settings(storage, APP, SETTINGS, env=real_io().env, host=real_io().host)
     os.makedirs(root / ".vmn" / APP)
     attention = [{"key": "failing", "query": 'status = "failed"', "level": "error"}]
     with open(root / ".vmn" / APP / "conf.yml", "w") as f:

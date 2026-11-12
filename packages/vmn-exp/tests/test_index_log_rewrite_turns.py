@@ -11,6 +11,7 @@ from s3_helpers import cached_host, meta, mocked_bucket
 from vmn_exp.core.index import ExperimentIndex, direct_rows
 from vmn_exp.core.writer import own_stream
 from vmn_exp.storage import buffered
+from writer_args import process_writer
 
 APP = "app"
 V = "0.0.1-dev.aaa1111.bbb2222"
@@ -49,8 +50,8 @@ def _one_shot_append(tmp_path, root, step, rng):
     if rng.random() < 0.4:
         _flaky(host, rng, 0.5)
     try:
-        host.append_log_entry(APP, V, own_stream(host, APP, V), _tag(step, root, rng))
-        host.sync_log_to_remote(APP, V, own_stream(host, APP, V))
+        host.append_log_entry(APP, V, own_stream(host, APP, V, writer=process_writer()), _tag(step, root, rng))
+        host.sync_log_to_remote(APP, V, own_stream(host, APP, V, writer=process_writer()))
     except Exception:
         pass  # the network is down: the next command ships it
 
@@ -68,7 +69,7 @@ def test_each_clones_persisted_index_equals_a_full_read(tmp_path, seed):
                             cache_path=caches[root], full_sweep_sec=0).refresh()
     for root in "ab":
         host = cached_host(tmp_path, root)
-        host.sync_log_to_remote(APP, V, own_stream(host, APP, V))
+        host.sync_log_to_remote(APP, V, own_stream(host, APP, V, writer=process_writer()))
 
     for root in "ab":
         host = cached_host(tmp_path, root)

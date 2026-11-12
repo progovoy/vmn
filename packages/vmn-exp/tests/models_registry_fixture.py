@@ -40,7 +40,7 @@ def build_registry(storage, models, versions, aliased=0):
                 "run_ref": {"app": "app", "verstr": f"1.0.{n}"}, "artifact_path": "model.pkl",
             }), {})
         if m < aliased:
-            set_alias(storage, name, "prod", versions)
+            set_alias(storage, name, "prod", versions, env=real_io().env, host=real_io().host)
 
 
 def store_client(tmp_path, background):

@@ -57,12 +57,12 @@ def _archive(storage, app_name, verstrs, archived):
     return 0
 
 
-def _tag(storage, app_name, verstrs, tags, remove):
+def _tag(storage, app_name, verstrs, tags, remove, writer):
     if len(verstrs) != 1:
         VMN_LOGGER.error("exp tag takes exactly one run (a ref, -v or --latest)")
         return 1
     try:
-        done = tag_run(storage, app_name, verstrs[0], tags, remove)
+        done = tag_run(storage, app_name, verstrs[0], tags, remove, writer=writer)
     except ValueError as e:
         VMN_LOGGER.error(str(e))
         return 1
@@ -88,7 +88,8 @@ def _archive_by_query(storage, app_name, args):
     return 0
 
 
-def experiment_manage(app_name, storage, args):
+def experiment_manage(app_name, storage, args, writer):
+    """``archive``/``unarchive``/``tag``; a tag is written as *writer*."""
     refs, tags = _split_refs(args)
     if getattr(args, "query", None) is not None and args.action != "tag":
         if refs or tags:
@@ -102,7 +103,7 @@ def experiment_manage(app_name, storage, args):
     if verstrs is None:
         return 1
     if args.action == "tag":
-        return _tag(storage, app_name, verstrs, tags, getattr(args, "remove", None))
+        return _tag(storage, app_name, verstrs, tags, getattr(args, "remove", None), writer)
     if tags:
         VMN_LOGGER.error(f"exp {args.action} takes runs, not key=value pairs")
         return 1

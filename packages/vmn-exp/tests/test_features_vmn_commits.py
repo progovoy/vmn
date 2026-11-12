@@ -15,6 +15,7 @@ from vmn_exp.core.features import features_from_patches
 from vmn_exp.core.fold import fold_features, fold_log
 from vmn_exp.gitmode.features import rerun_features
 from vmn_exp.sdk import start_run
+from vmn_exp.core.real_io import real_io
 
 SHA = "3d71d1bf894eea3f06c2c57b7bfbf77610a7ea8c"
 VMN_COMMIT = f"""From {SHA} Mon Sep 17 00:00:00 2001
@@ -115,7 +116,7 @@ def test_a_rerun_from_stored_code_leaves_out_vmns_commits(tmp_path):
     vcs = types.SimpleNamespace(backend=types.SimpleNamespace(repo_path=str(tmp_path)))
     patches = {"local_commits": VMN_COMMIT + USER_COMMIT}
 
-    entry = rerun_features(vcs, [], {}, patches)
+    entry = rerun_features(vcs, [], {}, patches, env=real_io().env, host=real_io().host)
 
     assert entry["commits"] == ["tune lr"]
     assert entry["changed"]["files"] == ["train.py"]

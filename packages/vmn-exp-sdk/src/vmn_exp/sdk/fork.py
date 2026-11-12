@@ -6,6 +6,7 @@ A fork is a new run seeded with another run's history up to a step (see
 marker that hides its history past a step (see :mod:`vmn_exp.core.rewind`).
 """
 from vmn_exp.core.fork import next_step, rewind_run, seed_fork, split_fork_ref
+from vmn_exp.core.writer import get_writer_id
 from vmn_exp.sdk import resume
 
 
@@ -25,13 +26,16 @@ def locate_source(app_name, fork_from, fork_step, storage, env):
     return app_name, storage, source, step
 
 
-def seed(storage, app_name, verstr, source, step):
-    """Seed the new run; returns the step it continues from."""
-    return next_step(seed_fork(storage, app_name, verstr, source, step)["step"])
+def seed(storage, app_name, verstr, source, step, io):
+    """Seed the new run as the writer of *io*'s env and host; returns the
+    step it continues from."""
+    writer = get_writer_id(io.env, io.host)
+    return next_step(seed_fork(storage, app_name, verstr, source, step, writer=writer)["step"])
 
 
-def rewind(storage, app_name, verstr, prior_state, step, now):
-    """Hide *verstr*'s history past *step* (refused while it runs at *now*);
-    returns the step it continues from."""
-    rewind_run(storage, app_name, verstr, step, prior_state, now)
+def rewind(storage, app_name, verstr, prior_state, step, now, io):
+    """Hide *verstr*'s history past *step* (refused while it runs at *now*),
+    as the writer of *io*'s env and host; returns the step it continues from."""
+    rewind_run(storage, app_name, verstr, step, prior_state, now,
+               writer=get_writer_id(io.env, io.host))
     return next_step(step)

@@ -21,6 +21,7 @@ from vmn_exp.registry.store import ensure_model, register_version, registry_stor
 from vmn_exp.sdk.models import get_model_version, register_model
 from vmn_exp.sdk.usage import use_dataset, use_model
 from vmn_exp.storage.local import LocalSnapshotStorage
+from vmn_exp.core.real_io import real_io
 
 
 @pytest.fixture(autouse=True)
@@ -88,7 +89,7 @@ def test_use_model_input_name_is_pinned_name_at_n(tmp_path):
 def test_use_model_alias_is_pinned_to_number(tmp_path):
     storage = _storage(tmp_path)
     _model(storage)
-    set_alias(storage, "resnet", "prod", 1)
+    set_alias(storage, "resnet", "prod", 1, env=real_io().env, host=real_io().host)
     run = FakeRun(storage, "serving", "1.0.0")
     use_model("resnet@prod", run=run, storage=storage)
     assert list(run.inputs()) == ["resnet@1"]

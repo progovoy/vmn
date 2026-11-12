@@ -13,6 +13,7 @@ from vmn_exp.core.index_store_schema import SCHEMA_VERSION
 from vmn_exp.snapshot import LocalSnapshotStorage
 from vmn_exp.storage.files import METADATA_FILE
 from vmn_exp.core.real_io import RealClock
+from vmn_exp.core.real_io import real_io
 
 TOKEN = "glpat-SECRET"
 TOKEN_URL = f"https://oauth2:{TOKEN}@gitlab.example.com/group/repo.git"
@@ -123,7 +124,7 @@ def test_git_free_run_from_an_exported_snapshot_has_no_credentials(tmp_path):
     }))
     storage = open_storage(root=str(tmp_path / "exp"), area="runs", clock=RealClock(), env=os.environ)
 
-    verstr, err = create_from_snapshot(storage, "testapp", str(meta_path))
+    verstr, err = create_from_snapshot(storage, "testapp", str(meta_path), environ=real_io().env, host=real_io().host)
 
     assert err is None
     assert TOKEN not in _raw_file(storage, "testapp", verstr)

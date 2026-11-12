@@ -15,6 +15,7 @@ from s3_helpers import cached_host, entry, meta, mocked_bucket, s3_storage
 
 from vmn_exp.core.manage import tag_run
 from vmn_exp.core.writer import append_to_log, create_log_entry, flush_log
+from writer_args import process_writer
 
 
 @pytest.fixture(autouse=True)
@@ -29,7 +30,7 @@ def test_tag_run_reaches_the_remote_with_no_heartbeat(tmp_path):
     host = cached_host(tmp_path, "a")
     host.save("app", "v1", meta("v1"), {})
 
-    assert tag_run(host, "app", "v1", tags={"verdict": "keep"})
+    assert tag_run(host, "app", "v1", tags={"verdict": "keep"}, writer=process_writer())
 
     # A second host / a fresh read of the bucket only, simulating another
     # machine or this host's local cache having been cleared.
@@ -46,8 +47,8 @@ def test_create_metrics_flush_reaches_the_remote_with_no_heartbeat(tmp_path):
     host = cached_host(tmp_path, "a")
     host.save("app", "v1", meta("v1"), {})
 
-    append_to_log(host, "app", "v1", create_log_entry("metrics", values={"i": 0}))
-    flush_log(host, "app", "v1")
+    append_to_log(host, "app", "v1", create_log_entry("metrics", values={"i": 0}), writer=process_writer())
+    flush_log(host, "app", "v1", writer=process_writer())
 
     remote_only = s3_storage()
     log = remote_only.load_merged_log("app", "v1")
@@ -62,7 +63,7 @@ def test_append_to_log_alone_does_not_reach_the_remote(tmp_path):
     host = cached_host(tmp_path, "a")
     host.save("app", "v1", meta("v1"), {})
 
-    append_to_log(host, "app", "v1", entry(0))
+    append_to_log(host, "app", "v1", entry(0), writer=process_writer())
 
     remote_only = s3_storage()
     assert remote_only.load_merged_log("app", "v1") == []

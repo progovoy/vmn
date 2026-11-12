@@ -9,6 +9,7 @@ import pytest
 from fakes.clock import FakeClock
 from fakes.console import FakeConsole
 from fakes.env import FakeEnv
+from fakes.host import FakeHost
 from fakes.random import FakeRandom
 from similar_seed import seed, verstr
 from version_stamp.cli.args import parse_user_commands
@@ -66,7 +67,8 @@ def test_patching_resolve_experiment_version_on_the_experiment_module_reaches_sh
     console = (FakeConsole(),) if action in ("experiment_show", "experiment_export") else ()
     random = (FakeRandom(),) if action == "experiment_add" else ()
     clock = ((FakeClock(), FakeEnv()) if action == "experiment_restore"
-             else (FakeClock(),) if action == "experiment_show" else ())
+             else (FakeClock(),) if action == "experiment_show"
+             else (FakeEnv(), FakeHost()) if action == "experiment_export" else ())
     assert getattr(experiment, action)(None, {}, _storage(tmp_path), _args(**extra), *console, *random,
                                        *clock) == 1
     assert len(calls) == 1
@@ -116,6 +118,7 @@ def test_dispatch_resolves_handlers_through_the_experiment_module(monkeypatch, a
     monkeypatch.setattr(experiment, "_open_checked_storage", lambda *a, **k: "storage")
     monkeypatch.setattr(experiment, handler, lambda *a, **k: got.append(a[2]) or 7)
     args = parse_user_commands(["exp", action, "my_app"])
-    io = SimpleNamespace(console=FakeConsole(), random=FakeRandom(), clock=FakeClock(), env=FakeEnv())
+    io = SimpleNamespace(console=FakeConsole(), random=FakeRandom(), clock=FakeClock(), env=FakeEnv(),
+                         host=FakeHost())
     assert experiment.handle_experiment(SimpleNamespace(vcs=None, args=args), io) == 7
     assert got == ["storage"]

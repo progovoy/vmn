@@ -27,6 +27,7 @@ from vmn_exp.core.writer import (
     save_run_state,
 )
 from vmn_exp.core.real_io import real_io
+from writer_args import process_suffix, process_writer
 
 
 class _FakeStorage:
@@ -88,7 +89,7 @@ def test_append_to_log_writes_through_the_per_writer_jsonl(monkeypatch):
     monkeypatch.setenv("VMN_WRITER_ID", "pod-7")
     storage = _FakeStorage()
 
-    append_to_log(storage, "app", "0.0.1", {"type": "note", "text": "hi"})
+    append_to_log(storage, "app", "0.0.1", {"type": "note", "text": "hi"}, writer=process_writer())
 
     [(app, verstr, stream, entry)] = storage.log_entries
     assert (app, verstr, entry) == ("app", "0.0.1", {"type": "note", "text": "hi"})
@@ -119,7 +120,7 @@ def test_a_failed_seal_does_not_fail_the_metric_append(monkeypatch):
     entry = {"type": "metrics", "step": 0, "timestamp": "2026-01-01T00:00:00Z",
              "values": {"loss": 0.5}}
 
-    assert append_metric_entries(storage, "app", "0.0.1", [entry]) is True
+    assert append_metric_entries(storage, "app", "0.0.1", [entry], writer=process_writer()) is True
     assert len(storage.blocks) == 1
 
 
@@ -326,7 +327,7 @@ def _meta(verstr):
 def test_allocate_run_verstr_uses_the_code_verstr_when_it_is_free():
     storage = _FakeStorage()
 
-    assert allocate_run_verstr(storage, "app", "0.0.1-dev.aaa.bbb") == "0.0.1-dev.aaa.bbb"
+    assert allocate_run_verstr(storage, "app", "0.0.1-dev.aaa.bbb", suffix=process_suffix()) == "0.0.1-dev.aaa.bbb"
 
 
 def test_allocate_run_verstr_increments_the_run_suffix():
@@ -335,7 +336,7 @@ def test_allocate_run_verstr_increments_the_run_suffix():
     )
 
     assert (
-        allocate_run_verstr(storage, "app", "0.0.1-dev.aaa.bbb")
+        allocate_run_verstr(storage, "app", "0.0.1-dev.aaa.bbb", suffix=process_suffix())
         == "0.0.1-dev.aaa.bbb.r3"
     )
 
@@ -345,7 +346,7 @@ def test_allocate_run_verstr_uses_a_writer_unique_suffix_in_k8s_mode(monkeypatch
     storage = _FakeStorage()
 
     assert (
-        allocate_run_verstr(storage, "app", "0.0.1-dev.aaa.bbb")
+        allocate_run_verstr(storage, "app", "0.0.1-dev.aaa.bbb", suffix=process_suffix())
         == "0.0.1-dev.aaa.bbb.pod-7"
     )
 
@@ -355,7 +356,7 @@ def test_allocate_run_verstr_disambiguates_a_taken_writer_suffix(monkeypatch):
     storage = _FakeStorage([_meta("0.0.1-dev.aaa.bbb.pod-7")])
 
     assert (
-        allocate_run_verstr(storage, "app", "0.0.1-dev.aaa.bbb")
+        allocate_run_verstr(storage, "app", "0.0.1-dev.aaa.bbb", suffix=process_suffix())
         == "0.0.1-dev.aaa.bbb.pod-7.2"
     )
 
@@ -393,7 +394,7 @@ def test_allocate_run_verstr_prefers_a_code_verstr_scoped_listing():
         ]
     )
 
-    verstr = allocate_run_verstr(storage, "app", "0.0.1-dev.aaa.bbb")
+    verstr = allocate_run_verstr(storage, "app", "0.0.1-dev.aaa.bbb", suffix=process_suffix())
 
     assert verstr == "0.0.1-dev.aaa.bbb.r3"
     assert storage.list_run_verstrs_calls == ["0.0.1-dev.aaa.bbb"]
@@ -428,7 +429,7 @@ def test_create_run_claims_the_verstr_and_writes_the_create_entry():
         note="n",
         create_data={"params": {"lr": 0.1}},
         parent="0.0.1-dev.aaa.bbb",
-        name="sweep",
+        name="sweep", writer=process_writer(), suffix=process_suffix()
     )
 
     assert verstr == "0.0.1-dev.aaa.bbb.r2"
@@ -454,7 +455,7 @@ def test_create_run_never_makes_the_run_its_own_parent():
     storage = _RecordingStorage()
 
     verstr = create_run(
-        storage, "app", "0.0.1-dev.aaa.bbb", {}, {}, parent="0.0.1-dev.aaa.bbb"
+        storage, "app", "0.0.1-dev.aaa.bbb", {}, {}, parent="0.0.1-dev.aaa.bbb", writer=process_writer(), suffix=process_suffix()
     )
 
     assert "parent" not in storage.saved[verstr][0]

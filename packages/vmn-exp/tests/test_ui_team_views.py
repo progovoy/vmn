@@ -56,7 +56,7 @@ def _status(client, **params):
 
 def test_the_status_carries_the_team_views(store):
     client_of, storage = store
-    write_settings(storage, APP, SETTINGS)
+    write_settings(storage, APP, SETTINGS, env=real_io().env, host=real_io().host)
     assert _status(client_of()).json()["views"] == SERVED
 
 
@@ -67,7 +67,7 @@ def test_no_views_no_field(store):
 
 def test_a_settings_change_moves_the_views_and_the_etag(store):
     client_of, storage = store
-    write_settings(storage, APP, SETTINGS)
+    write_settings(storage, APP, SETTINGS, env=real_io().env, host=real_io().host)
     client = client_of()
     first = _status(client)
     r = client.put(f"{BASE}/settings", json={"text": "ui: {views: []}\n"})
@@ -79,7 +79,7 @@ def test_a_settings_change_moves_the_views_and_the_etag(store):
 
 def test_a_scoped_status_carries_no_views(store):
     client_of, storage = store
-    write_settings(storage, APP, SETTINGS)
+    write_settings(storage, APP, SETTINGS, env=real_io().env, host=real_io().host)
     body = _status(client_of(), scope="0.0.1-dev.abc1234.def5678.r1").json()
     assert "views" not in body
 
@@ -92,7 +92,7 @@ def test_a_checkout_conf_names_team_views_too(tmp_path):
     (root / ".git").mkdir(parents=True)
     storage = LocalSnapshotStorage(str(root / ".vmn" / "store"), "runs")
     _run(storage, 1)
-    write_settings(storage, APP, SETTINGS)
+    write_settings(storage, APP, SETTINGS, env=real_io().env, host=real_io().host)
     os.makedirs(root / ".vmn" / APP)
     views = [{"name": "failed", "page": "jobs", "search": "status=failed"}]
     with open(root / ".vmn" / APP / "conf.yml", "w") as f:

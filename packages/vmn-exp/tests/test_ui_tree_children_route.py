@@ -16,6 +16,7 @@ from vmn_exp.core.app_settings_store import write_settings
 from vmn_exp.core.real_io import RealClock
 from vmn_exp.storage.areas import RUNS
 from vmn_exp.storage.open import open_storage
+from vmn_exp.core.real_io import real_io
 
 APP = "app"
 BASE = f"/api/v1/workspaces/ws/apps/{APP}"
@@ -72,7 +73,7 @@ def client(tmp_path):
     uri = f"file://{tmp_path}/store"
     storage = open_storage(uri, area=RUNS, clock=RealClock(), env=os.environ)
     _tree(storage)
-    write_settings(storage, APP, SETTINGS)
+    write_settings(storage, APP, SETTINGS, env=real_io().env, host=real_io().host)
     manager = WorkspaceManager(str(tmp_path / "data"))
     manager.add_store("ws", uri)
     test_client = TestClient(build_app(manager, fake_deps(clock)))

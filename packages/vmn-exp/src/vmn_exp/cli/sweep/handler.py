@@ -11,7 +11,7 @@ from vmn_exp.core.storage_resolve import _get_experiment_storage
 from vmn_exp.core.sweep.claims import claimed_trials
 from vmn_exp.core.sweep.spec import SpecError, load_spec, metric_definition, parse_spec
 from vmn_exp.core.sweep.summary import summarize, trial_rows
-from vmn_exp.core.writer import append_to_log, flush_log
+from vmn_exp.core.writer import append_to_log, flush_log, get_writer_id
 from version_stamp.api import VMN_LOGGER
 
 
@@ -25,7 +25,7 @@ def handle_sweep(vmn_ctx, io):
     storage = _get_experiment_storage(vcs, params, clock=io.clock, env=io.env)
     try:
         if args.action == "create":
-            return sweep_create(vcs, storage, args, io.env)
+            return sweep_create(vcs, storage, args, io.env, io.host)
         sweep, spec = resolve_sweep(storage, vcs.name, args.ref)
         if args.action == "status":
             return sweep_status(storage, vcs.name, sweep, spec, args, io.clock)
@@ -38,8 +38,9 @@ def handle_sweep(vmn_ctx, io):
         return 1
 
 
-def sweep_create(vcs, storage, args, env):
-    """The sweep's outer run, its normalized spec in the metadata."""
+def sweep_create(vcs, storage, args, env, host):
+    """The sweep's outer run, its normalized spec in the metadata, written as
+    the writer of *env* and *host*."""
     if not args.file:
         raise SpecError("sweep create needs the spec: -f sweep.yml")
     try:
@@ -52,13 +53,14 @@ def sweep_create(vcs, storage, args, env):
     verstr, err = _experiment_create_core(
         vcs, storage, note=args.note, name=args.run_name, parent=parent,
         extra_create_data={"tags": {"sweep": spec["method"]}},
-        capture_env=getattr(args, "capture_env", None), env=env,
+        capture_env=getattr(args, "capture_env", None), env=env, host=host,
     )
     if err is not None:
         return err
     storage.update_metadata(vcs.name, verstr, {"sweep": spec})
-    append_to_log(storage, vcs.name, verstr, metric_definition(spec))
-    flush_log(storage, vcs.name, verstr)
+    writer = get_writer_id(env, host)
+    append_to_log(storage, vcs.name, verstr, metric_definition(spec), writer)
+    flush_log(storage, vcs.name, verstr, writer)
     print(verstr)
     return 0
 
