@@ -16,13 +16,13 @@ from version_stamp.api import VMN_LOGGER
 from vmn_exp.core import sqlite_conn
 
 
-def _control_plane_db(args):
+def _control_plane_db(args, env):
     """``("postgres", dsn)`` or ``("sqlite", path)`` of the invocation."""
     from vmn_exp.ui.cli import DEFAULT_DATA_DIR, postgres_dsn
     from vmn_exp.ui.config import resolve_config
     from vmn_exp.ui.control_plane import CONTROL_PLANE_FILE
 
-    cfg = resolve_config(args)
+    cfg = resolve_config(args, env)
     dsn = postgres_dsn(cfg)
     if dsn:
         return "postgres", dsn
@@ -63,13 +63,13 @@ def backup_sqlite(src_path, dest):
         copy.close()
 
 
-def handle_backup(args):
+def handle_backup(args, env):
     rest = list(args.ui_args[1:])
     if len(rest) != 1:
         VMN_LOGGER.error("usage: vmn-exp ui backup <path> [--config server.yml | --db <dsn>]")
         return 2
     dest = rest[0]
-    kind, source = _control_plane_db(args)
+    kind, source = _control_plane_db(args, env)
     if kind == "postgres":
         print(pg_dump_command(source, dest))
         return 0

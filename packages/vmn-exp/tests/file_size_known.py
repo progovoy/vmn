@@ -31,7 +31,7 @@ KNOWN_OVERSIZED = {
     'vmn_exp.storage.cached': 393,
     'vmn_exp.storage.local': 441,
     'vmn_exp.storage.ship_state': 324,
-    'vmn_exp.ui.cli': 349,
+    'vmn_exp.ui.cli': 347,
     'vmn_exp.ui.experiment_source': 368,
     'vmn_exp.ui.job_aggregate': 348,
     'vmn_exp.ui.jobs': 311,

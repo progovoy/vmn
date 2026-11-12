@@ -64,6 +64,7 @@ def test_sigusr2_dumps_stacks_while_the_main_thread_holds_the_gil(tmp_path):
 
 
 def test_diag_pid_falls_back_to_the_stack_dump(tmp_path, capsys):
+    from vmn_exp.core.real_io import real_io
     from vmn_exp.ui import diag_cli
 
     # No SIGUSR1 handler that answers: the JSON dump never comes.
@@ -78,7 +79,7 @@ def test_diag_pid_falls_back_to_the_stack_dump(tmp_path, capsys):
     args = types.SimpleNamespace(diag_pid=proc.pid, diag_wait=0.5, diag_output=str(out),
                                  data_dir=str(tmp_path), config=None, db=None)
     try:
-        assert diag_cli._from_pid(args) == 0
+        assert diag_cli._from_pid(args, real_io().env) == 0
     finally:
         proc.kill()
         proc.wait()

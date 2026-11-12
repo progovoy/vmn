@@ -125,7 +125,7 @@ def seed_workspaces(manager, seeds):
                               reconcile_sec=seed.reconcile_sec)
 
 
-def build_server(args, env=None):
+def build_server(args, env):
     """``(manager, config, control_plane)``; config and control plane are
     ``None`` without ``--config``/``--db`` (the standalone server)."""
     from vmn_exp.ui.config import resolve_config
@@ -174,18 +174,17 @@ def _oidc_chain(cfg, control_plane, env, random):
         login_token_ttl_sec=oidc.login_token_ttl_days * 24 * 3600)])
 
 
-def server_app(manager, cfg, control_plane, args, *, io, env=None, token=None, **kwargs):
+def server_app(manager, cfg, control_plane, args, *, io, token=None, **kwargs):
     """The FastAPI app for *manager*, with *cfg*'s auth wired in."""
     from vmn_exp.core.writer import set_default_writer_id
     from vmn_exp.ui.config import DEFAULT_AUDIT_RETENTION_DAYS, DEFAULT_METRICS_ENDED_HOURS
     from vmn_exp.ui.onboarding import SERVER_WRITER_ID
     from vmn_exp.ui.server import create_app
 
-    env = os.environ if env is None else env
     # The server's own log writes match the edit policy's log/vmn-server*.
     set_default_writer_id(SERVER_WRITER_ID)
     dsn = postgres_dsn(cfg)
-    auth = _oidc_chain(cfg, control_plane, env, io.random) if cfg else None
+    auth = _oidc_chain(cfg, control_plane, io.env, io.random) if cfg else None
     host = cfg.server.host if cfg else args.host
     keep_warm = cfg.server.keep_warm if cfg else getattr(args, "keep_warm", None)
     ended_hours = (cfg.server.metrics_ended_hours if cfg
@@ -273,18 +272,18 @@ def handle_ui(args, io):
         if args.ui_args[0] == "backup":
             from vmn_exp.ui import backup_cli
 
-            return backup_cli.handle_backup(args)
+            return backup_cli.handle_backup(args, io.env)
         if args.ui_args[0] == "diag":
             from vmn_exp.ui import diag_cli
 
-            return diag_cli.handle_diag(args)
+            return diag_cli.handle_diag(args, io.env)
         if args.ui_args[0] != "cache":
             VMN_LOGGER.error(
                 f"Unknown ui action {args.ui_args[0]!r} (use: backup, cache, diag, onboarding)")
             return 2
-        from vmn_exp.ui.cache_cli import handle_cache
+        from vmn_exp.ui import cache_cli
 
-        return handle_cache(args)
+        return cache_cli.handle_cache(args, io.env)
     try:
         import uvicorn  # noqa: F401
 
@@ -296,14 +295,13 @@ def handle_ui(args, io):
         )
         return 1
 
-    from vmn_exp.core.real_io import real_io
     from vmn_exp.ui import server_logging
-    from vmn_exp.ui.config import ConfigError
+    from vmn_exp.ui.config import ConfigError, static_token
     from vmn_exp.ui.workspace_uri import missing_storage_extra
 
     server_logging.install()
     try:
-        manager, cfg, control_plane = build_server(args)
+        manager, cfg, control_plane = build_server(args, io.env)
     except ConfigError as e:
         VMN_LOGGER.error(str(e))
         return 1
@@ -313,7 +311,7 @@ def handle_ui(args, io):
         return 1
     host = cfg.server.host if cfg else args.host
     port = cfg.server.port if cfg else args.port
-    token = cfg.token() if cfg else args.token or os.environ.get("VMN_UI_TOKEN")
+    token = static_token(cfg, args, io.env)
     refusal = bind_refusal(host, has_token=bool(token), read_only=args.read_only,
                            has_oidc=cfg is not None and cfg.auth.oidc is not None)
     if refusal:
@@ -324,7 +322,7 @@ def handle_ui(args, io):
         VMN_LOGGER.warning(message)
 
     try:
-        app = server_app(manager, cfg, control_plane, args, io=real_io(), token=token,
+        app = server_app(manager, cfg, control_plane, args, io=io, token=token,
                          background_refresh=True)
     except ConfigError as e:
         VMN_LOGGER.error(str(e))

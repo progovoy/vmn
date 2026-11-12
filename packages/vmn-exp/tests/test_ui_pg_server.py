@@ -2,6 +2,7 @@
 plane, store workspaces' cache and search live in Postgres; tenancy reaches
 the workspace manager and turns row-level security on."""
 import argparse
+import dataclasses
 
 import pytest
 
@@ -78,7 +79,7 @@ def client(tmp_path, pg_dsn):
     storage.save(APP, V, {"verstr": V, "timestamp": "2026-01-01T00:00:00Z"}, {})
     args = _config(tmp_path, pg_dsn, store=uri)
     manager, cfg, cp = build_server(args, env={})
-    app = server_app(manager, cfg, cp, args, io=real_io(), env={}, token="t")
+    app = server_app(manager, cfg, cp, args, io=dataclasses.replace(real_io(), env={}), token="t")
     return TestClient(app, headers={"Authorization": "Bearer t"})
 
 

@@ -1,4 +1,5 @@
 """Authorization: a role per route, enforced from request.state.principal."""
+import dataclasses
 import tempfile
 import time
 
@@ -197,7 +198,7 @@ auth:
                               db=None, config=str(path), repo=None, store=None,
                               read_only=False, no_index=True, allowed_host=None)
     manager, cfg, cp = build_server(args, env={})
-    app = server_app(manager, cfg, cp, args, io=real_io(), env={})
+    app = server_app(manager, cfg, cp, args, io=dataclasses.replace(real_io(), env={}))
     return next(a for a in app.state.auth_chain.authenticators
                 if isinstance(a, OIDCAuthenticator))
 

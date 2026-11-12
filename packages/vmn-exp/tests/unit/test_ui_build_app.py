@@ -135,7 +135,7 @@ def test_server_app_builds_on_the_given_io(tmp_path, monkeypatch):
     args = argparse.Namespace(host="127.0.0.1", read_only=False, no_index=False,
                               allowed_host=None)
     app = server_app(_manager(tmp_path), None, SQLiteControlPlane(str(tmp_path / "cp.db")),
-                     args, io=io, env={})
+                     args, io=io)
 
     io.clock.advance(3)
 

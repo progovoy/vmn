@@ -1,5 +1,6 @@
 """Audit pages, counts and exports in SQL; retention and the expiry sweep
 (plan 25 F5)."""
+import dataclasses
 import json
 import time
 
@@ -143,7 +144,7 @@ def test_server_yml_retention_reaches_the_sweeper(tmp_path):
         host="127.0.0.1", port=8265, token=None, data_dir=None, db=None, config=str(path),
         repo=None, store=None, read_only=False, no_index=False, allowed_host=None)
     manager, cfg, cp = build_server(args, env={})
-    app = server_app(manager, cfg, cp, args, io=real_io(), env={}, token="t")
+    app = server_app(manager, cfg, cp, args, io=dataclasses.replace(real_io(), env={}), token="t")
     assert app.state.sweeper.retention_days == 7
 
 

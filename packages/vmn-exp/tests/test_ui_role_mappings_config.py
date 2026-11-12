@@ -1,5 +1,6 @@
 """auth.role_mappings from server.yml reach role checks intact (no 500)."""
 import argparse
+import dataclasses
 
 import pytest
 
@@ -31,7 +32,7 @@ auth:
                               db=None, config=str(p), repo=None, store=None,
                               read_only=False, no_index=True, allowed_host=None)
     manager, cfg, cp = build_server(args, env={})
-    return server_app(manager, cfg, cp, args, io=real_io(), env={}, token="t")
+    return server_app(manager, cfg, cp, args, io=dataclasses.replace(real_io(), env={}), token="t")
 
 
 def test_static_token_on_viewer_route_with_role_mappings(tmp_path):

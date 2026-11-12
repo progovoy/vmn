@@ -2,6 +2,7 @@
 (unless ``VMN_WRITER_ID`` names one), the id the generated edit IAM policy
 allows (``runs/*/*/log/vmn-server*``, plan 11 §6.3)."""
 import argparse
+import dataclasses
 import os
 
 import pytest
@@ -23,7 +24,7 @@ V = "0.0.1-dev.abc.r1"
 def _serve(tmp_path):
     args = argparse.Namespace(host="127.0.0.1", read_only=False, no_index=False,
                               allowed_host=None)
-    server_app(WorkspaceManager(str(tmp_path / "ui")), None, None, args, io=real_io(), env={})
+    server_app(WorkspaceManager(str(tmp_path / "ui")), None, None, args, io=dataclasses.replace(real_io(), env={}))
 
 
 def _rewind(tmp_path):

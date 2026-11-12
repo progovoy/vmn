@@ -47,14 +47,14 @@ def test_rebuild_calls_a_running_server(tmp_path, manager, monkeypatch):
     calls = []
     monkeypatch.setattr(cache_cli, "_post", lambda url, token: calls.append((url, token)) or {})
     args = _args(tmp_path, "cache", "rebuild", "--workspace", "ws", "--token", "t")
-    assert cache_cli.handle_cache(args) == 0
+    assert cache_cli.handle_cache(args, {}) == 0
     assert calls == [("http://127.0.0.1:8265/api/v1/workspaces/ws/cache/resync?full=1", "t")]
 
 
 def test_resync_covers_every_workspace_by_default(tmp_path, manager, monkeypatch):
     calls = []
     monkeypatch.setattr(cache_cli, "_post", lambda url, token: calls.append(url) or {})
-    assert cache_cli.handle_cache(_args(tmp_path, "cache", "resync")) == 0
+    assert cache_cli.handle_cache(env={}, args=_args(tmp_path, "cache", "resync")) == 0
     assert sorted(calls) == [
         f"http://127.0.0.1:8265/api/v1/workspaces/{n}/cache/resync" for n in ("other", "ws")]
 
@@ -66,17 +66,17 @@ def _no_server(url, token):
 def test_rebuild_without_a_server_drops_the_cache_file(tmp_path, manager, monkeypatch):
     monkeypatch.setattr(cache_cli, "_post", _no_server)
     ws_file, other_file = (_cache_file(tmp_path, manager, n) for n in ("ws", "other"))
-    assert cache_cli.handle_cache(_args(tmp_path, "cache", "rebuild", "--workspace", "ws")) == 0
+    assert cache_cli.handle_cache(env={}, args=_args(tmp_path, "cache", "rebuild", "--workspace", "ws")) == 0
     assert not os.path.exists(ws_file) and os.path.exists(other_file)
 
 
 def test_resync_without_a_server_keeps_the_cache(tmp_path, manager, monkeypatch):
     monkeypatch.setattr(cache_cli, "_post", _no_server)
     path = _cache_file(tmp_path, manager, "ws")
-    assert cache_cli.handle_cache(_args(tmp_path, "cache", "resync")) == 0
+    assert cache_cli.handle_cache(env={}, args=_args(tmp_path, "cache", "resync")) == 0
     assert os.path.exists(path)
 
 
 def test_unknown_workspace_or_action_fails(tmp_path, manager):
-    assert cache_cli.handle_cache(_args(tmp_path, "cache", "resync", "--workspace", "x")) == 1
-    assert cache_cli.handle_cache(_args(tmp_path, "cache", "explode")) == 2
+    assert cache_cli.handle_cache(env={}, args=_args(tmp_path, "cache", "resync", "--workspace", "x")) == 1
+    assert cache_cli.handle_cache(env={}, args=_args(tmp_path, "cache", "explode")) == 2

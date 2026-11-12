@@ -1,4 +1,5 @@
 """``vmn-exp login``: OIDC device flow through the server, a 0600 credentials file."""
+import dataclasses
 import json
 import os
 import stat
@@ -135,7 +136,7 @@ auth:
                               db=None, config=str(path), repo=None, store=None,
                               read_only=False, no_index=True, allowed_host=None)
     manager, cfg, cp = build_server(args, env={})
-    app = server_app(manager, cfg, cp, args, io=real_io(), env={})
+    app = server_app(manager, cfg, cp, args, io=dataclasses.replace(real_io(), env={}))
     oidc = next(a for a in app.state.auth_chain.authenticators
                 if isinstance(a, OIDCAuthenticator))
     assert oidc.sessions.ttl_sec == 2 * 3600

@@ -1,4 +1,5 @@
 import argparse
+import dataclasses
 
 import pytest
 
@@ -110,7 +111,7 @@ auth:
     args = _cfg_args(tmp_path, text, read_only=False, no_index=True, allowed_host=None)
     env = {"SEC": "shh"}
     manager, cfg, cp = build_server(args, env=env)
-    app = server_app(manager, cfg, cp, args, io=real_io(), env=env)
+    app = server_app(manager, cfg, cp, args, io=dataclasses.replace(real_io(), env=env))
     assert app.state.role_mappings[0].group == "g"
     oidc = [a for a in app.state.auth_chain.authenticators
             if isinstance(a, OIDCAuthenticator)]

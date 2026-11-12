@@ -1,6 +1,7 @@
 """Cache status/resync/metrics on ``vmn-exp ui --db postgresql://`` (the
 workspace cache serves ElectedIndexes there)."""
 import argparse
+import dataclasses
 import time
 
 import pytest
@@ -32,7 +33,7 @@ def client(tmp_path, pg_dsn):
                               db=None, config=str(path), repo=None, store=None,
                               read_only=False, no_index=False, allowed_host=None)
     manager, cfg, cp = build_server(args, env={})
-    c = TestClient(server_app(manager, cfg, cp, args, io=real_io(), env={}, token="t"),
+    c = TestClient(server_app(manager, cfg, cp, args, io=dataclasses.replace(real_io(), env={}), token="t"),
                    headers={"Authorization": "Bearer t"})
     assert c.get(f"/api/v1/workspaces/ws/apps/{APP}/experiments").status_code == 200
     return c

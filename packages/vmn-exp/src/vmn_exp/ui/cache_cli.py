@@ -15,6 +15,7 @@ from urllib.parse import quote
 from urllib.request import Request, urlopen
 
 from version_stamp.api import VMN_LOGGER
+from vmn_exp.ui.config import static_token
 
 ACTIONS = ("resync", "rebuild")
 
@@ -27,18 +28,18 @@ def _post(url, token):
         return json.loads(r.read() or b"{}")
 
 
-def _server(args):
+def _server(args, env):
     """``(manager, base url, token)`` of the invocation."""
     from vmn_exp.ui.cli import DEFAULT_DATA_DIR, build_server
     from vmn_exp.ui.workspaces import WorkspaceManager
 
     if getattr(args, "config", None) or getattr(args, "db", None):
-        manager, cfg, _ = build_server(args)
-        host, port, token = cfg.server.host, cfg.server.port, cfg.token()
+        manager, cfg, _ = build_server(args, env)
+        host, port, token = cfg.server.host, cfg.server.port, cfg.token(env)
     else:
         manager = WorkspaceManager(args.data_dir or DEFAULT_DATA_DIR)
         host, port = args.host, args.port
-        token = args.token or os.environ.get("VMN_UI_TOKEN")
+        token = static_token(None, args, env)
     if host in ("0.0.0.0", "::"):
         host = "127.0.0.1"
     return manager, f"http://{host}:{port}", token
@@ -79,12 +80,12 @@ def _resync(manager, base, token, ws, full):
     return 0
 
 
-def handle_cache(args):
+def handle_cache(args, env):
     rest = list(args.ui_args[1:])
     if len(rest) != 1 or rest[0] not in ACTIONS:
         VMN_LOGGER.error("usage: vmn-exp ui cache resync|rebuild [--workspace <name>]")
         return 2
-    manager, base, token = _server(args)
+    manager, base, token = _server(args, env)
     if args.workspace:
         ws = manager.get(args.workspace)
         if ws is None:
