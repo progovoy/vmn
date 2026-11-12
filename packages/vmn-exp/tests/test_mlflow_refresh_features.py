@@ -76,7 +76,7 @@ def test_refresh_appends_the_features_a_legacy_import_lacks(tmp_path):
     storage, run = _storage(tmp_path), _run(tmp_path)
     verstr = _legacy_record(storage, run)
 
-    assert import_run(storage, APP, run, refresh_features=True) == "refreshed"
+    assert import_run(storage, APP, run, refresh_features=True, writer="refresher") == "refreshed"
 
     [entry] = _features(storage, verstr, writer="refresher")
     assert entry["source"] == "mlflow"
@@ -91,7 +91,7 @@ def test_refresh_sets_the_mlflow_note_on_a_record_without_one(tmp_path):
     storage, run = _storage(tmp_path), _run(tmp_path)
     verstr = _legacy_record(storage, run)
 
-    import_run(storage, APP, run, refresh_features=True)
+    import_run(storage, APP, run, refresh_features=True, writer="refresher")
 
     assert storage.load_metadata(APP, verstr)["note"] == NOTE
 
@@ -100,7 +100,7 @@ def test_refresh_keeps_a_note_the_record_already_has(tmp_path):
     storage, run = _storage(tmp_path), _run(tmp_path)
     verstr = _legacy_record(storage, run, note="mine")
 
-    assert import_run(storage, APP, run, refresh_features=True) == "refreshed"
+    assert import_run(storage, APP, run, refresh_features=True, writer="refresher") == "refreshed"
 
     assert storage.load_metadata(APP, verstr)["note"] == "mine"
 
@@ -108,9 +108,9 @@ def test_refresh_keeps_a_note_the_record_already_has(tmp_path):
 def test_a_second_refresh_changes_nothing(tmp_path):
     storage, run = _storage(tmp_path), _run(tmp_path)
     verstr = _legacy_record(storage, run)
-    import_run(storage, APP, run, refresh_features=True)
+    import_run(storage, APP, run, refresh_features=True, writer="refresher")
 
-    assert import_run(storage, APP, run, refresh_features=True) == "skipped"
+    assert import_run(storage, APP, run, refresh_features=True, writer="refresher") == "skipped"
 
     assert len(_features(storage, verstr)) == 1
 
@@ -119,7 +119,7 @@ def test_refresh_skips_a_new_import_that_already_has_its_features(tmp_path):
     storage, run = _storage(tmp_path), _run(tmp_path)
     assert import_run(storage, APP, run) == "created"
 
-    assert import_run(storage, APP, run, refresh_features=True) == "skipped"
+    assert import_run(storage, APP, run, refresh_features=True, writer="refresher") == "skipped"
 
     assert len(_features(storage, run_verstr(RUN_ID))) == 1
 
@@ -130,7 +130,7 @@ def test_refresh_picks_up_a_note_added_in_mlflow_after_the_import(tmp_path):
     assert import_run(storage, APP, _run(tmp_path, plain)) == "created"
     run = _run(tmp_path)  # the note was written in MLflow since
 
-    assert import_run(storage, APP, run, refresh_features=True) == "refreshed"
+    assert import_run(storage, APP, run, refresh_features=True, writer="refresher") == "refreshed"
 
     verstr = run_verstr(RUN_ID)
     assert storage.load_metadata(APP, verstr)["note"] == NOTE
@@ -151,7 +151,7 @@ def test_refresh_never_touches_another_runs_record(tmp_path):
     storage, run = _storage(tmp_path), _run(tmp_path)
     verstr = _legacy_record(storage, run, run_id="a" * 12 + "b" * 20)
 
-    assert import_run(storage, APP, run, refresh_features=True) == "skipped"
+    assert import_run(storage, APP, run, refresh_features=True, writer="refresher") == "skipped"
 
     assert _features(storage, verstr) == []
     assert "note" not in storage.load_metadata(APP, verstr)
@@ -165,7 +165,7 @@ def test_refreshed_rows_show_the_mlflow_author_and_note(tmp_path):
     [before] = list_runs(APP, storage=storage)
     assert before["author"] is None
 
-    import_run(storage, APP, run, refresh_features=True)
+    import_run(storage, APP, run, refresh_features=True, writer="refresher")
 
     for use_index in (True, False):
         [row] = list_runs(APP, storage=storage, use_index=use_index)
@@ -177,7 +177,7 @@ def test_a_refreshed_run_has_the_mlflow_branch_in_its_features(tmp_path):
 
     storage, run = _storage(tmp_path), _run(tmp_path)
     verstr = _legacy_record(storage, run)
-    import_run(storage, APP, run, refresh_features=True)
+    import_run(storage, APP, run, refresh_features=True, writer="refresher")
 
     snap = direct_snapshot(storage, APP)
     assert snap.features_of(verstr)["branch"] == "feat/focal"

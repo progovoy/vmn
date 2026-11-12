@@ -148,7 +148,7 @@ def test_a_failed_ship_does_not_duplicate_log_lines(monkeypatch):
 
     monkeypatch.setattr(pod, "_ship", flaky_ship)
 
-    buf = LogBuffer(functools.partial(append_entries_to_log, pod, "app", V))
+    buf = LogBuffer(functools.partial(append_entries_to_log, pod, "app", V, writer="w"))
     for i in range(3):
         buf.append(entry(i))
 

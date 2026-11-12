@@ -258,3 +258,15 @@ def test_from_snapshot_is_read_from_the_given_env(monkeypatch):
     run_mod._create_experiment(None, EmptyStorage(), args,
                                env=FakeEnv({"VMN_SNAPSHOT_METADATA": "/snap.yml"}), host=FakeHost())
     assert got["from_snapshot"] == "/snap.yml"
+
+
+def test_the_run_log_entry_is_appended_as_the_supervisions_writer():
+    sup = _supervision(_io(env={"VMN_WRITER_ID": "pod-3"}))
+    calls = {}
+    sup.guard = lambda what, fn, *args: calls.setdefault(what, (fn, args))
+    sup.start = 0.0
+    sup.output = None
+    sup._finish(_Child(FakeClock()), list(CMD))
+    fn, args = calls["run log entry"]
+    assert fn is run_mod.append_to_log
+    assert args[-1] == "pod-3"

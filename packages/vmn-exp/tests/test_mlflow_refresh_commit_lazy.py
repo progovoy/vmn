@@ -39,11 +39,11 @@ def test_a_refresh_asks_for_commit_changes_only_while_features_lack_them(
         return CHANGES
 
     assert import_run(storage, APP, run) == "created"
-    assert import_run(storage, APP, run, refresh_features=True,
+    assert import_run(storage, APP, run, refresh_features=True, writer="refresher",
                       commit_changes=changes) == "refreshed"
     assert asked
     asked.clear()
 
-    assert import_run(storage, APP, run, refresh_features=True,
+    assert import_run(storage, APP, run, refresh_features=True, writer="refresher",
                       commit_changes=changes) == "skipped"
     assert asked == []

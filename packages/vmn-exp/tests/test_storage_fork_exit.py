@@ -64,7 +64,7 @@ def line(i):
 
 
 def append(storage, i):
-    stream = own_stream(storage, "app", "v")   # <writer>~<the buffer's owner>
+    stream = own_stream(storage, "app", "v", "w")   # <writer>~<the buffer's owner>
     storage.append_log_entry("app", "v", stream, line(i))
 
 

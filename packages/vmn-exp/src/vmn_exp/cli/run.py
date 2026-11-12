@@ -490,12 +490,11 @@ class _Supervision:
         self.guard(
             "run log entry",
             append_to_log,
-            self.storage,
-            self.app_name,
-            self.verstr,
+            self.storage, self.app_name, self.verstr,
             create_log_entry(
                 "run", command=run_cmd, exit_code=exit_code, duration_sec=duration
             ),
+            self.writer,
         )
         # A request after this would be a periodic sync replacing the final one.
         self._undefer_ships()
@@ -609,8 +608,8 @@ class _Supervision:
 
     def _sync_once(self):
         # The log first: a slow output PUT must not hold back liveness data.
-        self.guard("remote sync", sync_to_remote, self.storage, self.app_name, self.verstr,
-                   writer=self.writer)
+        self.guard("remote sync", lambda: sync_to_remote(
+            self.storage, self.app_name, self.verstr, writer=self.writer))
         if self.output is not None:
             self.guard("output log upload", self.output.upload)
 

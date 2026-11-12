@@ -94,6 +94,7 @@ def test_the_supervisor_syncs_the_log_before_uploading_output():
         app_name="app",
         verstr="0.0.1-dev.1",
         writer_id="w",
+        writer="w",
         guard=lambda _what, fn, *a: fn(*a),
     )
     _Supervision._sync_once(fake)

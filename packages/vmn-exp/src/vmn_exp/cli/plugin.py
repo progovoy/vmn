@@ -145,7 +145,7 @@ def _exp_run_without_repo(args):
         "compare": functools.partial(experiment_compare, console=io.console),
         "prune": functools.partial(experiment_prune, clock=io.clock),
         "compact": functools.partial(experiment_compact, clock=io.clock),
-        "rewind": functools.partial(experiment_rewind, clock=io.clock),
+        "rewind": functools.partial(experiment_rewind, io=io),
         "push": functools.partial(experiment_push, clock=io.clock, env=io.env),
         "similar": functools.partial(experiment_similar, clock=io.clock),
         "similar-backfill": functools.partial(experiment_similar_backfill, io=io),

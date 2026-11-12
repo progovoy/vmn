@@ -113,9 +113,9 @@ def test_start_run_reads_the_exports_features_before_taking_the_shared_dir_lock(
             finally:
                 held.pop()
 
-    def read(tree_dir):
+    def read(tree_dir, *env_host):
         reads.append(bool(held))
-        return real_read(tree_dir)
+        return real_read(tree_dir, *env_host)
 
     monkeypatch.setattr(sdk_create, "get_repo_lock", lock)
     monkeypatch.setattr(from_snapshot, "export_features", read)
