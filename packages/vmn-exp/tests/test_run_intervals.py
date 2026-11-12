@@ -33,42 +33,42 @@ def _clean_env(monkeypatch):
 ])
 class TestPrecedence:
     def test_defaults_to_30(self, resolve, env, key):
-        assert resolve(None) == 30
-        assert resolve(None, {}) == 30
+        assert resolve(None, os.environ) == 30
+        assert resolve(None, os.environ, {}) == 30
 
     def test_conf_beats_the_default(self, resolve, env, key):
-        assert resolve(None, {key: 120}) == 120
+        assert resolve(None, os.environ, {key: 120}) == 120
 
     def test_env_beats_conf(self, resolve, env, key, monkeypatch):
         monkeypatch.setenv(env, "300")
-        assert resolve(None, {key: 120}) == 300
+        assert resolve(None, os.environ, {key: 120}) == 300
 
     def test_explicit_beats_env(self, resolve, env, key, monkeypatch):
         monkeypatch.setenv(env, "300")
-        assert resolve(5, {key: 120}) == 5
+        assert resolve(5, os.environ, {key: 120}) == 5
 
     @pytest.mark.parametrize("bad", ["", "abc", "0", "-5", "nan", "inf"])
     def test_a_bad_env_value_is_skipped(self, resolve, env, key, bad, monkeypatch):
         monkeypatch.setenv(env, bad)
-        assert resolve(None, {key: 120}) == 120
+        assert resolve(None, os.environ, {key: 120}) == 120
 
     @pytest.mark.parametrize("bad", [0, -1, "abc", True, None, float("nan")])
     def test_a_bad_conf_value_is_skipped(self, resolve, env, key, bad):
-        assert resolve(None, {key: bad}) == 30
+        assert resolve(None, os.environ, {key: bad}) == 30
 
     def test_a_fractional_value_is_kept(self, resolve, env, key, monkeypatch):
         monkeypatch.setenv(env, "0.5")
-        assert resolve(None) == 0.5
+        assert resolve(None, os.environ) == 0.5
 
 
 def test_heartbeat_zero_explicit_falls_through_like_before(monkeypatch):
     monkeypatch.setenv(HEARTBEAT_ENV, "90")
-    assert resolve_heartbeat_sec(0) == 90
+    assert resolve_heartbeat_sec(0, os.environ) == 90
 
 
 def test_explicit_zero_sync_still_means_finish_only(monkeypatch):
     monkeypatch.setenv(SYNC_ENV, "90")
-    assert resolve_sync_sec(0) == 0
+    assert resolve_sync_sec(0, os.environ) == 0
 
 
 def _set_conf(app_layout, **values):

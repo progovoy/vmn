@@ -37,7 +37,7 @@ class PushLedger:
 
     def __init__(self, local, app_name, remote_id):
         self.dir = host_dirs.push_ledger_dir(
-            local.cache_identity(), remote_id, app_name
+            local.cache_identity(), remote_id, app_name, host_dirs.process_env()
         )
 
     @classmethod

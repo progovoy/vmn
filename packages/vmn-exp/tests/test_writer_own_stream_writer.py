@@ -13,6 +13,7 @@ from vmn_exp.core.writer import (
     set_default_writer_id,
     sync_to_remote,
 )
+from vmn_exp.core.real_io import real_io
 
 GUEST = guest_writer_id("host")
 
@@ -20,7 +21,7 @@ GUEST = guest_writer_id("host")
 @pytest.fixture
 def host(monkeypatch):
     monkeypatch.delenv("VMN_WRITER_ID", raising=False)
-    set_default_writer_id("host")
+    set_default_writer_id(real_io().env, "host")
 
 
 def _metrics(**values):

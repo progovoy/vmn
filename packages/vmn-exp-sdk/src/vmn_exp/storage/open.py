@@ -54,8 +54,8 @@ def open_storage(store=None, root=None, area=SNAPSHOTS, buffer_logs=False, write
         )
     if buffer_logs:
         from vmn_exp.storage.buffered import BufferedRemoteStorage
-        from vmn_exp.storage.host_dirs import log_buffers_dir
+        from vmn_exp.storage.host_dirs import log_buffers_dir, process_env
 
-        return BufferedRemoteStorage(remote, log_buffers_dir(remote.cache_identity()), area=area,
+        return BufferedRemoteStorage(remote, log_buffers_dir(remote.cache_identity(), process_env()), area=area,
                                      clock=clock)
     return remote

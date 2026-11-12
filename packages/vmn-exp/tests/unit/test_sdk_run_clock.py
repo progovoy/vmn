@@ -1,5 +1,6 @@
 """A Run reads time and its process from the clock and host it is handed
 (plan 44 G10); start_run, the SDK's entry point, hands it the real ones."""
+import os
 import pytest
 from fakes.clock import FakeClock
 from fakes.host import FakeHost
@@ -29,7 +30,7 @@ def _storage(tmp_path):
 
 
 def _run(tmp_path, clock, host=None, **kwargs):
-    return run_module.Run(_storage(tmp_path), APP, VERSTR, 3600, install_hooks=None,
+    return run_module.Run(_storage(tmp_path), APP, VERSTR, 3600, env=os.environ, install_hooks=None,
                           clock=clock, host=host or FakeHost(), random=FakeRandom(), **kwargs)
 
 

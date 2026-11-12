@@ -35,11 +35,11 @@ from version_stamp.api import patch_summary as _patch_summary  # noqa: F401
 GOTO_HINT = "vmn goto -v {verstr} {app}"
 
 
-def _get_storage(vcs, params, clock):
+def _get_storage(vcs, params, clock, env):
     """The checkout's snapshots, fronting the app's experiment store (flags,
     then ``VMN_EXPERIMENT_*``, then conf ``experiment.storage``)."""
     storage_params = {key: params.get(key) for key in STORAGE_ENV}
-    merge_conf_into_params(vcs, storage_params)
+    merge_conf_into_params(vcs, storage_params, env)
     return open_storage(store_uri(storage_params), local_store_root(vcs.vmn_root_path),
                         area=SNAPSHOTS, clock=clock)
 

@@ -12,7 +12,7 @@ supervisor sees it.
 import logging
 
 from vmn_exp.core.streams import guest_writer_id
-from vmn_exp.core.writer import get_writer_id
+from vmn_exp.core.writer import process_writer_id
 from vmn_exp.sdk import adoption
 from vmn_exp.sdk.run import Run
 
@@ -32,7 +32,7 @@ class GuestRun(Run):
         if capture_output:
             _LOGGER.debug("vmn: capture_output is ignored; vmn-exp run captures the output")
         super().__init__(*args, name=None, capture_output=False,
-                         writer=writer or guest_writer_id(get_writer_id()), **kwargs)
+                         writer=writer or guest_writer_id(process_writer_id()), **kwargs)
 
     def _publish(self, updates=(), final=False):
         pass  # the supervisor writes the run's state

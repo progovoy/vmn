@@ -24,7 +24,8 @@ V = "0.0.1-dev.abc.r1"
 def _serve(tmp_path):
     args = argparse.Namespace(host="127.0.0.1", read_only=False, no_index=False,
                               allowed_host=None)
-    server_app(WorkspaceManager(str(tmp_path / "ui")), None, None, args, io=dataclasses.replace(real_io(), env={}))
+    server_app(WorkspaceManager(str(tmp_path / "ui")), None, None, args, io=dataclasses.replace(
+        real_io(), env={k: v for k, v in os.environ.items() if k == "VMN_WRITER_ID"}))
 
 
 def _rewind(tmp_path):
@@ -48,4 +49,4 @@ def test_server_edits_use_the_server_writer_id(tmp_path, monkeypatch):
 def test_vmn_writer_id_wins(tmp_path, monkeypatch):
     monkeypatch.setenv("VMN_WRITER_ID", "pod7")
     _serve(tmp_path)
-    assert writer.get_writer_id() == "pod7"
+    assert writer.get_writer_id(real_io().env, real_io().host) == "pod7"

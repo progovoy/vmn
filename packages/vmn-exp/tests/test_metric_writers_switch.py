@@ -94,7 +94,7 @@ def test_flush_log_ships_metric_blocks_too(tmp_path):
 
 def test_sdk_log_metrics_reach_the_stream_not_the_jsonl(tmp_path):
     storage = _storage(tmp_path)
-    run = Run(storage, APP, V, 60, system_metrics=False, clock=RealClock(), host=RealHost(), random=RealRandom(), install_hooks=_real_process_hooks())
+    run = Run(storage, APP, V, 60, system_metrics=False, clock=RealClock(), host=RealHost(), random=RealRandom(), env=os.environ, install_hooks=_real_process_hooks())
     run._open()
     run.log_metrics({"loss": 0.5})
     run.log_metric("loss", 0.25)

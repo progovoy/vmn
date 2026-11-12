@@ -7,6 +7,7 @@ another attempt finished the run cannot then flip it back to running and
 erase its exit code. A beat on the token of its own last write still costs
 one conditional PUT and no read.
 """
+import os
 import threading
 import time
 
@@ -159,11 +160,11 @@ def test_a_beat_into_a_deleted_local_record_is_dropped(root):
 
 
 def test_a_resumed_attempts_first_write_keeps_a_finish_landing_before_it(root):
-    a = Run(_local(root), APP, X, 3600, clock=RealClock(), host=RealHost(), random=RealRandom(), install_hooks=_real_process_hooks())
+    a = Run(_local(root), APP, X, 3600, clock=RealClock(), host=RealHost(), random=RealRandom(), env=os.environ, install_hooks=_real_process_hooks())
     a._open()
     prior = load_run_state(_local(root), APP, X)
     b_side = _local(root)
-    b = Run(b_side, APP, X, 3600, prior_state=prior, clock=RealClock(), host=RealHost(), random=RealRandom(), install_hooks=_real_process_hooks())
+    b = Run(b_side, APP, X, 3600, prior_state=prior, clock=RealClock(), host=RealHost(), random=RealRandom(), env=os.environ, install_hooks=_real_process_hooks())
 
     _before_next(b_side, ("save_file", "save_file_if_match"), lambda: a.finish(0))
     b._open()
@@ -177,11 +178,11 @@ def test_a_resumed_attempts_first_write_keeps_a_finish_landing_before_it(root):
 
 
 def test_resuming_a_finished_run_still_reopens_it(root):
-    a = Run(_local(root), APP, X, 3600, clock=RealClock(), host=RealHost(), random=RealRandom(), install_hooks=_real_process_hooks())
+    a = Run(_local(root), APP, X, 3600, clock=RealClock(), host=RealHost(), random=RealRandom(), env=os.environ, install_hooks=_real_process_hooks())
     a._open()
     a.finish(0)
 
-    b = Run(_local(root), APP, X, 3600, prior_state=load_run_state(_local(root), APP, X), clock=RealClock(), host=RealHost(), random=RealRandom(), install_hooks=_real_process_hooks())
+    b = Run(_local(root), APP, X, 3600, prior_state=load_run_state(_local(root), APP, X), clock=RealClock(), host=RealHost(), random=RealRandom(), env=os.environ, install_hooks=_real_process_hooks())
     b._open()
     try:
         assert load_run_state(_local(root), APP, X)["state"] == "running"

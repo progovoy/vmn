@@ -103,7 +103,7 @@ def _exp_run_without_repo(args):
             return usage_error
     if is_experiment and action == "run":
         from vmn_exp.cli.run_disabled import exec_if_disabled
-        result = exec_if_disabled(args)
+        result = exec_if_disabled(args, real_io().env)
         if result is not None:
             return result
 
@@ -145,7 +145,7 @@ def _exp_run_without_repo(args):
         "prune": functools.partial(experiment_prune, clock=io.clock),
         "compact": functools.partial(experiment_compact, clock=io.clock),
         "rewind": functools.partial(experiment_rewind, clock=io.clock),
-        "push": functools.partial(experiment_push, clock=io.clock),
+        "push": functools.partial(experiment_push, clock=io.clock, env=io.env),
         "similar": functools.partial(experiment_similar, clock=io.clock),
         "similar-backfill": functools.partial(experiment_similar_backfill, clock=io.clock),
         "backfill-children": experiment_backfill_children,
@@ -158,9 +158,9 @@ def _exp_run_without_repo(args):
 
     if getattr(args, "writer_id", None):
         os.environ["VMN_WRITER_ID"] = args.writer_id
-    params = experiment_storage_params(None, args)
+    params = experiment_storage_params(None, args, io.env)
     try:
-        storage = _get_experiment_storage(None, params, clock=io.clock)
+        storage = _get_experiment_storage(None, params, clock=io.clock, env=io.env)
     except ValueError as exc:
         VMN_LOGGER.error(str(exc))
         return 1
@@ -188,8 +188,9 @@ def _dev_version_loader(vcs, params, version):
     from vmn_exp.cli.experiment import experiment_storage_params
     from vmn_exp.snapshot import _restore_with_safety_net
 
-    record = load_code_record(vcs, experiment_storage_params(vcs, None), version,
-                              clock=real_io().clock)
+    io = real_io()
+    record = load_code_record(vcs, experiment_storage_params(vcs, None, io.env), version,
+                              clock=io.clock, env=io.env)
     if record is None:
         return 1
     return _restore_with_safety_net(vcs, params, *record)
@@ -207,7 +208,8 @@ def _register(spec) -> None:
 def _snapshot_store_opener(vcs, params):
     from vmn_exp.snapshot.stores import open_configured_snapshot_stores
 
-    return open_configured_snapshot_stores(vcs, params, real_io().clock)
+    io = real_io()
+    return open_configured_snapshot_stores(vcs, params, io.clock, io.env)
 
 
 def register_dev_version() -> None:

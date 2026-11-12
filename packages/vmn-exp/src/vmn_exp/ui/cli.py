@@ -182,7 +182,7 @@ def server_app(manager, cfg, control_plane, args, *, io, token=None, **kwargs):
     from vmn_exp.ui.server import create_app
 
     # The server's own log writes match the edit policy's log/vmn-server*.
-    set_default_writer_id(SERVER_WRITER_ID)
+    set_default_writer_id(io.env, SERVER_WRITER_ID)
     dsn = postgres_dsn(cfg)
     auth = _oidc_chain(cfg, control_plane, io.env, io.random) if cfg else None
     host = cfg.server.host if cfg else args.host

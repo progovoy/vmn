@@ -121,23 +121,25 @@ def heartbeat_interval_sec(run_state):
         return DEFAULT_HEARTBEAT_INTERVAL_SEC
 
 
-def positive_env_sec(name, default):
-    """Env var *name* as a positive, finite number of seconds, else *default*."""
+def positive_env_sec(env, name, default):
+    """*env*'s variable *name* as a positive, finite number of seconds, else *default*."""
     try:
-        value = float(os.environ.get(name, ""))
+        value = float(env.get(name, ""))
     except ValueError:
         return default
     return value if math.isfinite(value) and value > 0 else default
 
 
-def min_stale_sec():
-    """The stuck floor: ``VMN_EXP_MIN_STALE_SEC`` when a positive number, else 60."""
-    return positive_env_sec(MIN_STALE_ENV, MIN_STALE_SEC)
+def min_stale_sec(env):
+    """The stuck floor: *env*'s ``VMN_EXP_MIN_STALE_SEC`` when a positive number, else 60."""
+    return positive_env_sec(env, MIN_STALE_ENV, MIN_STALE_SEC)
 
 
 def stale_after_sec(run_state):
     """How long a heartbeat may go unrefreshed before the run counts as stuck."""
-    return max(heartbeat_interval_sec(run_state) * STALE_MULTIPLIER, min_stale_sec())
+    # The floor is the process's setting: status is derived where no env is
+    # handed down (plan 44 G12 leaves threading one through derive_status).
+    return max(heartbeat_interval_sec(run_state) * STALE_MULTIPLIER, min_stale_sec(os.environ))
 
 
 def run_state_observed_at(storage, app_name, verstr):

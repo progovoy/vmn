@@ -27,21 +27,22 @@ def _positive(value):
     return int(value) if value.is_integer() else value
 
 
-def _resolve(env, conf_key, default, exp_conf):
+def _resolve(env, name, conf_key, default, exp_conf):
     conf = _positive((exp_conf or {}).get(conf_key))
-    return _positive(positive_env_sec(env, conf or default))
+    return _positive(positive_env_sec(env, name, conf or default))
 
 
-def resolve_heartbeat_sec(explicit, exp_conf=None):
-    """Seconds between heartbeats; a falsy *explicit* (None, 0) falls through."""
+def resolve_heartbeat_sec(explicit, env, exp_conf=None):
+    """Seconds between heartbeats; a falsy *explicit* (None, 0) falls through
+    to *env*, then *exp_conf*."""
     if explicit:
         return explicit
-    return _resolve(HEARTBEAT_ENV, "heartbeat_interval_sec",
+    return _resolve(env, HEARTBEAT_ENV, "heartbeat_interval_sec",
                     DEFAULT_HEARTBEAT_INTERVAL_SEC, exp_conf)
 
 
-def resolve_sync_sec(explicit, exp_conf=None):
+def resolve_sync_sec(explicit, env, exp_conf=None):
     """Seconds between remote log syncs; an explicit 0 still means finish-only."""
     if explicit is not None:
         return explicit
-    return _resolve(SYNC_ENV, "sync_interval_sec", DEFAULT_SYNC_INTERVAL_SEC, exp_conf)
+    return _resolve(env, SYNC_ENV, "sync_interval_sec", DEFAULT_SYNC_INTERVAL_SEC, exp_conf)

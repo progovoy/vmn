@@ -83,9 +83,9 @@ class _JournalState:
 
 
 def _writer_id():
-    from vmn_exp.core.writer import get_writer_id
+    from vmn_exp.core.writer import process_writer_id
 
-    return get_writer_id()
+    return process_writer_id()
 
 
 def _is_heartbeat(filename, data):

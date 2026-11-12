@@ -26,6 +26,7 @@ from vmn_exp.core.writer import (
     save_artifact,
     save_run_state,
 )
+from vmn_exp.core.real_io import real_io
 
 
 class _FakeStorage:
@@ -196,19 +197,19 @@ def test_save_artifact_delegates_to_the_storage(tmp_path):
 def test_get_writer_id_prefers_the_env_over_the_conf(monkeypatch):
     monkeypatch.setenv("VMN_WRITER_ID", "from-env")
 
-    assert get_writer_id(conf_writer_id="from-conf") == "from-env"
+    assert get_writer_id(real_io().env, real_io().host, conf_writer_id="from-conf") == "from-env"
 
 
 def test_get_writer_id_falls_back_to_conf_then_hostname_env(monkeypatch):
     monkeypatch.setenv("HOSTNAME", "host-env")
 
-    assert get_writer_id(conf_writer_id="from-conf") == "from-conf"
+    assert get_writer_id(real_io().env, real_io().host, conf_writer_id="from-conf") == "from-conf"
 
 
 def test_get_writer_id_falls_back_to_the_hostname_env(monkeypatch):
     monkeypatch.setenv("HOSTNAME", "host-env")
 
-    assert get_writer_id() == "host-env"
+    assert get_writer_id(real_io().env, real_io().host) == "host-env"
 
 
 def test_get_writer_id_falls_back_to_the_real_hostname(monkeypatch):
@@ -216,15 +217,15 @@ def test_get_writer_id_falls_back_to_the_real_hostname(monkeypatch):
 
     monkeypatch.delenv("HOSTNAME", raising=False)
 
-    assert get_writer_id() == socket.gethostname()
+    assert get_writer_id(real_io().env, real_io().host) == socket.gethostname()
 
 
 def test_get_writer_id_is_cached_for_the_process(monkeypatch):
     monkeypatch.setenv("VMN_WRITER_ID", "first")
-    assert get_writer_id() == "first"
+    assert get_writer_id(real_io().env, real_io().host) == "first"
 
     monkeypatch.setenv("VMN_WRITER_ID", "second")
-    assert get_writer_id() == "first"
+    assert get_writer_id(real_io().env, real_io().host) == "first"
 
 
 # ---------------------------------------------------------------------------
@@ -260,7 +261,7 @@ def test_merge_conf_into_params_fills_unset_keys():
     vcs = _Vcs(experiment={"storage": {"bucket": "b", "prefix": "p"}})
     params = {"bucket": None, "prefix": None}
 
-    merge_conf_into_params(vcs, params)
+    merge_conf_into_params(vcs, params, os.environ)
 
     assert params == {"bucket": "b", "prefix": "p"}
 
@@ -269,7 +270,7 @@ def test_merge_conf_into_params_ignores_a_backend_key():
     vcs = _Vcs(experiment={"storage": {"backend": "s3", "bucket": "b"}})
     params = {"bucket": None}
 
-    merge_conf_into_params(vcs, params)
+    merge_conf_into_params(vcs, params, os.environ)
 
     assert params == {"bucket": "b"}
 
@@ -278,7 +279,7 @@ def test_merge_conf_into_params_lets_explicit_cli_values_win():
     vcs = _Vcs(experiment={"storage": {"bucket": "from-conf"}})
     params = {"bucket": "from-cli"}
 
-    merge_conf_into_params(vcs, params)
+    merge_conf_into_params(vcs, params, os.environ)
 
     assert params["bucket"] == "from-cli"
 
@@ -286,7 +287,7 @@ def test_merge_conf_into_params_lets_explicit_cli_values_win():
 def test_merge_conf_into_params_tolerates_a_vcs_without_conf():
     params = {"bucket": "b"}
 
-    merge_conf_into_params(None, params)
+    merge_conf_into_params(None, params, os.environ)
 
     assert params == {"bucket": "b"}
 

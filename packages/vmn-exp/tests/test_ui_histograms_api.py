@@ -1,4 +1,5 @@
 """The ui API's histograms: names + totals in the detail, steps per name."""
+import os
 import pytest
 
 pytest.importorskip("fastapi")
@@ -27,7 +28,7 @@ def storage(tmp_path):
 
 @pytest.fixture
 def run(storage):
-    run = Run(storage, APP, V, 60, clock=RealClock(), host=RealHost(), random=RealRandom(), install_hooks=_real_process_hooks())
+    run = Run(storage, APP, V, 60, clock=RealClock(), host=RealHost(), random=RealRandom(), env=os.environ, install_hooks=_real_process_hooks())
     run._open()
     yield run
     run.finish()

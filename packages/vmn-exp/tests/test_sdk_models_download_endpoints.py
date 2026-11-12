@@ -1,6 +1,7 @@
 """An absolute ``s3://`` download is cached per endpoint (the same bucket/key
 on AWS and on MinIO are different objects), and a configured
 ``endpoint_url`` reaches it even with no remote store to borrow it from."""
+import os
 from types import SimpleNamespace
 
 import boto3
@@ -66,7 +67,7 @@ def _download(storage):
 
 def test_an_env_endpoint_applies_without_a_remote_store(tmp_path, endpoints, monkeypatch):
     monkeypatch.setenv(STORAGE_ENV["endpoint_url"], MINIO)
-    storage = resolve_experiment_storage(dir=str(tmp_path / "local"), clock=RealClock())
+    storage = resolve_experiment_storage(dir=str(tmp_path / "local"), clock=RealClock(), env=os.environ)
     endpoints.clear()
     assert open(_download(storage), "rb").read() == b"minio"
     assert endpoints == [MINIO]
@@ -76,8 +77,8 @@ def test_a_conf_endpoint_applies_without_a_remote_store(tmp_path, endpoints):
     vcs = SimpleNamespace(experiment={"storage": {"endpoint_url": MINIO}},
                           vmn_root_path=str(tmp_path))
     params = {}
-    merge_conf_into_params(vcs, params)
-    storage = _get_experiment_storage(vcs, params, clock=RealClock())
+    merge_conf_into_params(vcs, params, os.environ)
+    storage = _get_experiment_storage(vcs, params, clock=RealClock(), env=os.environ)
     endpoints.clear()
     _download(storage)
     assert endpoints == [MINIO]
@@ -85,7 +86,7 @@ def test_a_conf_endpoint_applies_without_a_remote_store(tmp_path, endpoints):
 
 def test_the_uris_endpoint_still_wins_over_the_conf(tmp_path, endpoints, monkeypatch):
     monkeypatch.setenv(STORAGE_ENV["endpoint_url"], MINIO)
-    storage = resolve_experiment_storage(dir=str(tmp_path / "local"), clock=RealClock())
+    storage = resolve_experiment_storage(dir=str(tmp_path / "local"), clock=RealClock(), env=os.environ)
     endpoints.clear()
     assert location_local_path(f"{ARTIFACT}?endpoint_url={OTHER}", store=storage)
     assert endpoints == [OTHER]
@@ -93,6 +94,6 @@ def test_the_uris_endpoint_still_wins_over_the_conf(tmp_path, endpoints, monkeyp
 
 def test_an_area_of_the_store_keeps_the_endpoint(tmp_path, endpoints, monkeypatch):
     monkeypatch.setenv(STORAGE_ENV["endpoint_url"], MINIO)
-    storage = resolve_experiment_storage(dir=str(tmp_path / "local"), clock=RealClock())
+    storage = resolve_experiment_storage(dir=str(tmp_path / "local"), clock=RealClock(), env=os.environ)
     assert storage.in_area("models").uri_options("s3") == {"endpoint_url": MINIO}
     assert storage.uri_options("gs") == {}

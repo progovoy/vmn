@@ -209,7 +209,7 @@ def _export_conf_writer_id(writer_id):
     experiment_writer._WRITER_ID = None  # re-read on the next log append
 
 
-def experiment_storage_params(vcs, args):
+def experiment_storage_params(vcs, args, env):
     """The storage params of *args*, conf.yml's filling the gaps."""
     params = {
         "store": getattr(args, "store", None),
@@ -219,7 +219,7 @@ def experiment_storage_params(vcs, args):
         "experiment_dir": getattr(args, "experiment_dir", None),
         "writer_id": getattr(args, "writer_id", None),
     }
-    merge_conf_into_params(vcs, params)
+    merge_conf_into_params(vcs, params, env)
     _export_conf_writer_id(params.get("writer_id"))
     return params
 
@@ -272,11 +272,11 @@ READ_ONLY_ACTIONS = frozenset({"list", "show", "compare", "diff", "export", "imp
                                "export-metrics", "similar"})
 
 
-def _open_checked_storage(vcs, params, action, args=None, *, clock):
+def _open_checked_storage(vcs, params, action, args=None, *, clock, env):
     """The experiment storage; a read-only action refuses a configured store
     that doesn't exist (a mistyped URI) instead of listing nothing."""
     writer = action not in READ_ONLY_ACTIONS or getattr(args, "compact", False)
-    storage = _get_experiment_storage(vcs, params, writer=writer, clock=clock)
+    storage = _get_experiment_storage(vcs, params, writer=writer, clock=clock, env=env)
     if not writer:
         require_store(storage, store_uri(params))
     return storage
@@ -291,7 +291,7 @@ def handle_experiment(vmn_ctx, io):
     if usage_error:
         return usage_error
 
-    params = experiment_storage_params(vcs, args)
+    params = experiment_storage_params(vcs, args, io.env)
 
     # Auto-init for create/run (zero-setup cold start), unless from_snapshot mode.
     if action in ("create", "run") and not from_snapshot_metadata(args, io.env):
@@ -303,7 +303,7 @@ def handle_experiment(vmn_ctx, io):
             return err
 
     try:
-        storage = _open_checked_storage(vcs, params, action, args, clock=io.clock)
+        storage = _open_checked_storage(vcs, params, action, args, clock=io.clock, env=io.env)
     except ValueError as exc:
         VMN_LOGGER.error(str(exc))
         return 1
@@ -335,7 +335,7 @@ def handle_experiment(vmn_ctx, io):
     elif action == "diff":
         return experiment_diff(vcs, params, storage, args, io.console)
     elif action == "restore":
-        return experiment_restore(vcs, params, storage, args, io.clock)
+        return experiment_restore(vcs, params, storage, args, io.clock, io.env)
     elif action == "export":
         return experiment_export(vcs, params, storage, args, io.console)
     elif action == "prune":
@@ -347,7 +347,7 @@ def handle_experiment(vmn_ctx, io):
     elif action == "watch":
         from vmn_exp.cli.watch import experiment_watch
 
-        return experiment_watch(vcs, storage, _app_name(vcs, args), args, io.clock)
+        return experiment_watch(vcs, storage, _app_name(vcs, args), args, io.clock, io.env)
     elif action == "rewind":
         return experiment_rewind(vcs, params, storage, args, io.clock)
     elif action == "export-metrics":
@@ -357,7 +357,7 @@ def handle_experiment(vmn_ctx, io):
     elif action == "compact":
         return experiment_compact(vcs, params, storage, args, io.clock)
     elif action == "push":
-        return experiment_push(vcs, params, storage, args, io.clock)
+        return experiment_push(vcs, params, storage, args, io.clock, io.env)
     elif action == "lineage":
         from vmn_exp.cli.lineage import experiment_lineage
 
@@ -404,7 +404,7 @@ def experiment_compact(vcs, params, storage, args, clock):
     return compact(storage, _app_name(vcs, args), args, clock)
 
 
-def experiment_push(vcs, params, storage, args, clock):
+def experiment_push(vcs, params, storage, args, clock, env):
     from vmn_exp.cli.push import experiment_push as push
 
-    return push(vcs, params, _app_name(vcs, args), args, clock)
+    return push(vcs, params, _app_name(vcs, args), args, clock, env)

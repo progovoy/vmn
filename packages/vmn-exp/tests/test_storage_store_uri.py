@@ -111,20 +111,20 @@ def test_no_root_and_no_store_is_an_error():
 
 
 def test_resolve_takes_a_store_uri(s3):
-    storage = resolve_experiment_storage(store=f"s3://{BUCKET}/r", repo_root=False, clock=RealClock())
+    storage = resolve_experiment_storage(store=f"s3://{BUCKET}/r", repo_root=False, clock=RealClock(), env=os.environ)
     assert _record(storage)
     assert _keys(s3, "r/")
 
 
 def test_store_env_selects_the_store(s3, monkeypatch):
     monkeypatch.setenv("VMN_EXPERIMENT_STORE", f"s3://{BUCKET}/from-env")
-    assert _record(resolve_experiment_storage(repo_root=False, clock=RealClock()))
+    assert _record(resolve_experiment_storage(repo_root=False, clock=RealClock(), env=os.environ))
     assert _keys(s3, "from-env/")
 
 
 def test_store_beats_the_bucket_shorthand(s3, monkeypatch):
     monkeypatch.setenv("VMN_EXPERIMENT_BUCKET", "some-other-bucket")
-    storage = resolve_experiment_storage(store=f"s3://{BUCKET}/win", repo_root=False, clock=RealClock())
+    storage = resolve_experiment_storage(store=f"s3://{BUCKET}/win", repo_root=False, clock=RealClock(), env=os.environ)
     assert _remote(storage).bucket == BUCKET
 
 
@@ -132,7 +132,7 @@ def test_env_store_fills_params():
     os.environ["VMN_EXPERIMENT_STORE"] = "gs://b/p"
     try:
         params = {"store": None}
-        merge_env_into_params(params)
+        merge_env_into_params(params, os.environ)
         assert params["store"] == "gs://b/p"
     finally:
         del os.environ["VMN_EXPERIMENT_STORE"]
@@ -141,14 +141,14 @@ def test_env_store_fills_params():
 def test_conf_storage_uri_fills_params():
     vcs = SimpleNamespace(experiment={"storage": {"uri": "az://c/p"}})
     params = {"store": None}
-    merge_conf_into_params(vcs, params)
+    merge_conf_into_params(vcs, params, os.environ)
     assert params["store"] == "az://c/p"
 
 
 def test_store_flag_beats_conf_uri():
     vcs = SimpleNamespace(experiment={"storage": {"uri": "az://c/p"}})
     params = {"store": "gs://flag/p"}
-    merge_conf_into_params(vcs, params)
+    merge_conf_into_params(vcs, params, os.environ)
     assert params["store"] == "gs://flag/p"
 
 

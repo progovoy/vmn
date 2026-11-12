@@ -41,7 +41,7 @@ class RunAlerts:
 
     def _alerter(self):
         if self._alerter_instance is None:
-            self._alerter_instance = Alerter(load_alert_config(self.app_name, self._exp_conf),
+            self._alerter_instance = Alerter(load_alert_config(self.app_name, self._exp_conf, env=self._env),
                                              clock=self._clock.monotonic)
         return self._alerter_instance
 

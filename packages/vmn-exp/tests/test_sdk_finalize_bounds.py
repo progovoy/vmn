@@ -221,7 +221,7 @@ def local_runs(tmp_path, monkeypatch):
 
     def make(verstr):
         local.save(APP, verstr, {"verstr": verstr, "timestamp": "2026-01-01T00:00:00Z"}, {})
-        made.append(Run(local, APP, verstr, 3600, clock=RealClock(), host=RealHost(), random=RealRandom(), install_hooks=_real_process_hooks()))
+        made.append(Run(local, APP, verstr, 3600, clock=RealClock(), host=RealHost(), random=RealRandom(), env=os.environ, install_hooks=_real_process_hooks()))
         return made[-1]
 
     try:

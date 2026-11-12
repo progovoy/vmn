@@ -127,7 +127,7 @@ def test_vmn_experiment_dir_wins(tmp_path, monkeypatch):
     monkeypatch.delenv("VMN_EXPERIMENT_BUCKET", raising=False)
 
     from vmn_exp.core.storage_resolve import resolve_experiment_storage
-    storage = resolve_experiment_storage(clock=RealClock())
+    storage = resolve_experiment_storage(clock=RealClock(), env=os.environ)
 
     root = _storage_root(storage)
     assert root is not None and root.startswith(exp_dir)
@@ -156,7 +156,7 @@ def test_bucket_env_gives_s3_backend(tmp_path, monkeypatch, _aws_creds):
         boto3.client("s3", region_name="us-east-1").create_bucket(Bucket=BUCKET)
 
         from vmn_exp.core.storage_resolve import resolve_experiment_storage
-        storage = resolve_experiment_storage(clock=RealClock())
+        storage = resolve_experiment_storage(clock=RealClock(), env=os.environ)
 
     assert _is_s3(storage), f"Expected S3 backend, got {type(storage).__name__}"
 
@@ -176,7 +176,7 @@ def test_flags_beat_env(tmp_path, monkeypatch):
     monkeypatch.delenv("VMN_EXPERIMENT_BUCKET", raising=False)
 
     from vmn_exp.core.storage_resolve import resolve_experiment_storage
-    storage = resolve_experiment_storage(dir=flag_dir, clock=RealClock())
+    storage = resolve_experiment_storage(dir=flag_dir, clock=RealClock(), env=os.environ)
 
     root = _storage_root(storage)
     assert root is not None and root.startswith(flag_dir)

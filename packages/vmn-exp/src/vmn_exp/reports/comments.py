@@ -10,7 +10,7 @@ from __future__ import annotations
 import base64
 
 from vmn_exp.core.record_format import stamped
-from vmn_exp.core.writer import claim_record, flush_log, get_writer_id, own_stream
+from vmn_exp.core.writer import claim_record, flush_log, process_writer_id, own_stream
 from vmn_exp.registry.fold import next_ts, now_iso
 from vmn_exp.registry.log import actor_identity
 from vmn_exp.storage.areas import COMMENTS, REPORTS
@@ -76,7 +76,7 @@ def delete_thread(storage, target):
 
 def _append(area, scope, name, entry_type, **fields):
     entries = _entries(area, scope, name)
-    writer = get_writer_id()
+    writer = process_writer_id()
     entry = {
         "type": entry_type,
         "ts": next_ts(max((e.get("ts", "") for e in entries), default=None), now_iso()),

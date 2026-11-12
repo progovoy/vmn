@@ -84,10 +84,10 @@ def enabled(explicit, exp_conf=None):
     return opted_in(explicit, SYSTEM_METRICS_ENV, "system_metrics", exp_conf)
 
 
-def sdk_enabled(explicit, exp_conf=None):
-    """:func:`enabled`, but off by default under a ``vmn-exp run`` that
-    already samples this process's tree — explicit ``True`` still samples."""
-    if explicit is None and os.environ.get(SUPERVISOR_SAMPLES_ENV):
+def sdk_enabled(explicit, env, exp_conf=None):
+    """:func:`enabled`, but off by default under a ``vmn-exp run`` that already
+    samples this process's tree (*env* says) — explicit ``True`` still samples."""
+    if explicit is None and env.get(SUPERVISOR_SAMPLES_ENV):
         return False
     return enabled(explicit, exp_conf)
 

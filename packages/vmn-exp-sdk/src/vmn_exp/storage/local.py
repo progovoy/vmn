@@ -305,7 +305,7 @@ class LocalSnapshotStorage(LocalChildren, LocalStreams, LocalMetrics, SnapshotSt
         """In the per-host cache dir; None before any record."""
         if not os.path.isdir(self._snapshot_base_dir(app_name)):
             return None
-        return host_dirs.index_cache_path(self.cache_identity(), app_name)
+        return host_dirs.index_cache_path(self.cache_identity(), app_name, host_dirs.process_env())
 
     def update_note(self, app_name, verstr, note):
         return self.update_metadata(app_name, verstr, {"note": note})

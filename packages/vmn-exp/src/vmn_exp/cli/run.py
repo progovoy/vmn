@@ -372,7 +372,7 @@ class _Supervision:
 
     def _supervise(self, proc, run_cmd):
         heartbeat_interval = resolve_heartbeat_sec(
-            getattr(self.args, "heartbeat_interval", None), self.exp_conf
+            getattr(self.args, "heartbeat_interval", None), self.io.env, self.exp_conf
         )
         started_at = now_iso()
         self.run_state = {
@@ -407,7 +407,7 @@ class _Supervision:
         )
 
         sync_interval = resolve_sync_sec(
-            getattr(self.args, "sync_interval", None), self.exp_conf
+            getattr(self.args, "sync_interval", None), self.io.env, self.exp_conf
         )
         tick = self._tick(sampler, sync_interval, heartbeat_interval, self.clock())
         watch(lambda: proc.poll() is not None, popen_waiter(proc), tick,
@@ -585,7 +585,7 @@ class _Supervision:
                 f"Experiment {self.verstr}: the failure alert did not finish in time")
 
     def _alert_if_failed(self):
-        alerter = Alerter(load_alert_config(self.app_name, self.exp_conf), clock=self.clock)
+        alerter = Alerter(load_alert_config(self.app_name, self.exp_conf, env=self.io.env), clock=self.clock)
         alert_if_failed(
             self.storage, self.app_name, self.verstr,
             getattr(self, "run_state", None), alerter,

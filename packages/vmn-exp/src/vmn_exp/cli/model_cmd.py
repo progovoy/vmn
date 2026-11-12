@@ -37,7 +37,7 @@ _LOG = logging.getLogger(__name__)
 # Storage helpers
 # ---------------------------------------------------------------------------
 
-def _get_storage(args, clock):
+def _get_storage(args, clock, env):
     """Build experiment storage for registry operations from args / env."""
     return resolve_experiment_storage(
         dir=getattr(args, "dir", None),
@@ -45,7 +45,7 @@ def _get_storage(args, clock):
         bucket=getattr(args, "bucket", None),
         prefix=getattr(args, "prefix", None),
         endpoint_url=getattr(args, "endpoint_url", None),
-        clock=clock,
+        clock=clock, env=env,
     )
 
 
@@ -275,7 +275,7 @@ def model_run_without_repo(args, io):
     Returns an int exit code (0 = ok, 1 = error).  Always returns an int
     (never None) because every model action is repo-free.
     """
-    storage = _get_storage(args, io.clock)
+    storage = _get_storage(args, io.clock, io.env)
 
     dispatch = {
         "register": _cmd_register,

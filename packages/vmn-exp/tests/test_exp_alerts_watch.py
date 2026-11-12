@@ -57,7 +57,7 @@ def _stuck_state(heartbeat):
 def _alerter(url, on):
     return Alerter(load_alert_config("app", exp_conf={"alerts": {
         "on": on, "sinks": [{"type": "webhook", "url": url}],
-    }}), clock=time.monotonic)
+    }}, env=os.environ), clock=time.monotonic)
 
 
 def _an_hour_ago():

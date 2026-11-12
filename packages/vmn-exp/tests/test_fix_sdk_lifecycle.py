@@ -276,7 +276,7 @@ def _open_run(tmp_path, install_hooks=None):
     storage = LocalSnapshotStorage(str(tmp_path), area="runs")
     storage.save("app", ABANDONED_VERSTR, meta(ABANDONED_VERSTR), {})
     run = Run(storage, "app", ABANDONED_VERSTR, 3600, sync_interval_sec=0,
-              install_hooks=install_hooks, clock=RealClock(), host=RealHost(), random=RealRandom())
+              env=os.environ, install_hooks=install_hooks, clock=RealClock(), host=RealHost(), random=RealRandom())
     run._open()
     return run, storage
 

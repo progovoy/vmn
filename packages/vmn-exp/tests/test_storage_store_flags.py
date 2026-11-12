@@ -1,5 +1,6 @@
 """``--store <uri>`` on every command that opens experiment/snapshot storage:
 ``exp`` (and ``import-mlflow``), ``model`` and ``ui``."""
+import os
 from types import SimpleNamespace
 
 import boto3
@@ -51,7 +52,7 @@ def test_snapshot_storage_honours_store(s3, tmp_path):
     from vmn_exp.snapshot import _get_storage
 
     vcs = SimpleNamespace(vmn_root_path=str(tmp_path))
-    storage = _get_storage(vcs, {"store": f"s3://{BUCKET}/snaps"}, RealClock())
+    storage = _get_storage(vcs, {"store": f"s3://{BUCKET}/snaps"}, RealClock(), os.environ)
     assert (_remote(storage).bucket, _remote(storage).prefix) == (BUCKET, "snaps/snapshots")
 
 
@@ -59,7 +60,7 @@ def test_snapshot_storage_bucket_shorthand_uses_the_vmn_root(s3, tmp_path):
     from vmn_exp.snapshot import _get_storage
 
     vcs = SimpleNamespace(vmn_root_path=str(tmp_path))
-    storage = _get_storage(vcs, {"bucket": BUCKET}, RealClock())
+    storage = _get_storage(vcs, {"bucket": BUCKET}, RealClock(), os.environ)
     assert _remote(storage).prefix == "vmn/snapshots"
 
 
@@ -68,7 +69,7 @@ def test_model_storage_honours_store(s3):
 
     args = SimpleNamespace(dir=None, store=f"s3://{BUCKET}/models",
                            bucket=None, prefix=None, endpoint_url=None)
-    assert _remote(_get_storage(args, RealClock())).prefix == "models/runs"
+    assert _remote(_get_storage(args, RealClock(), os.environ)).prefix == "models/runs"
 
 
 def test_import_mlflow_storage_honours_store(s3):
@@ -76,7 +77,7 @@ def test_import_mlflow_storage_honours_store(s3):
 
     args = SimpleNamespace(experiment_dir=None, store=f"s3://{BUCKET}/imp",
                            bucket=None, prefix=None, endpoint_url=None)
-    assert _remote(_get_storage(args, RealClock())).prefix == "imp/runs"
+    assert _remote(_get_storage(args, RealClock(), os.environ)).prefix == "imp/runs"
 
 
 def test_ui_store_flag_adds_a_store_workspace(tmp_path, s3):

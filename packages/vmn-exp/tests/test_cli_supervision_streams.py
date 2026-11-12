@@ -19,7 +19,7 @@ from vmn_exp.core.writer import set_default_writer_id
 @pytest.fixture(autouse=True)
 def host(monkeypatch):
     monkeypatch.delenv("VMN_WRITER_ID", raising=False)
-    set_default_writer_id("host")
+    set_default_writer_id(real_io().env, "host")
     logger = MagicMock()
     monkeypatch.setattr(supervisor, "VMN_LOGGER", logger)
     monkeypatch.setattr(runmod, "VMN_LOGGER", logger)

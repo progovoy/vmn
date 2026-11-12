@@ -23,7 +23,7 @@ _LOG = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 
-def _get_storage(args, clock):
+def _get_storage(args, clock, env):
     """Resolve experiment storage from args / environment variables."""
     from vmn_exp.core.storage_resolve import resolve_experiment_storage
 
@@ -34,6 +34,7 @@ def _get_storage(args, clock):
         prefix=getattr(args, "prefix", None),
         endpoint_url=getattr(args, "endpoint_url", None),
         clock=clock,
+        env=env,
     )
 
 
@@ -150,7 +151,7 @@ def import_mlflow_run_without_repo(args, io) -> int | None:
         return 0
 
     try:
-        storage = _get_storage(args, io.clock)
+        storage = _get_storage(args, io.clock, io.env)
     except (OSError, ValueError) as e:
         print(f"error: cannot open the experiment store: {e}")
         return 1

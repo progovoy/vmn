@@ -16,13 +16,11 @@ importing them upward out of it.
 import itertools
 import logging
 import os
-import socket
 
 import yaml
 
 from vmn_exp._base import get_repo_lock, now_iso, sha256_file  # noqa: F401
 from vmn_exp._base import valid_path_component
-from vmn_exp.core.app_conf import experiment_conf
 from vmn_exp.core.children import mark_parent
 from vmn_exp.core.metric_compact import note_points
 from vmn_exp.core.metric_entries import (
@@ -31,39 +29,23 @@ from vmn_exp.core.metric_entries import (
     split_metric_entries,
 )
 from vmn_exp.core.metric_stream import MetricWriter
+from vmn_exp.core.real_io import real_io
 from vmn_exp.core import run_hint
 from vmn_exp.core.record_format import stamped
 from vmn_exp.core.status import RUN_STATE_FILE
+from vmn_exp.core.storage_resolve import (  # noqa: F401  (importers' names)
+    STORAGE_ENV, merge_conf_into_params, merge_env_into_params)
 from vmn_exp.core.streams import clean_writer_id, process_owner, stream_key
 from vmn_exp.core.values import sanitize_entry
 from vmn_exp.storage.files import user_artifact_path
-
-# Storage params an app's conf.yml may supply (param -> conf key).
-_STORAGE_CONF_KEYS = {
-    "store": "uri",
-    "bucket": "bucket",
-    "prefix": "prefix",
-    "endpoint_url": "endpoint_url",
-    "experiment_dir": "experiment_dir",
-    "writer_id": "writer_id",
-}
 
 WRITER_ID_ENV = "VMN_WRITER_ID"
 OFFLINE_ENV = "VMN_EXP_OFFLINE"
 _TRUE_VALUES = ("1", "true", "yes", "on")
 
-# Storage params a pod can set without a conf.yml (see merge_env_into_params).
-STORAGE_ENV = {
-    "store": "VMN_EXPERIMENT_STORE",
-    "bucket": "VMN_EXPERIMENT_BUCKET",
-    "prefix": "VMN_EXPERIMENT_PREFIX",
-    "endpoint_url": "VMN_EXPERIMENT_ENDPOINT_URL",
-}
-
-
-def offline_mode():
-    """Whether ``VMN_EXP_OFFLINE`` asks to record to the local root only."""
-    return is_true(os.environ.get(OFFLINE_ENV))
+def offline_mode(env):
+    """Whether *env*'s ``VMN_EXP_OFFLINE`` asks to record to the local root only."""
+    return is_true(env.get(OFFLINE_ENV))
 
 
 def is_true(value):
@@ -74,22 +56,33 @@ def is_true(value):
 _WRITER_ID = None
 
 
-def get_writer_id(conf_writer_id=None):
+def get_writer_id(env, host, conf_writer_id=None):
     """Return a unique writer identifier for concurrent-safe log writes.
 
-    Priority: VMN_WRITER_ID env > conf_writer_id > HOSTNAME env > socket.gethostname().
-    Cached for the process lifetime. A ``~`` (the stream key separator,
+    Priority: *env*'s VMN_WRITER_ID > conf_writer_id > *env*'s HOSTNAME >
+    ``host.hostname()``. Resolved on the first call, then cached for the
+    process lifetime. A ``~`` (the stream key separator,
     :mod:`vmn_exp.core.streams`) is replaced.
     """
     global _WRITER_ID
     if _WRITER_ID is None:
         _WRITER_ID = clean_writer_id(
-            os.environ.get(WRITER_ID_ENV)
+            env.get(WRITER_ID_ENV)
             or conf_writer_id
-            or os.environ.get("HOSTNAME")
-            or socket.gethostname()
+            or env.get("HOSTNAME")
+            or host.hostname()
         )
     return _WRITER_ID
+
+
+def process_writer_id():
+    """:func:`get_writer_id` for callers handed no env or host (stream
+    owners, journals, registry and comment logs): resolved, on first use,
+    from the process's real environment and host."""
+    if _WRITER_ID is not None:
+        return _WRITER_ID
+    io = real_io()
+    return get_writer_id(io.env, io.host)
 
 
 def own_stream(storage, app_name, verstr, writer=None):
@@ -99,41 +92,18 @@ def own_stream(storage, app_name, verstr, writer=None):
     to again, so its owner moves on. *writer* (default: this process's
     writer id) names another writer of the same process, such as an adopted
     run's own stream (:func:`vmn_exp.core.streams.guest_writer_id`)."""
-    writer = writer or get_writer_id()
+    writer = writer or process_writer_id()
     owner_for = getattr(storage, "stream_owner", None)
     owner = owner_for(app_name, verstr, writer) if owner_for else None
     return stream_key(writer, owner or process_owner())
 
 
-def set_default_writer_id(writer_id):
-    """Make *writer_id* the process's writer id unless ``VMN_WRITER_ID`` names one
-    (a server's own edits, whatever an earlier call cached)."""
+def set_default_writer_id(env, writer_id):
+    """Make *writer_id* the process's writer id unless *env*'s ``VMN_WRITER_ID``
+    names one (a server's own edits, whatever an earlier call cached)."""
     global _WRITER_ID
-    _WRITER_ID = clean_writer_id(os.environ.get(WRITER_ID_ENV) or writer_id)
+    _WRITER_ID = clean_writer_id(env.get(WRITER_ID_ENV) or writer_id)
     return _WRITER_ID
-
-
-def merge_env_into_params(params):
-    """Fill unset storage params from ``VMN_EXPERIMENT_*`` (flags override env).
-
-    A pod has no conf.yml and often no checkout; the environment is how it is
-    pointed at a bucket.
-    """
-    for key, var in STORAGE_ENV.items():
-        if not params.get(key) and os.environ.get(var):
-            params[key] = os.environ[var]
-
-
-def merge_conf_into_params(vcs, params):
-    """Fill unset storage params: CLI flags, then ``VMN_EXPERIMENT_*``, then conf.yml."""
-    merge_env_into_params(params)
-    exp_conf = experiment_conf(vcs)
-    storage_conf = exp_conf.get("storage", {}) or {}
-    for key, conf_key in _STORAGE_CONF_KEYS.items():
-        if not params.get(key):
-            conf_val = storage_conf.get(conf_key)
-            if conf_val:
-                params[key] = conf_val
 
 
 # ---------------------------------------------------------------------------
@@ -337,15 +307,22 @@ def _taken_verstrs(storage, app_name, code_verstr, suffix=None):
     return {m.get("verstr", "") for m in storage.list_snapshots(app_name)}
 
 
-def default_run_suffix():
+def default_run_suffix(env, host):
     """The suffix a new run's name carries unless told otherwise: the pod's
-    VMN_WRITER_ID (K8s mode), else the writer id when recording offline — an
-    offline run is named without seeing the remote, so ``.rN`` could collide
-    with another host's — else None (``.rN``)."""
-    writer_id = os.environ.get(WRITER_ID_ENV)
+    VMN_WRITER_ID in *env* (K8s mode), else the writer id when recording
+    offline — an offline run is named without seeing the remote, so ``.rN``
+    could collide with another host's — else None (``.rN``)."""
+    writer_id = env.get(WRITER_ID_ENV)
     if writer_id:
         return writer_id
-    return get_writer_id() if offline_mode() else None
+    return get_writer_id(env, host) if offline_mode(env) else None
+
+
+def process_run_suffix():
+    """:func:`default_run_suffix` of the process's real environment and host,
+    for the run-name allocators, which are handed neither."""
+    io = real_io()
+    return default_run_suffix(io.env, io.host)
 
 
 def _run_verstr_candidates(code_verstr, taken, suffix):
@@ -434,7 +411,7 @@ def allocate_run_verstr(storage, app_name, code_verstr, make_record=None,
     again after :data:`_HINT_MISSES` names in a row were taken.
     """
     if suffix is _DEFAULT_SUFFIX:
-        suffix = default_run_suffix()
+        suffix = process_run_suffix()
     hint = None if suffix or make_record is None else run_hint.hint_key(
         storage, app_name, code_verstr)
     if hint is not None:

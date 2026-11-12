@@ -15,7 +15,7 @@ from vmn_exp.snapshot import _get_storage
 from version_stamp.api import VMN_LOGGER
 
 
-def load_code_record(vcs, params, verstr, app_name=None, exp_storage=None, *, clock):
+def load_code_record(vcs, params, verstr, app_name=None, exp_storage=None, *, clock, env):
     """``(metadata, patches)`` of *verstr*, or None after logging why not.
 
     *params* are experiment storage params (``experiment_storage_params``);
@@ -24,11 +24,11 @@ def load_code_record(vcs, params, verstr, app_name=None, exp_storage=None, *, cl
     """
     app_name = app_name or vcs.name
     if exp_storage is None:
-        exp_storage = _open_experiment_storage(vcs, params, clock)
+        exp_storage = _open_experiment_storage(vcs, params, clock, env)
     metadata, patches = _try_load(exp_storage, app_name, verstr, "experiment")
     if metadata is None:
         metadata, patches = _load_snapshot(
-            _open_snapshot_storage(vcs, params, clock), app_name, verstr, exp_storage
+            _open_snapshot_storage(vcs, params, clock, env), app_name, verstr, exp_storage
         )
     if metadata is None:
         VMN_LOGGER.error(
@@ -40,17 +40,17 @@ def load_code_record(vcs, params, verstr, app_name=None, exp_storage=None, *, cl
     return metadata, patches
 
 
-def _open_experiment_storage(vcs, params, clock):
+def _open_experiment_storage(vcs, params, clock, env):
     try:
-        return _get_experiment_storage(vcs, params, clock=clock)
+        return _get_experiment_storage(vcs, params, clock=clock, env=env)
     except Exception:
         VMN_LOGGER.debug("Could not open the experiment store", exc_info=True)
         return None
 
 
-def _open_snapshot_storage(vcs, params, clock):
+def _open_snapshot_storage(vcs, params, clock, env):
     try:
-        return _get_storage(vcs, params, clock)
+        return _get_storage(vcs, params, clock, env)
     except Exception:
         VMN_LOGGER.debug("Could not open the snapshot store", exc_info=True)
         return None

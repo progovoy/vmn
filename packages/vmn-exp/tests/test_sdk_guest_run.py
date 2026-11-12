@@ -1,6 +1,7 @@
 """The run ``vmn-exp run``'s child adopts (plan 38 A5) is a guest on the
 supervisor's record: it appends to a stream of its own and never writes the
 run's state, its ``run`` entry or its finish alerts."""
+import os
 import logging
 
 import pytest
@@ -12,6 +13,7 @@ from vmn_exp.core.writer import set_default_writer_id
 from vmn_exp.sdk import run as run_module
 from vmn_exp.sdk.guest_run import GuestRun
 from vmn_exp.sdk.run import Run
+from vmn_exp.core.real_io import real_io
 
 GUEST = guest_writer_id("host")
 
@@ -19,7 +21,7 @@ GUEST = guest_writer_id("host")
 @pytest.fixture(autouse=True)
 def host(monkeypatch):
     monkeypatch.delenv("VMN_WRITER_ID", raising=False)
-    set_default_writer_id("host")
+    set_default_writer_id(real_io().env, "host")
 
 
 @pytest.fixture
@@ -40,7 +42,7 @@ class _AlertSpy(GuestRun):
 def _open(storage, cls=GuestRun, **kwargs):
     kwargs.setdefault("writer", GUEST)
     run = cls(storage, APP, V, 3600, sync_interval_sec=0, export_env=False,
-              install_hooks=None, clock=RealClock(), host=RealHost(), random=RealRandom(), **kwargs)
+              env=os.environ, install_hooks=None, clock=RealClock(), host=RealHost(), random=RealRandom(), **kwargs)
     run._open()
     return run
 

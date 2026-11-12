@@ -5,6 +5,7 @@ resumed one when an intent is given — and refuses a bad one before creating
 anything. ``set_intent`` appends a new entry (the latest wins);
 ``NoOpRun.set_intent`` records nothing.
 """
+import os
 import pytest
 import yaml
 from exp_helpers import _bootstrap, _storage
@@ -36,7 +37,7 @@ def storage(tmp_path):
 
 @pytest.fixture
 def run(storage):
-    run = Run(storage, APP, VERSTR, 60, clock=RealClock(), host=RealHost(), random=RealRandom(), install_hooks=_real_process_hooks())
+    run = Run(storage, APP, VERSTR, 60, clock=RealClock(), host=RealHost(), random=RealRandom(), env=os.environ, install_hooks=_real_process_hooks())
     run._open()
     yield run
     run.finish()

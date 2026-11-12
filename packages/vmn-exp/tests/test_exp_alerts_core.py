@@ -113,7 +113,7 @@ def test_config_from_conf_builds_sinks_and_triggers(monkeypatch):
             {"type": "carrier-pigeon"},
         ],
     }}
-    config = load_alert_config("app", exp_conf=conf)
+    config = load_alert_config("app", exp_conf=conf, env=os.environ)
     assert [type(s) for s in config.sinks] == [WebhookSink, SlackSink, CommandSink]
     assert config.on == {"failed", "stuck"}
     assert config.wait_sec == 5
@@ -125,14 +125,14 @@ def test_env_vars_add_sinks_and_override_triggers(monkeypatch):
     monkeypatch.setenv("VMN_EXP_ALERT_SLACK_URL", "http://example/b")
     monkeypatch.setenv("VMN_EXP_ALERT_COMMAND", "true")
     monkeypatch.setenv("VMN_EXP_ALERT_ON", "failed, alert")
-    config = load_alert_config("app", exp_conf={"alerts": {"on": ["stuck"]}})
+    config = load_alert_config("app", exp_conf={"alerts": {"on": ["stuck"]}}, env=os.environ)
     assert [type(s) for s in config.sinks] == [WebhookSink, SlackSink, CommandSink]
     assert config.on == {"failed", "alert"}
 
 
 def test_only_explicit_alerts_fire_by_default(monkeypatch):
     monkeypatch.delenv("VMN_EXP_ALERT_ON", raising=False)
-    config = load_alert_config("app", exp_conf={})
+    config = load_alert_config("app", exp_conf={}, env=os.environ)
     assert config.on == {"alert"}
 
 
@@ -144,7 +144,7 @@ def test_config_reads_the_apps_conf_yml_from_the_root(tmp_path, monkeypatch):
         "conf:\n  experiment:\n    alerts:\n      on: [stuck]\n"
         "      sinks:\n        - {type: webhook, url: 'http://example/a'}\n"
     )
-    config = load_alert_config("root/svc", root=str(tmp_path))
+    config = load_alert_config("root/svc", root=str(tmp_path), env=os.environ)
     assert config.on == {"stuck"}
     assert len(config.sinks) == 1
 
@@ -153,7 +153,7 @@ def test_unreachable_sinks_never_raise_and_fail_fast(monkeypatch):
     monkeypatch.setenv("VMN_EXP_ALERT_WEBHOOK_URL", dead_url())
     monkeypatch.setenv("VMN_EXP_ALERT_SLACK_URL", dead_url())
     monkeypatch.setenv("VMN_EXP_ALERT_COMMAND", "exit 1")
-    alerter = Alerter(load_alert_config("app", exp_conf={"alerts": {"timeout_sec": 2}}), clock=time.monotonic)
+    alerter = Alerter(load_alert_config("app", exp_conf={"alerts": {"timeout_sec": 2}}, env=os.environ), clock=time.monotonic)
     start = time.monotonic()
     assert alerter.send(_alert()) is False
     assert time.monotonic() - start < 10
@@ -163,13 +163,13 @@ def test_one_working_sink_is_enough_for_a_delivery(monkeypatch):
     with WebhookReceiver() as hook:
         monkeypatch.setenv("VMN_EXP_ALERT_WEBHOOK_URL", hook.url)
         monkeypatch.setenv("VMN_EXP_ALERT_COMMAND", "exit 1")
-        assert Alerter(load_alert_config("app", exp_conf={}), clock=time.monotonic).send(_alert()) is True
+        assert Alerter(load_alert_config("app", exp_conf={}, env=os.environ), clock=time.monotonic).send(_alert()) is True
         assert hook.wait_for(1)
 
 
 def test_admit_rate_limits_repeats_of_one_title():
     now = [100.0]
-    alerter = Alerter(load_alert_config("app", exp_conf={"alerts": {"wait_sec": 60}}),
+    alerter = Alerter(load_alert_config("app", exp_conf={"alerts": {"wait_sec": 60}}, env=os.environ),
                       clock=lambda: now[0])
     assert alerter.admit("a") is True
     assert alerter.admit("a") is False
@@ -183,9 +183,9 @@ def test_wants_needs_the_trigger_and_a_sink(monkeypatch):
     for var in ("VMN_EXP_ALERT_WEBHOOK_URL", "VMN_EXP_ALERT_SLACK_URL",
                 "VMN_EXP_ALERT_COMMAND", "VMN_EXP_ALERT_ON"):
         monkeypatch.delenv(var, raising=False)
-    assert not Alerter(load_alert_config("app", exp_conf={}), clock=time.monotonic).wants("alert")
+    assert not Alerter(load_alert_config("app", exp_conf={}, env=os.environ), clock=time.monotonic).wants("alert")
     monkeypatch.setenv("VMN_EXP_ALERT_WEBHOOK_URL", "http://example/a")
-    alerter = Alerter(load_alert_config("app", exp_conf={}), clock=time.monotonic)
+    alerter = Alerter(load_alert_config("app", exp_conf={}, env=os.environ), clock=time.monotonic)
     assert alerter.wants("alert")
     assert not alerter.wants("failed")
 
@@ -193,7 +193,7 @@ def test_wants_needs_the_trigger_and_a_sink(monkeypatch):
 def test_send_async_delivers_and_drain_waits(monkeypatch):
     with WebhookReceiver() as hook:
         monkeypatch.setenv("VMN_EXP_ALERT_WEBHOOK_URL", hook.url)
-        alerter = Alerter(load_alert_config("app", exp_conf={}), clock=time.monotonic)
+        alerter = Alerter(load_alert_config("app", exp_conf={}, env=os.environ), clock=time.monotonic)
         alerter.send_async(_alert())
         alerter.drain(5)
         assert len(hook.requests) == 1
@@ -204,6 +204,6 @@ def test_config_never_raises_on_a_broken_conf_file(tmp_path, monkeypatch):
     conf_dir = tmp_path / ".vmn" / "app"
     conf_dir.mkdir(parents=True)
     (conf_dir / "conf.yml").write_text("conf: [unbalanced\n")
-    config = load_alert_config("app", root=str(tmp_path))
+    config = load_alert_config("app", root=str(tmp_path), env=os.environ)
     assert config.on == {"alert"}
     assert os.path.isdir(str(conf_dir))

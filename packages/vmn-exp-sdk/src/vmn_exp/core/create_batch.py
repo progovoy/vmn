@@ -18,7 +18,7 @@ from vmn_exp.core.writer import (
     _taken_verstrs,
     check_run_id,
     create_tags_entry,
-    default_run_suffix,
+    process_run_suffix,
     env_yaml,
     flush_log,
     hinted_names,
@@ -86,7 +86,7 @@ class _Names:
 
     def __init__(self, storage, app_name, code_verstr, exclude):
         self._scope = (storage, app_name, code_verstr)
-        self._suffix = default_run_suffix()
+        self._suffix = process_run_suffix()
         self._exclude = set(exclude)  # the batch's run_ids, then every name handed out
         self._lock = threading.Lock()
         self._relisted = False

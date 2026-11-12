@@ -24,23 +24,23 @@ def _fs(kind):
 
 def test_a_local_cache_dir_is_kept(xdg, monkeypatch):
     monkeypatch.setattr(host_dirs, "filesystem_type", _fs("apfs"))
-    assert host_dirs.cache_base() == xdg
+    assert host_dirs.cache_base(os.environ) == xdg
 
 
 @pytest.mark.parametrize("kind", ["nfs", "nfs4", "cifs", "smbfs", "fuse.sshfs"])
 def test_a_network_cache_dir_falls_back_to_tmp(xdg, monkeypatch, kind):
     monkeypatch.setattr(host_dirs, "filesystem_type", _fs(kind))
-    base = host_dirs.cache_base()
+    base = host_dirs.cache_base(os.environ)
     assert base != xdg
     assert os.path.commonpath([tempfile.gettempdir(), base]) == tempfile.gettempdir()
-    assert host_dirs.index_cache_root() == base
+    assert host_dirs.index_cache_root(os.environ) == base
 
 
 def test_the_fallback_is_warned_about_once(xdg, monkeypatch, caplog):
     monkeypatch.setattr(host_dirs, "filesystem_type", _fs("nfs"))
     caplog.set_level(logging.WARNING)
-    host_dirs.cache_base()
-    host_dirs.cache_base()
+    host_dirs.cache_base(os.environ)
+    host_dirs.cache_base(os.environ)
     warnings = [r for r in caplog.records if xdg in r.getMessage()]
     assert len(warnings) == 1 and "nfs" in warnings[0].getMessage()
 
@@ -49,14 +49,14 @@ def test_an_explicit_cache_dir_is_kept_even_on_nfs(monkeypatch, tmp_path, caplog
     monkeypatch.setattr(host_dirs, "filesystem_type", _fs("nfs"))
     monkeypatch.setenv("VMN_EXP_CACHE_DIR", str(tmp_path / "chosen"))
     caplog.set_level(logging.WARNING)
-    assert host_dirs.cache_base() == str(tmp_path / "chosen")
+    assert host_dirs.cache_base(os.environ) == str(tmp_path / "chosen")
     assert not caplog.records
 
 
 def test_the_state_dir_is_not_redirected(xdg, monkeypatch, tmp_path):
     monkeypatch.setattr(host_dirs, "filesystem_type", _fs("nfs"))
     monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path / "state"))
-    assert host_dirs.state_base() == str(tmp_path / "state" / "vmn-exp")
+    assert host_dirs.state_base(os.environ) == str(tmp_path / "state" / "vmn-exp")
 
 
 def test_the_type_of_a_path_not_created_yet_is_its_parents(tmp_path):

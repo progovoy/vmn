@@ -31,17 +31,19 @@ RESUME_ENV = "VMN_RESUME_RUN_ID"
 REOPEN_ENV = "VMN_RESUME_REOPEN"
 
 
-def requested_run_id(run_id, reopen=False):
-    """``(ref, reopen)``: *run_id* with *reopen*, else ``VMN_RESUME_RUN_ID``
-    with ``VMN_RESUME_REOPEN``.
+def requested_run_id(run_id, reopen, env, consume):
+    """``(ref, reopen)``: *run_id* with *reopen*, else *env*'s
+    ``VMN_RESUME_RUN_ID`` with ``VMN_RESUME_REOPEN``.
 
-    The env values are consumed: left in place, every run this process opens
-    next — and every vmn subprocess it launches — would resume the same run again.
+    The env values are consumed (``consume(names)``): left in place, every run
+    this process opens next — and every vmn subprocess it launches — would
+    resume the same run again.
     """
     if run_id:
         return run_id, reopen
-    ref = os.environ.pop(RESUME_ENV, None) or None
-    return ref, is_true(os.environ.pop(REOPEN_ENV, None))
+    ref, reopen = env.get(RESUME_ENV) or None, is_true(env.get(REOPEN_ENV))
+    consume((RESUME_ENV, REOPEN_ENV))
+    return ref, reopen
 
 
 class ReopenRefusedError(RunRefusedError):

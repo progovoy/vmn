@@ -144,7 +144,7 @@ def test_finish_refuses_a_finished_run(storage):
 
 
 def test_force_finishes_a_live_run_and_its_heartbeats_stop(storage):
-    run = Run(storage, APP, VERSTR, 60, clock=RealClock(), host=RealHost(), random=RealRandom(), install_hooks=_real_process_hooks())
+    run = Run(storage, APP, VERSTR, 60, clock=RealClock(), host=RealHost(), random=RealRandom(), env=os.environ, install_hooks=_real_process_hooks())
     run._open()
     try:
         manage.finish_run(APP, VERSTR, 143, end_reason="evicted", force=True,

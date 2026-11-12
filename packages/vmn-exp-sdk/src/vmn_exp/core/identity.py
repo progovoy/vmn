@@ -11,7 +11,7 @@ from __future__ import annotations
 import os
 import subprocess
 
-from vmn_exp.core.writer import get_writer_id
+from vmn_exp.core.writer import process_writer_id
 
 AUTHOR_ENV = "VMN_EXP_AUTHOR"
 # A git that cannot answer ``git config user.email`` by then gives no email:
@@ -30,7 +30,7 @@ def actor_identity(cwd: str | None = None) -> dict:
       os_user        — $USER / $LOGNAME / os.getlogin(), best-effort
     """
     return {
-        "writer": get_writer_id(),
+        "writer": process_writer_id(),
         "git_user_email": _git_user_email(cwd),
         "os_user": _os_user(),
     }

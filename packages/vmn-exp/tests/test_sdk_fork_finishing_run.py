@@ -43,7 +43,7 @@ class SlowSync(CachedSnapshotStorage):
 storage = SlowSync(LocalSnapshotStorage(sys.argv[1], area="runs"))
 storage.save("app", "0.0.1-dev.a.b", {"verstr": "0.0.1-dev.a.b"}, {})
 run = Run(storage, "app", "0.0.1-dev.a.b", 60, sync_interval_sec=0, clock=RealClock(), host=RealHost(), random=RealRandom(),
-          install_hooks=_real_process_hooks())
+          env=os.environ, install_hooks=_real_process_hooks())
 run._open()
 run.log_note("logged")
 

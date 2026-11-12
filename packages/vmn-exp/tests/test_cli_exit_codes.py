@@ -2,6 +2,7 @@
 failed, 2 the invocation was wrong. Handler-detected usage errors return 2
 like argparse does; a run that is not there is a failure, not a usage error.
 """
+import os
 from types import SimpleNamespace
 
 import pytest
@@ -38,7 +39,7 @@ def test_run_without_a_command_is_a_usage_error():
 
 def test_run_without_a_command_is_a_usage_error_when_disabled(monkeypatch):
     monkeypatch.setenv("VMN_MODE", "disabled")
-    assert exec_if_disabled(SimpleNamespace(run_cmd=None)) == 2
+    assert exec_if_disabled(SimpleNamespace(run_cmd=None), os.environ) == 2
 
 
 def test_stray_refs_are_a_usage_error():

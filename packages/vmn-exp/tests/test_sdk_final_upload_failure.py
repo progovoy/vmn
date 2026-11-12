@@ -1,6 +1,7 @@
 """A run's final state that fails to upload is retried and reported, never
 silent; a failing heartbeat upload warns once and is not retried in place.
 """
+import os
 import logging
 
 import yaml
@@ -129,7 +130,7 @@ def test_finish_warns_that_the_final_state_was_not_uploaded(tmp_path, monkeypatc
     remote = LocalSnapshotStorage(str(tmp_path / "remote"), "runs")
     for side in (local, remote):
         side.save(APP, X, meta(X), {})
-    run = Run(CachedSnapshotStorage(local, _StateRefusingRemote(remote)), APP, X, 3600, clock=RealClock(), host=RealHost(), random=RealRandom(), install_hooks=_real_process_hooks())
+    run = Run(CachedSnapshotStorage(local, _StateRefusingRemote(remote)), APP, X, 3600, clock=RealClock(), host=RealHost(), random=RealRandom(), env=os.environ, install_hooks=_real_process_hooks())
     run._open()
 
     with caplog.at_level(logging.WARNING):

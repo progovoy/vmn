@@ -9,7 +9,7 @@ from vmn_exp.core.real_io import RealClock
 
 
 def s3_index_cache_path(endpoint_url, bucket, prefix, app_name):
-    return index_cache_path(("s3", endpoint_url, bucket, prefix), app_name)
+    return index_cache_path(("s3", endpoint_url, bucket, prefix), app_name, os.environ)
 
 
 # ---------------------------------------------------------------------------
@@ -21,25 +21,25 @@ def test_env_override_is_used(monkeypatch, tmp_path):
     custom = str(tmp_path / "mycache")
     monkeypatch.setenv("VMN_INDEX_CACHE_DIR", custom)
     monkeypatch.delenv("XDG_CACHE_HOME", raising=False)
-    assert index_cache_root() == custom
+    assert index_cache_root(os.environ) == custom
 
 
 def test_xdg_fallback_used_when_no_env(monkeypatch, tmp_path):
     monkeypatch.delenv("VMN_INDEX_CACHE_DIR", raising=False)
     monkeypatch.delenv("VMN_EXP_CACHE_DIR", raising=False)
     monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path / "xdg"))
-    root = index_cache_root()
+    root = index_cache_root(os.environ)
     assert root == str(tmp_path / "xdg" / "vmn-exp")
 
 
 def test_none_value_disables(monkeypatch):
     monkeypatch.setenv("VMN_INDEX_CACHE_DIR", "none")
-    assert index_cache_root() is None
+    assert index_cache_root(os.environ) is None
 
 
 def test_none_case_insensitive(monkeypatch):
     monkeypatch.setenv("VMN_INDEX_CACHE_DIR", "NONE")
-    assert index_cache_root() is None
+    assert index_cache_root(os.environ) is None
 
 
 # ---------------------------------------------------------------------------

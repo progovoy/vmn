@@ -14,10 +14,10 @@ from vmn_exp.sdk.mode import is_disabled
 NOTICE = "vmn-exp: VMN_MODE=disabled - running the command without recording a run"
 
 
-def exec_if_disabled(args):
+def exec_if_disabled(args, env):
     """Under ``VMN_MODE=disabled`` replace this process with ``args.run_cmd``
     (2, a usage error, when there is no command); None otherwise, for the normal ``run``."""
-    if not is_disabled():
+    if not is_disabled(None, env):
         return None
     run_cmd = getattr(args, "run_cmd", None)
     if not run_cmd:

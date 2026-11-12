@@ -130,12 +130,12 @@ def test_uss_is_read_every_nth_tick_and_estimated_from_rss_in_between(monkeypatc
 def test_an_sdk_run_inside_a_sampling_supervisor_defaults_off(monkeypatch):
     monkeypatch.delenv(sysmetrics.SYSTEM_METRICS_ENV, raising=False)
     monkeypatch.setenv(sysmetrics.SUPERVISOR_SAMPLES_ENV, "1")
-    assert sysmetrics.sdk_enabled(None) is False
-    assert sysmetrics.sdk_enabled(True) is True  # asked for explicitly
+    assert sysmetrics.sdk_enabled(None, os.environ) is False
+    assert sysmetrics.sdk_enabled(True, os.environ) is True  # asked for explicitly
 
     monkeypatch.delenv(sysmetrics.SUPERVISOR_SAMPLES_ENV)
-    assert sysmetrics.sdk_enabled(None) is True
-    assert sysmetrics.sdk_enabled(None, {"system_metrics": False}) is False
+    assert sysmetrics.sdk_enabled(None, os.environ) is True
+    assert sysmetrics.sdk_enabled(None, os.environ, {"system_metrics": False}) is False
 
 
 def test_start_run_under_a_sampling_supervisor_does_not_sample(app_layout, monkeypatch):

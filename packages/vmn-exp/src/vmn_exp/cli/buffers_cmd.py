@@ -34,7 +34,7 @@ def run_buffers(argv, io):
     from vmn_exp.storage.open import open_storage
 
     return buffers_main(
-        argv, host=LocalBufferHost(), bases=log_buffers_bases(),
+        argv, host=LocalBufferHost(), bases=log_buffers_bases(io.env),
         store_env=io.env.get("VMN_EXPERIMENT_STORE"),
         open_remote=lambda uri, area: open_storage(uri, area=area, writer=False, clock=io.clock),
         out=sys.stdout, now=io.clock.now().timestamp())

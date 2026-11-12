@@ -27,6 +27,7 @@ from vmn_exp.core import status as st
 from version_stamp.core.constants import VMN_USER_NAME
 from vmn_exp.core.status import RUN_STATE_FILE, load_run_state
 from vmn_exp.sdk import Run, start_run
+from vmn_exp.core.real_io import real_io
 
 _RUN_STATE_KEYS = {
     "state",
@@ -381,7 +382,7 @@ def test_sdk_writes_the_same_per_writer_log_file_as_the_cli(app_layout):
     )
     [log_file] = os.listdir(log_dir)
     assert log_file.endswith(".jsonl")
-    assert display_writer(log_file[:-len(".jsonl")]) == get_writer_id()
+    assert display_writer(log_file[:-len(".jsonl")]) == get_writer_id(real_io().env, real_io().host)
 
 
 # ---------------------------------------------------------------------------

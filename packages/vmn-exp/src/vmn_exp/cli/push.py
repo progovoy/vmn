@@ -40,9 +40,9 @@ _NO_REMOTE = (
 )
 
 
-def experiment_push(vcs, params, app_name, args, clock):
+def experiment_push(vcs, params, app_name, args, clock, env):
     try:
-        local, target = _stores(vcs, params)
+        local, target = _stores(vcs, params, env)
         verstrs = _select(local, app_name, getattr(args, "version", None))
     except ValueError as exc:
         VMN_LOGGER.error(str(exc))
@@ -81,9 +81,9 @@ def _adopt(local, target, app_name, verstrs, ledger):
     return failed
 
 
-def _stores(vcs, params):
+def _stores(vcs, params, env):
     uri = store_uri(params)
-    root = experiment_dir(vcs, params)
+    root = experiment_dir(vcs, params, env)
     if not uri or not root:
         raise ValueError(_NO_REMOTE if root else "exp push needs a local experiment dir")
     target = open_store(uri, area=RUNS)

@@ -46,7 +46,7 @@ def test_env_fills_unset_storage_params(monkeypatch):
     monkeypatch.setenv("VMN_EXPERIMENT_ENDPOINT_URL", "http://minio:9000")
     params = {"backend": "local", "bucket": None, "prefix": None}
 
-    merge_env_into_params(params)
+    merge_env_into_params(params, os.environ)
 
     assert params["bucket"] == BUCKET
     assert params["prefix"] == "team-a"
@@ -57,7 +57,7 @@ def test_explicit_flags_beat_the_env(monkeypatch):
     monkeypatch.setenv("VMN_EXPERIMENT_BUCKET", BUCKET)
     params = {"bucket": "from-flag", "prefix": "custom"}
 
-    merge_env_into_params(params)
+    merge_env_into_params(params, os.environ)
 
     assert params == {"bucket": "from-flag", "prefix": "custom"}
 
@@ -67,7 +67,7 @@ def test_env_beats_conf_yml(monkeypatch):
     vcs = SimpleNamespace(experiment={"storage": {"bucket": "from-conf"}})
     params = {"backend": "local", "bucket": None}
 
-    merge_conf_into_params(vcs, params)
+    merge_conf_into_params(vcs, params, os.environ)
 
     assert params["bucket"] == BUCKET
 

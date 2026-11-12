@@ -74,20 +74,20 @@ def test_platform_defaults(monkeypatch):
         monkeypatch.delenv(var, raising=False)
     home = os.path.expanduser("~")
     if sys.platform == "darwin":
-        assert host_dirs.cache_base() == os.path.join(home, "Library", "Caches", "vmn-exp")
-        assert host_dirs.state_base() == os.path.join(
+        assert host_dirs.cache_base(os.environ) == os.path.join(home, "Library", "Caches", "vmn-exp")
+        assert host_dirs.state_base(os.environ) == os.path.join(
             home, "Library", "Application Support", "vmn-exp")
     else:
-        assert host_dirs.cache_base() == os.path.join(home, ".cache", "vmn-exp")
-        assert host_dirs.state_base() == os.path.join(home, ".local", "state", "vmn-exp")
+        assert host_dirs.cache_base(os.environ) == os.path.join(home, ".cache", "vmn-exp")
+        assert host_dirs.state_base(os.environ) == os.path.join(home, ".local", "state", "vmn-exp")
 
 
 def test_xdg_vars_win_over_platform_defaults(monkeypatch, tmp_path):
     monkeypatch.delenv("VMN_EXP_CACHE_DIR", raising=False)
     monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path / "c"))
     monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path / "s"))
-    assert host_dirs.cache_base() == str(tmp_path / "c" / "vmn-exp")
-    assert host_dirs.state_base() == str(tmp_path / "s" / "vmn-exp")
+    assert host_dirs.cache_base(os.environ) == str(tmp_path / "c" / "vmn-exp")
+    assert host_dirs.state_base(os.environ) == str(tmp_path / "s" / "vmn-exp")
 
 
 def test_app_names_that_slug_alike_get_distinct_paths(tmp_path, monkeypatch):
@@ -96,9 +96,9 @@ def test_app_names_that_slug_alike_get_distinct_paths(tmp_path, monkeypatch):
     monkeypatch.setenv("VMN_EXP_CACHE_DIR", str(tmp_path))
     monkeypatch.delenv("VMN_INDEX_CACHE_DIR", raising=False)
     ident = ("file", str(tmp_path / "store"))
-    assert host_dirs.index_cache_path(ident, "a.b") != host_dirs.index_cache_path(
-        ident, "a_b"
+    assert host_dirs.index_cache_path(ident, "a.b", os.environ) != host_dirs.index_cache_path(
+        ident, "a_b", os.environ
     )
-    assert host_dirs.push_ledger_dir(ident, "r", "a.b") != host_dirs.push_ledger_dir(
-        ident, "r", "a_b"
+    assert host_dirs.push_ledger_dir(ident, "r", "a.b", os.environ) != host_dirs.push_ledger_dir(
+        ident, "r", "a_b", os.environ
     )

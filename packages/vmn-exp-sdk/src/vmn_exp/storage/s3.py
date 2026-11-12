@@ -127,7 +127,7 @@ class S3SnapshotStorage(
                 {"prefix": self.prefix, "endpoint_url": self.endpoint_url})
 
     def index_cache_path(self, app_name):
-        return host_dirs.index_cache_path(self.cache_identity(), app_name)
+        return host_dirs.index_cache_path(self.cache_identity(), app_name, host_dirs.process_env())
 
     def save_file(self, app_name, verstr, filename, data):
         self._put(f"{self._record_prefix(app_name, verstr)}/{filename}", data)

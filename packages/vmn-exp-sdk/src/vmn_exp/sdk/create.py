@@ -12,6 +12,7 @@ vmn-exp package ships.
 """
 import collections
 import contextlib
+import functools
 import os
 
 import yaml
@@ -23,7 +24,8 @@ from vmn_exp.core.from_snapshot import exported_features, snapshot_record
 from vmn_exp.core.refs import resolve_parent
 from vmn_exp.core.storage_resolve import try_repo_root
 from vmn_exp.core.writer import create_run as record_run
-from vmn_exp.core.writer import get_repo_lock, merge_env_into_params
+from vmn_exp.core.real_io import real_io
+from vmn_exp.core.writer import get_repo_lock
 from vmn_exp.sdk import _resolve_app_name, context
 from vmn_exp.sdk.context import current_run
 
@@ -96,7 +98,7 @@ def create_runs(
     specs = create_batch.run_specs(runs)
     if not specs:
         return []
-    source = record_source(app_name, parent, True, storage, capture_env)
+    source = record_source(app_name, parent, True, storage, capture_env, real_io().env)
     with source.lock():
         return create_batch.create_runs(
             source.storage, source.app_name, source.code_verstr, source.template,
@@ -107,18 +109,18 @@ def create_runs(
 
 def create_record(
     app_name, note, params, parent, nested, storage, name=None,
-    capture_env=None, python_exe=None, code=None,
+    capture_env=None, python_exe=None, code=None, *, env,
 ):
     """Create a new run's record; ``(app_name, storage, verstr, exp_conf)``.
 
     *exp_conf* is the checkout's ``experiment:`` conf (``{}`` without one);
-    ``code=False`` records no code (:func:`source_kind`).
+    ``code=False`` records no code (:func:`source_kind`), as *env* says.
     """
     _reject_reentry_without_nesting(nested)
     # Same shape as the CLI's `-f file` params, so latest_metrics and
     # `exp diff` pick them up unchanged.
     create_data = {"params": dict(params)} if params else None
-    source = record_source(app_name, parent, nested, storage, capture_env, python_exe, code)
+    source = record_source(app_name, parent, nested, storage, capture_env, env, python_exe, code)
     with source.lock():
         verstr = record_run(
             source.storage, source.app_name, source.code_verstr,
@@ -128,19 +130,18 @@ def create_record(
     return source.app_name, source.storage, verstr, source.exp_conf
 
 
-def record_source(app_name, parent, nested, storage, capture_env, python_exe=None,
+def record_source(app_name, parent, nested, storage, capture_env, env, python_exe=None,
                   code=None):
-    """The :data:`RecordSource` new runs record from (see :func:`source_kind`)."""
-    env = os.environ
+    """The :data:`RecordSource` new runs record from (:func:`source_kind` of *env*)."""
     kind = source_kind(code, env)
     if kind == SNAPSHOT:
         return snapshot_source(app_name, env[SNAPSHOT_METADATA_ENV], parent, nested, storage,
-                               capture_env)
+                               capture_env, env=env)
     if kind == CODELESS:
         from vmn_exp.sdk.codeless import codeless_source
 
         return codeless_source(app_name, parent, nested, storage, capture_env, env,
-                               _codeless_io())
+                               _codeless_io(env))
     require_checkout_here()
     return gitmode().checkout_source(
         app_name, parent, nested, storage, capture_env=capture_env, python_exe=python_exe)
@@ -162,12 +163,12 @@ def source_kind(code, env):
     raise ValueError(f"{CODE_ENV}={value!r}: its one value is 'none' (record no code)")
 
 
-def _codeless_io():
+def _codeless_io(env):
     from vmn_exp.sdk.codeless import CodelessIO
 
     return CodelessIO(snapshot_mode_storage, pick_parent,
                       lambda capture: _maybe_capture_env(None, capture), now_iso,
-                      _shared_dir_lock)
+                      functools.partial(_shared_dir_lock, env))
 
 
 def require_checkout_here():
@@ -214,11 +215,9 @@ def _reject_reentry_without_nesting(nested):
 def snapshot_mode_storage():
     """Where a git-less run records, as the CLI does: ``VMN_EXPERIMENT_DIR``
     and/or the ``VMN_EXPERIMENT_BUCKET`` it syncs to."""
-    from vmn_exp.sdk.store_resolve import configured_storage  # lazy (plan 41 D1)
-    params = {}
-    merge_env_into_params(params)
+    from vmn_exp.sdk.store_resolve import env_storage  # lazy (plan 41 D1)
     try:
-        return configured_storage(None, params)
+        return env_storage()
     except ValueError:
         raise ValueError(
             "No experiment store for a run without a git checkout: "
@@ -265,7 +264,7 @@ def pick_parent(storage, app_name, parent, nested):
     return resolve_parent(storage, app_name, env_ref=ref)[0]
 
 
-def snapshot_source(app_name, meta_path, parent, nested, storage, capture_env=None):
+def snapshot_source(app_name, meta_path, parent, nested, storage, capture_env=None, *, env):
     """Container mode: the :data:`RecordSource` of an exported snapshot, no
     git needed."""
     app_name = _resolve_app_name(app_name, lambda: snapshot_app_names(meta_path))
@@ -276,17 +275,18 @@ def snapshot_source(app_name, meta_path, parent, nested, storage, capture_env=No
         raise creation_failed(app_name, 1)
     app_name, code_verstr, template = record
     # Env and the export's features are read OUTSIDE the lock.
-    env = _maybe_capture_env(None, capture_env)
+    captured = _maybe_capture_env(None, capture_env)
     features = exported_features(meta_path)
     parent = pick_parent(storage, app_name, parent, nested)
-    return RecordSource(app_name, storage, code_verstr, template, parent, env,
-                        features, _shared_dir_lock, {})
+    return RecordSource(app_name, storage, code_verstr, template, parent, captured,
+                        features, functools.partial(_shared_dir_lock, env), {})
 
 
-def _shared_dir_lock():
-    """A shared VMN_EXPERIMENT_DIR is the only thing concurrent git-less workers
-    have in common: serialize verstr allocation on it, like a checkout's lock."""
-    lock_root = os.environ.get("VMN_EXPERIMENT_DIR")
+def _shared_dir_lock(env):
+    """A shared VMN_EXPERIMENT_DIR (in *env*) is the only thing concurrent
+    git-less workers have in common: serialize verstr allocation on it, like a
+    checkout's lock."""
+    lock_root = env.get("VMN_EXPERIMENT_DIR")
     if not lock_root:
         return contextlib.nullcontext()
     os.makedirs(os.path.join(lock_root, ".vmn"), exist_ok=True)

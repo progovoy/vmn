@@ -7,6 +7,7 @@ code in place and returns False, and ``manage.finish_run`` refuses a finished
 run unless forced. The final write is a compare-and-swap on the state's
 version token, so two finishers racing cannot both land.
 """
+import os
 import pytest
 import yaml
 from s3_helpers import cached_host, meta, mocked_bucket, s3_storage
@@ -45,7 +46,7 @@ def storage(request):
 
 
 def _attempts(storage):
-    a, b = Run(storage, APP, VERSTR, 60, clock=RealClock(), host=RealHost(), random=RealRandom(), install_hooks=_real_process_hooks()), Run(storage, APP, VERSTR, 60, clock=RealClock(), host=RealHost(), random=RealRandom(), install_hooks=_real_process_hooks())
+    a, b = Run(storage, APP, VERSTR, 60, clock=RealClock(), host=RealHost(), random=RealRandom(), env=os.environ, install_hooks=_real_process_hooks()), Run(storage, APP, VERSTR, 60, clock=RealClock(), host=RealHost(), random=RealRandom(), env=os.environ, install_hooks=_real_process_hooks())
     a._open()
     b._open()
     return a, b
@@ -194,7 +195,7 @@ def test_manage_finish_also_lands_in_a_cache_without_the_record(two_hosts):
 
 def test_a_loser_on_another_host_caches_the_winners_state(two_hosts):
     first, second = two_hosts
-    a, b = Run(first, APP, VERSTR, 60, clock=RealClock(), host=RealHost(), random=RealRandom(), install_hooks=_real_process_hooks()), Run(second, APP, VERSTR, 60, clock=RealClock(), host=RealHost(), random=RealRandom(), install_hooks=_real_process_hooks())
+    a, b = Run(first, APP, VERSTR, 60, clock=RealClock(), host=RealHost(), random=RealRandom(), env=os.environ, install_hooks=_real_process_hooks()), Run(second, APP, VERSTR, 60, clock=RealClock(), host=RealHost(), random=RealRandom(), env=os.environ, install_hooks=_real_process_hooks())
     a._open()
     b._open()
 

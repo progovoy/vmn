@@ -1,5 +1,6 @@
 """The run object's repr: one line in a REPL or a log, a small HTML block in a
 notebook (plan 43 F18). Both read only what the run holds in memory."""
+import os
 from vmn_exp.sdk import run_repr
 from vmn_exp.sdk.ranks import NoOpRun
 from vmn_exp.sdk.run import Run
@@ -63,7 +64,7 @@ class _AccessRecorder:
 
 def test_repr_of_an_open_run_delegates_and_reads_no_storage():
     storage = _AccessRecorder()
-    run = Run(storage, APP, VERSTR, 60, name="baseline", install_hooks=None, clock=RealClock(), host=RealHost(), random=RealRandom())
+    run = Run(storage, APP, VERSTR, 60, name="baseline", env=os.environ, install_hooks=None, clock=RealClock(), host=RealHost(), random=RealRandom())
     storage.reads.clear()  # the baseline is taken after construction
 
     text = repr(run)

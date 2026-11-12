@@ -2,6 +2,7 @@
 in the middle of a log append: it runs on a worker thread while the main
 thread sits in the signal handler, so it must not wait on a lock that thread
 holds (see vmn_exp.storage.ship_state.FINALIZING_WAIT_SEC)."""
+import os
 import yaml
 from frozen_holders import finishes_within, frozen_in, in_thread
 from vmn_exp.core.status import RUN_STATE_FILE
@@ -12,6 +13,7 @@ from vmn_exp.snapshot import LocalSnapshotStorage
 from vmn_exp.storage.cached import CachedSnapshotStorage
 from vmn_exp.storage.ship_state import FINALIZING_WAIT_SEC
 from vmn_exp.core.real_io import RealClock, RealHost, RealRandom
+from vmn_exp.core.real_io import real_io
 
 APP = "app"
 VERSTR = "0.0.1-dev.aaaaaaa.bbbbbbb"
@@ -31,13 +33,13 @@ def _note(text):
 
 def test_the_sigterm_finalizer_records_a_run_whose_append_was_interrupted(tmp_path):
     storage = _storage(tmp_path)
-    run = Run(storage, APP, VERSTR, 60, clock=RealClock(), host=RealHost(), random=RealRandom(), install_hooks=_real_process_hooks())
+    run = Run(storage, APP, VERSTR, 60, clock=RealClock(), host=RealHost(), random=RealRandom(), env=os.environ, install_hooks=_real_process_hooks())
     run._open()
     run.log_note("before")
     run._log_buffer.flush()  # the frozen append below is the next storage append
     entered, release = frozen_in(storage._local, "append_log_entries")
     holder = in_thread(
-        lambda: storage.append_log_entry(APP, VERSTR, get_writer_id(), _note("interrupted")))
+        lambda: storage.append_log_entry(APP, VERSTR, get_writer_id(real_io().env, real_io().host), _note("interrupted")))
     assert entered.wait(5)
 
     finished, took = finishes_within(

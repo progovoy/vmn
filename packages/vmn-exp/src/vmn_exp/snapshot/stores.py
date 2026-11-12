@@ -7,7 +7,7 @@ store at all leaves vmn on its local stores. Snapshot records live in the
 store's ``snapshots`` area (where restore safety snapshots are), code objects
 in its ``code`` area, so snapshots and runs share them.
 
-Public: ``open_configured_snapshot_stores(vcs, params, clock) -> ConfiguredStores | None``.
+Public: ``open_configured_snapshot_stores(vcs, params, clock, env) -> ConfiguredStores | None``.
 """
 from dataclasses import dataclass
 
@@ -48,19 +48,19 @@ class RecordsWithCode:
         return resolve_code(self.code_store, app_name, metadata, patches)
 
 
-def _storage_params(vcs, params):
+def _storage_params(vcs, params, env):
     storage_params = {key: params.get(key) for key in STORAGE_ENV}
-    merge_conf_into_params(vcs, storage_params)
-    return drop_remote_if_offline(storage_params, vcs.vmn_root_path)
+    merge_conf_into_params(vcs, storage_params, env)
+    return drop_remote_if_offline(storage_params, vcs.vmn_root_path, env)
 
 
-def open_configured_snapshot_stores(vcs, params, clock):
-    storage_params = _storage_params(vcs, params)
+def open_configured_snapshot_stores(vcs, params, clock, env):
+    storage_params = _storage_params(vcs, params, env)
     where = store_uri(storage_params)
     if where is None:
         return None
     writer = not params.get("read_only")
-    runs = _get_experiment_storage(vcs, storage_params, writer=writer, clock=clock)
+    runs = _get_experiment_storage(vcs, storage_params, writer=writer, clock=clock, env=env)
     records = open_storage(where, local_store_root(vcs.vmn_root_path), area=SNAPSHOTS,
                            writer=writer, clock=clock)
     if not writer:

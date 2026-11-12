@@ -3,6 +3,7 @@ from types import SimpleNamespace
 
 from fakes.clock import FakeClock
 from fakes.console import FakeConsole
+from fakes.env import FakeEnv
 from vmn_exp.cli.model_cmd import model_run_without_repo
 from vmn_exp.core.ports import IO
 from vmn_exp.registry.store import ensure_model, register_version
@@ -20,7 +21,7 @@ def _registered(tmp_path, *names):
 
 def _model(tmp_path, action, **kw):
     console = FakeConsole()
-    io = IO(clock=FakeClock(), env=None, processes=None, random=None, host=None, console=console)
+    io = IO(clock=FakeClock(), env=FakeEnv(), processes=None, random=None, host=None, console=console)
     args = SimpleNamespace(action=action, dir=str(tmp_path), store=None, bucket=None,
                            prefix=None, endpoint_url=None, kind=None, json=False, **kw)
     return model_run_without_repo(args, io), console

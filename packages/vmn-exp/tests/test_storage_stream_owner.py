@@ -20,6 +20,7 @@ from vmn_exp.storage.buffered import BufferedRemoteStorage
 from vmn_exp.storage.cached import CachedSnapshotStorage
 from vmn_exp.storage.local import LocalSnapshotStorage
 from vmn_exp.core.real_io import RealClock
+from vmn_exp.core.real_io import real_io
 
 APP, V = "app", "0.0.1-dev.aaa1111.bbb2222"
 
@@ -166,7 +167,7 @@ def test_a_tilde_in_an_explicit_writer_id_is_replaced(monkeypatch):
     monkeypatch.setenv("VMN_WRITER_ID", "team~gpu07")
     writer._WRITER_ID = None
 
-    assert get_writer_id() == "team-gpu07"
+    assert get_writer_id(real_io().env, real_io().host) == "team-gpu07"
 
 
 def test_a_tag_lands_in_the_record_copys_stream(tmp_path):

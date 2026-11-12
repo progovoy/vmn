@@ -160,7 +160,7 @@ def _execute(vcs, params, storage, args, source, repo_lock, io):
             repo_lock.release()
         supervision = rerun_supervision(
             storage, source, verstr, args, experiment_conf(vcs), cwd, workdir,
-            experiment_dir(vcs, params), io,
+            experiment_dir(vcs, params, io.env), io,
         )
         return supervision.run(_argv(vcs, source, workdir))
     finally:

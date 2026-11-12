@@ -17,7 +17,7 @@ from vmn_exp.core.identity import (  # noqa: F401
     actor_identity,
 )
 from vmn_exp.core.record_format import stamped
-from vmn_exp.core.writer import flush_log, get_writer_id, own_stream
+from vmn_exp.core.writer import flush_log, process_writer_id, own_stream
 from vmn_exp.registry.fold import fold_registry, fold_uses, next_ts
 from vmn_exp.registry.fold import now_iso as _reg_ts
 from vmn_exp.registry.names import HEADER_RECORD, USES_RECORD
@@ -55,7 +55,7 @@ def _build_entry(
     actor: dict | None,
     **fields,
 ) -> dict:
-    writer_id = get_writer_id()
+    writer_id = process_writer_id()
     pos = _writer_pos(entries, writer_id)
     ts = next_ts(_max_ts(entries), _reg_ts())
     return {

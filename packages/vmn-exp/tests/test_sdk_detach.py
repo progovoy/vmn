@@ -42,7 +42,7 @@ def threads_before():
 def run(tmp_path, threads_before):
     storage = LocalSnapshotStorage(str(tmp_path), area="runs")
     storage.save(APP, VERSTR, {"verstr": VERSTR, "timestamp": "2026-01-01T00:00:00Z"}, {})
-    run = Run(storage, APP, VERSTR, 0.05, sync_interval_sec=0.05, clock=RealClock(), host=RealHost(), random=RealRandom(), install_hooks=_real_process_hooks())
+    run = Run(storage, APP, VERSTR, 0.05, sync_interval_sec=0.05, clock=RealClock(), host=RealHost(), random=RealRandom(), env=os.environ, install_hooks=_real_process_hooks())
     run._open()
     run.log_metric("loss", 1.0, step=1)
     run._log_buffer.flush()

@@ -6,6 +6,7 @@ test_sdk_run_error.py) ``setattr`` these names on the run module. Moving the
 code that calls them into another module would make those patches silently
 stop applying; these tests fail first.
 """
+import os
 from s3_helpers import meta
 
 from vmn_exp.sdk import run as run_module
@@ -33,7 +34,7 @@ PATCHED_NAMES = (
 def _run(tmp_path):
     storage = LocalSnapshotStorage(str(tmp_path / "s"), "runs")
     storage.save(APP, VERSTR, meta(VERSTR), {})
-    run = run_module.Run(storage, APP, VERSTR, 3600, clock=RealClock(), host=RealHost(), random=RealRandom(), install_hooks=_real_process_hooks())
+    run = run_module.Run(storage, APP, VERSTR, 3600, clock=RealClock(), host=RealHost(), random=RealRandom(), env=os.environ, install_hooks=_real_process_hooks())
     run._open()
     return run, storage
 

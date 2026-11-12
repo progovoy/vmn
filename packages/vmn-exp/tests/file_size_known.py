@@ -18,7 +18,7 @@ KNOWN_OVERSIZED = {
     'vmn_exp.core.query': 735,
     'vmn_exp.core.series_reader': 372,
     'vmn_exp.core.tree': 427,
-    'vmn_exp.core.writer': 584,
+    'vmn_exp.core.writer': 561,
     'vmn_exp.importers.import_records': 310,
     'vmn_exp.importers.mlflow_filestore': 430,
     'vmn_exp.integrations.optuna_study': 312,

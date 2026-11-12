@@ -233,19 +233,19 @@ def start_run(
     where the process-shared env would leak one run's ID into a sibling.
     Subprocesses then do not nest under it unless given the ID themselves.
     """
-    on_sigterm = release.resolve_on_sigterm(on_sigterm)
-    sigterm_exit = release.resolve_sigterm_exit(sigterm_exit)
-    if is_disabled(mode):
+    io = real_io()
+    on_sigterm = release.resolve_on_sigterm(on_sigterm, io.env)
+    sigterm_exit = release.resolve_sigterm_exit(sigterm_exit, io.env)
+    if is_disabled(mode, io.env):
         return NoOpRun(app_name, disabled=True)
-    if not all_ranks and is_secondary_rank():
-        return NoOpRun(app_name, rank=process_rank())
+    if not all_ranks and is_secondary_rank(io.env):
+        return NoOpRun(app_name, rank=process_rank(io.env))
     # The reused CLI helpers log through VMN_LOGGER, which raises until something
     # initializes it — and a library must not call init_stamp_logger.
     ensure_logger()
     _check_intent(intent, intent_keywords)
-    io = real_io()
     prior_state, start_step = None, None
-    ref, reopen = resume.requested_run_id(run_id, reopen)
+    ref, reopen = resume.requested_run_id(run_id, reopen, io.env, context.consume_env)
     fork.check_modes(ref, fork_from, rewind_to_step)
     adopted = None if ref else _adopted_record(app_name, storage, parent, nested, fork_from)
     if ref:
@@ -266,7 +266,7 @@ def start_run(
             )
         app_name, storage, verstr, exp_conf = create_record(
             app_name, note, params, parent, nested, storage, name,
-            capture_env=capture_env, code=code,
+            capture_env=capture_env, code=code, env=io.env,
         )
         if fork_from:
             start_step = fork.seed(storage, app_name, verstr, source, fork_step)
@@ -275,11 +275,11 @@ def start_run(
         storage,
         app_name,
         verstr,
-        resolve_heartbeat_sec(heartbeat_interval_sec, exp_conf),
-        system_metrics=sysmetrics.sdk_enabled(system_metrics, exp_conf),
+        resolve_heartbeat_sec(heartbeat_interval_sec, io.env, exp_conf),
+        system_metrics=sysmetrics.sdk_enabled(system_metrics, io.env, exp_conf),
         sync_interval_sec=resolve_sync_sec(
             None if sync_interval_sec is _SYNC_UNSET else sync_interval_sec or 0,
-            exp_conf,
+            io.env, exp_conf,
         ),
         prior_state=prior_state,
         name=name,
@@ -292,6 +292,7 @@ def start_run(
         clock=io.clock,
         host=io.host,
         random=io.random,
+        env=io.env,
     )
     run.start_step = start_step
     run._steps = StepCounter(
@@ -371,13 +372,12 @@ class Run(RunMetrics, MetricDefinitions, RunArtifacts, RunMedia, RunAlerts, RunB
         writer=None,
         *,
         install_hooks,
-        clock,
-        host,
-        random,
+        clock, host, random, env,
     ):
         self._storage = storage
         self._clock = clock
         self._host = host
+        self._env = env  # what its alert config reads
         # The writer id of this run's own streams; None: the process's.
         self._writer = writer
         # Installs the process's excepthook and atexit finalizer at open;
@@ -686,13 +686,13 @@ def _quietly(step, *args, **kwargs):
 def final_upload_timeout_sec():
     """How long finalizing waits for the last uploads: ``VMN_EXP_FINAL_UPLOAD_TIMEOUT_SEC``
     when a positive number, else a minute. Read when a run is finalized."""
-    return positive_env_sec(FINAL_UPLOAD_TIMEOUT_ENV, FINAL_REMOTE_TIMEOUT_SEC)
+    return positive_env_sec(real_io().env, FINAL_UPLOAD_TIMEOUT_ENV, FINAL_REMOTE_TIMEOUT_SEC)
 
 
 def sigterm_timeout_sec():
     """How long finalizing under SIGTERM waits: ``VMN_EXP_FINAL_UPLOAD_TIMEOUT_SEC``
     when a positive number, else 25 s (or the final-upload default, if lower)."""
-    timeout = positive_env_sec(FINAL_UPLOAD_TIMEOUT_ENV, None)
+    timeout = positive_env_sec(real_io().env, FINAL_UPLOAD_TIMEOUT_ENV, None)
     if timeout is None:
         return min(FINAL_REMOTE_TIMEOUT_SEC, SIGTERM_FINAL_TIMEOUT_SEC)
     return timeout

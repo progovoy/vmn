@@ -342,7 +342,7 @@ def test_get_writer_id_from_env_vmn_writer_id(monkeypatch):
 
     from vmn_exp.core.writer import get_writer_id
 
-    assert get_writer_id() == "my-pod"
+    assert get_writer_id(real_io().env, real_io().host) == "my-pod"
     experiment_writer._WRITER_ID = None
 
 
@@ -355,7 +355,7 @@ def test_get_writer_id_from_hostname(monkeypatch):
 
     from vmn_exp.core.writer import get_writer_id
 
-    assert get_writer_id() == "k8s-pod-abc"
+    assert get_writer_id(real_io().env, real_io().host) == "k8s-pod-abc"
     experiment_writer._WRITER_ID = None
 
 
@@ -371,7 +371,7 @@ def test_get_writer_id_fallback_hostname(monkeypatch):
 
     from vmn_exp.core.writer import get_writer_id
 
-    wid = get_writer_id()
+    wid = get_writer_id(real_io().env, real_io().host)
     assert wid == socket.gethostname()
     experiment_writer._WRITER_ID = None
 
@@ -385,8 +385,8 @@ def test_get_writer_id_cached_across_calls(monkeypatch):
 
     from vmn_exp.core.writer import get_writer_id
 
-    first = get_writer_id()
-    second = get_writer_id()
+    first = get_writer_id(real_io().env, real_io().host)
+    second = get_writer_id(real_io().env, real_io().host)
     assert first == second
     experiment_writer._WRITER_ID = None
 
@@ -652,7 +652,7 @@ def test_get_experiment_storage_with_experiment_dir(tmp_path):
     from vmn_exp.cli.experiment import _get_experiment_storage
 
     params = {"experiment_dir": str(tmp_path), "backend": "local"}
-    storage = _get_experiment_storage(None, params, clock=RealClock())
+    storage = _get_experiment_storage(None, params, clock=RealClock(), env=os.environ)
     assert storage is not None
     # Verify it uses the right root by saving and checking
     storage.save("app", "v1", {"verstr": "v1", "timestamp": "t"}, {})
@@ -664,7 +664,7 @@ def test_get_experiment_storage_env_var(tmp_path, monkeypatch):
 
     monkeypatch.setenv("VMN_EXPERIMENT_DIR", str(tmp_path))
     params = {"backend": "local"}
-    storage = _get_experiment_storage(None, params, clock=RealClock())
+    storage = _get_experiment_storage(None, params, clock=RealClock(), env=os.environ)
     assert storage is not None
     storage.save("app", "v1", {"verstr": "v1", "timestamp": "t"}, {})
     assert storage.exists("app", "v1")
@@ -675,7 +675,7 @@ def test_get_experiment_storage_default_uses_vcs_root(tmp_path):
 
     vcs = SimpleNamespace(vmn_root_path=str(tmp_path))
     params = {"backend": "local"}
-    storage = _get_experiment_storage(vcs, params, clock=RealClock())
+    storage = _get_experiment_storage(vcs, params, clock=RealClock(), env=os.environ)
     assert storage is not None
     storage.save("app", "v1", {"verstr": "v1", "timestamp": "t"}, {})
     assert storage.exists("app", "v1")
@@ -780,7 +780,7 @@ def test_handle_experiment_reads_experiment_dir_from_conf(monkeypatch):
         "experiment_dir": None,
     }
 
-    experiment_writer.merge_conf_into_params(vcs, params)
+    experiment_writer.merge_conf_into_params(vcs, params, os.environ)
     assert params["experiment_dir"] == "/mnt/shared/experiments"
 
 
@@ -802,7 +802,7 @@ def test_handle_experiment_cli_experiment_dir_overrides_conf(monkeypatch):
         "experiment_dir": "/cli/override",
     }
 
-    experiment_writer.merge_conf_into_params(vcs, params)
+    experiment_writer.merge_conf_into_params(vcs, params, os.environ)
     assert params["experiment_dir"] == "/cli/override"
 
 
@@ -814,7 +814,7 @@ def test_get_writer_id_from_conf(monkeypatch):
     monkeypatch.delenv("VMN_WRITER_ID", raising=False)
     monkeypatch.delenv("HOSTNAME", raising=False)
 
-    wid = experiment_writer.get_writer_id(conf_writer_id="build-server-1")
+    wid = experiment_writer.get_writer_id(real_io().env, real_io().host, conf_writer_id="build-server-1")
     assert wid == "build-server-1"
     experiment_writer._WRITER_ID = None
 
@@ -826,7 +826,7 @@ def test_get_writer_id_env_overrides_conf(monkeypatch):
     experiment_writer._WRITER_ID = None
     monkeypatch.setenv("VMN_WRITER_ID", "env-pod")
 
-    wid = experiment_writer.get_writer_id(conf_writer_id="conf-server")
+    wid = experiment_writer.get_writer_id(real_io().env, real_io().host, conf_writer_id="conf-server")
     assert wid == "env-pod"
     experiment_writer._WRITER_ID = None
 
@@ -841,7 +841,7 @@ def test_get_writer_id_defaults_to_hostname(monkeypatch):
     monkeypatch.delenv("VMN_WRITER_ID", raising=False)
     monkeypatch.delenv("HOSTNAME", raising=False)
 
-    wid = experiment_writer.get_writer_id()
+    wid = experiment_writer.get_writer_id(real_io().env, real_io().host)
     assert wid == socket.gethostname()
     experiment_writer._WRITER_ID = None
 
@@ -865,5 +865,5 @@ def test_handle_experiment_passes_writer_id_from_conf(monkeypatch):
         "writer_id": None,
     }
 
-    experiment_writer.merge_conf_into_params(vcs, params)
+    experiment_writer.merge_conf_into_params(vcs, params, os.environ)
     assert params["writer_id"] == "team-server"

@@ -21,7 +21,7 @@ from vmn_exp.core.sweep.early_stop import stopper_for
 from vmn_exp.core.sweep.peer_points import PeerPoints
 from vmn_exp.core.sweep.spec import metric_definition
 from vmn_exp.core.sweep.summary import history, retry_slots, trial_rows
-from vmn_exp.core.writer import append_to_log, get_writer_id
+from vmn_exp.core.writer import append_to_log, process_writer_id
 from vmn_exp.sdk.sweep import SWEEP_PARAMS_ENV
 from version_stamp.api import VMN_LOGGER
 
@@ -33,7 +33,7 @@ def run_agent(vcs, storage, args, sweep, spec, repo_lock=None, *, io):
     require_command(spec, getattr(args, "run_cmd", None))
     if repo_lock is not None:
         repo_lock.release()  # re-taken only around each trial's creation
-    agent = f"{get_writer_id()}:{os.getpid()}"
+    agent = f"{process_writer_id()}:{os.getpid()}"
     base_name = (storage.load_metadata(vcs.name, sweep) or {}).get("name") or "sweep"
     ran = 0
     while args.count is None or ran < args.count:

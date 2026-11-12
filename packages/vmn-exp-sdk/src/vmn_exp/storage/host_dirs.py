@@ -16,6 +16,9 @@ unreliable there) is warned about once and replaced by a local temp dir; an
 explicitly chosen dir is kept (:mod:`vmn_exp.storage.fs_type`). ``<store-id>``
 is a stable hash of the backend's ``cache_identity()`` (a local root's
 identity holds its absolute path), so two stores never share a file.
+
+Each resolver reads the env it is given; a storage backend, handed none,
+passes :func:`process_env`.
 """
 import functools
 import hashlib
@@ -30,11 +33,17 @@ from vmn_exp.storage.fs_type import filesystem_type, is_network_fs
 _verified_dirs: set = set()
 
 
-def _base(xdg_var, mac_parts, other_parts):
-    override = os.environ.get("VMN_EXP_CACHE_DIR")
+def process_env():
+    """The process's environment, for the storage backends that resolve
+    their per-host dirs without being handed an env."""
+    return os.environ
+
+
+def _base(env, xdg_var, mac_parts, other_parts):
+    override = env.get("VMN_EXP_CACHE_DIR")
     if override:
         return override
-    xdg = os.environ.get(xdg_var)
+    xdg = env.get(xdg_var)
     if xdg:
         return os.path.join(xdg, "vmn-exp")
     parts = mac_parts if sys.platform == "darwin" else other_parts
@@ -47,9 +56,9 @@ def _local_temp(name):
     return os.path.join(tempfile.gettempdir(), f"{name}-{uid}")
 
 
-def cache_base():
-    base = _base("XDG_CACHE_HOME", ("Library", "Caches"), (".cache",))
-    if os.environ.get("VMN_EXP_CACHE_DIR"):
+def cache_base(env):
+    base = _base(env, "XDG_CACHE_HOME", ("Library", "Caches"), (".cache",))
+    if env.get("VMN_EXP_CACHE_DIR"):
         return base
     kind = filesystem_type(base)
     if not is_network_fs(kind):
@@ -63,9 +72,9 @@ def cache_base():
     return fallback
 
 
-def state_base():
+def state_base(env):
     return _base(
-        "XDG_STATE_HOME", ("Library", "Application Support"), (".local", "state")
+        env, "XDG_STATE_HOME", ("Library", "Application Support"), (".local", "state")
     )
 
 
@@ -88,12 +97,12 @@ def _app_part(app_name):
     return f"{_slug(app_name.replace('/', '-'))}.{digest}"
 
 
-def index_cache_root():
+def index_cache_root(env):
     """The root dir for cached indexes, or None when disabled."""
-    env = os.environ.get("VMN_INDEX_CACHE_DIR")
-    if env is not None:
-        return None if env.lower() == "none" else env
-    return cache_base()
+    root = env.get("VMN_INDEX_CACHE_DIR")
+    if root is not None:
+        return None if root.lower() == "none" else root
+    return cache_base(env)
 
 
 def ensure_writable_dir(path):
@@ -112,10 +121,10 @@ def ensure_writable_dir(path):
         return False
 
 
-def index_cache_path(identity, app_name):
+def index_cache_path(identity, app_name, env):
     """The persistent SQLite index of *app_name* in the store *identity*, or
     None when caching is disabled or the dir is unwritable."""
-    root = index_cache_root()
+    root = index_cache_root(env)
     if root is None or identity is None:
         return None
     cache_dir = os.path.join(root, "index", store_id(identity))
@@ -124,14 +133,14 @@ def index_cache_path(identity, app_name):
     return os.path.join(cache_dir, _app_part(app_name) + ".sqlite")
 
 
-def _log_buffers_base():
+def _log_buffers_base(env):
     """Where log buffers go: ``$VMN_EXP_CACHE_DIR`` as given, else the state
     dir, unless that is on a network filesystem or unwritable (a buffer
     takes a write a second): then a local temp dir, warned about once."""
-    override = os.environ.get("VMN_EXP_CACHE_DIR")
+    override = env.get("VMN_EXP_CACHE_DIR")
     if override:
         return override
-    base = state_base()
+    base = state_base(env)
     kind = filesystem_type(base)
     if is_network_fs(kind):
         why = f"is on a network filesystem ({kind})"
@@ -147,23 +156,23 @@ def _log_buffers_base():
     return fallback
 
 
-def log_buffers_dir(identity):
+def log_buffers_dir(identity, env):
     """The dir of the log buffers of the store whose ``cache_identity()`` is
     *identity*: one buffer per subdirectory."""
-    return os.path.join(_log_buffers_base(), "log-buffers", store_id(identity))
+    return os.path.join(_log_buffers_base(env), "log-buffers", store_id(identity))
 
 
-def log_buffers_bases():
+def log_buffers_bases(env):
     """Every dir a log buffer of this host may be under (one subdirectory
     per store), for listing them."""
-    bases = [os.environ.get("VMN_EXP_CACHE_DIR"), state_base(), _local_temp("vmn-exp-state")]
+    bases = [env.get("VMN_EXP_CACHE_DIR"), state_base(env), _local_temp("vmn-exp-state")]
     found = [os.path.join(b, "log-buffers") for b in bases if b]
     return list(dict.fromkeys(found))
 
 
-def push_ledger_dir(identity, remote_id, app_name):
+def push_ledger_dir(identity, remote_id, app_name, env):
     """Where the push ledger of *app_name* from store *identity* to the
     remote *remote_id* lives."""
     return os.path.join(
-        state_base(), "push", store_id(identity), remote_id, _app_part(app_name)
+        state_base(env), "push", store_id(identity), remote_id, _app_part(app_name)
     )

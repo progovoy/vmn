@@ -21,14 +21,13 @@ def as_int(value):
         return None
 
 
-def process_rank(env=None):
+def process_rank(env):
     """This process's rank in a distributed job, or None when it is not in one.
 
     ``RANK`` (torchrun's global rank) is authoritative when set. Without it,
     ``LOCAL_RANK`` counts only in a job of several processes (``WORLD_SIZE >
     1``), then ``SLURM_PROCID``. Unparseable values are ignored.
     """
-    env = os.environ if env is None else env
     rank = as_int(env.get("RANK"))
     if rank is not None:
         return rank
@@ -39,7 +38,7 @@ def process_rank(env=None):
     return as_int(env.get("SLURM_PROCID"))
 
 
-def is_secondary_rank(env=None):
+def is_secondary_rank(env):
     """Whether this process is a non-zero rank, whose runs must not record."""
     rank = process_rank(env)
     return rank is not None and rank > 0

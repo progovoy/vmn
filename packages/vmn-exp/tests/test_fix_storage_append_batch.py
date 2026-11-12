@@ -128,7 +128,7 @@ def test_s3_batch_on_a_segmented_log_adds_one_segment(bucket):
 
 
 def test_direct_s3_pod_batches_through_its_buffer(bucket):
-    pod = _get_experiment_storage(None, {"bucket": "vmn-bucket", "prefix": "exps"}, clock=RealClock())
+    pod = _get_experiment_storage(None, {"bucket": "vmn-bucket", "prefix": "exps"}, clock=RealClock(), env=os.environ)
     pod.create_exclusive("app", V, meta(V), {})
 
     assert pod.append_log_entries("app", V, "w", _entries(10)) is True

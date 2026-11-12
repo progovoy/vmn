@@ -17,12 +17,12 @@ from version_stamp.api import VMN_LOGGER
 
 def handle_sweep(vmn_ctx, io):
     vcs, args = vmn_ctx.vcs, vmn_ctx.args
-    params = experiment_storage_params(vcs, args)
+    params = experiment_storage_params(vcs, args, io.env)
     if args.action == "create":
         err = auto_init(vmn_ctx)
         if err:
             return err
-    storage = _get_experiment_storage(vcs, params, clock=io.clock)
+    storage = _get_experiment_storage(vcs, params, clock=io.clock, env=io.env)
     try:
         if args.action == "create":
             return sweep_create(vcs, storage, args, io.env)

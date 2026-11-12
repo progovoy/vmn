@@ -17,7 +17,7 @@ import re
 from vmn_exp._base import now_iso
 from vmn_exp.core.sweep.spec import trial_limit
 from vmn_exp.core.sweep.suggest import suggest
-from vmn_exp.core.writer import claim_record, get_writer_id
+from vmn_exp.core.writer import claim_record, process_writer_id
 from vmn_exp.storage.areas import SWEEPS, app_key
 from vmn_exp.storage.s3_base import parallel_map
 
@@ -106,7 +106,7 @@ def _claim(storage, app_name, sweep_verstr, trial, attempt, params, agent):
         "trial": trial,
         "attempt": attempt,
         "params": params,
-        "agent": agent or get_writer_id(),
+        "agent": agent or process_writer_id(),
         "timestamp": now_iso(),
     }
     app = claims_scope(app_name, sweep_verstr)

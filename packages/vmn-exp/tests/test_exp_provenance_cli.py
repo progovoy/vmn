@@ -2,6 +2,7 @@
 
 All pure-unit or fake-storage tests; no Docker required.
 """
+import os
 import types
 import pytest
 from empty_storage import EmptyStorage
@@ -271,7 +272,7 @@ def test_restore_imported_refuses_with_commit_hint(monkeypatch, caplog):
     )
 
     with caplog.at_level(logging.DEBUG, logger="vmn"):
-        ret = exp_mod.experiment_restore(None, {}, storage, _args(), RealClock())
+        ret = exp_mod.experiment_restore(None, {}, storage, _args(), RealClock(), os.environ)
 
     assert ret == 1
     # Should mention source commit as a hint or the tool name
