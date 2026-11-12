@@ -430,6 +430,7 @@ Deleting the file costs one rebuild, never data
 In code the index is `ExperimentIndex` in `vmn_exp/core/index.py`, a facade
 assembled from mixins that keep all state on the index:
 `core/index_surface.py` (properties, freshness, the snapshots it serves),
+`core/index_refresh.py` (refreshing: from storage, a follower's cache, an I/O helper process),
 `core/index_load.py` (loading what a listing hands a refresh, chunk by chunk),
 `core/index_publish.py` (applying a refresh's changes, publishing snapshots),
 `core/index_persist.py` (reading back and saving its SQLite file) and

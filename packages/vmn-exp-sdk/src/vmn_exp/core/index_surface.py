@@ -1,7 +1,17 @@
 #!/usr/bin/env python3
 """What :class:`~vmn_exp.core.index.ExperimentIndex` shows its readers: its
 properties, the journal pass-throughs to its sweep, freshness, and the
-snapshots and row copies it serves (a mixin; all state stays on the index)."""
+snapshots and row copies it serves (a mixin; all state stays on the index).
+
+Readers get an immutable :class:`IndexSnapshot` per ``generation`` (bumped by
+anything visible, run states included) that never takes the index lock or
+touches storage. Its rows are ``experiment_row``'s under no metrics schema and
+without ``metric_summary`` or ``outputs`` (the snapshot keeps them per
+verstr; the row copies handed out carry them) — nor the run's
+``features``/``intent``/hypothesis, which only the snapshot keeps; a caller's
+schema is a view of it (:meth:`IndexSnapshot.summarized`), never index state.
+Status is derived from its run states on every read, since it depends on the
+clock."""
 import logging
 import threading
 

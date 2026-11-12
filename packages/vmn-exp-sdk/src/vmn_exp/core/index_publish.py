@@ -2,10 +2,14 @@
 """How :class:`~vmn_exp.core.index.ExperimentIndex` applies what a refresh
 read to its records and publishes a new snapshot of them: a bulk load's
 publishing cadence, a follower's deltas (a mixin; all state stays on the
-index). The storage order (``_sorted_keys``) stays in core/index.py, since
-tests patch the ``_timestamp`` it reads there."""
+index). The storage order (``_sorted_keys``) reads the ``_timestamp`` tests
+patch on core/index.py through its ``_sort_stamp()`` seam."""
+import bisect
+
 from vmn_exp.core.index_follower import apply_delta
 from vmn_exp.core.index_rows import adopted as _adopted
+
+_BISECT_NEW = 64  # new records past which the order is merged, not inserted into
 
 
 class IndexPublish:
@@ -122,3 +126,27 @@ class IndexPublish:
             self.app_name, self.generation, order, self._records, touched,
             self._loading(len(order)),
         )
+
+    def _sorted_keys(self):
+        """Record keys in storage order (by timestamp, then key — the order
+        the persisted ``exp_rows`` number, see
+        :mod:`vmn_exp.core.index_lean_store`). New records
+        are bisected into the current order; a first build, a re-described
+        record (its timestamp may have moved) or a removal sorts them all."""
+        new, resort = self._reorder
+        stamp_of = self._sort_stamp()
+        if self._order is None or resort:
+            keys = [k for k, r in self._records.items() if r["meta"] is not None]
+            self._stamps = sorted((stamp_of(self._records[k]["meta"]), k) for k in keys)
+            return [key for _, key in self._stamps]
+        stamps = [(stamp_of(meta), key) for key in new
+                  for meta in (self._records[key]["meta"],) if meta is not None]
+        if len(stamps) > _BISECT_NEW:  # one merge of two sorted runs beats that many inserts
+            self._stamps = sorted(self._stamps + stamps)
+            return [key for _, key in self._stamps]
+        order = list(self._order)
+        for stamp in stamps:
+            at = bisect.bisect_right(self._stamps, stamp)
+            self._stamps.insert(at, stamp)
+            order.insert(at, stamp[1])
+        return order
