@@ -48,7 +48,10 @@ def add(storage, target, text, reply_to=None, anchor=None, author=None, *, rando
     """Post a comment on *target* as the writer of *env* and *host*; returns its id."""
     area, scope, name, target_dict = _location(storage, target)
     header = {"verstr": name, "type": "comment_thread", "target": target_dict, "timestamp": now_iso()}
-    claim_record(area, scope, name, stamped(header))  # losing the race is fine
+    if not claim_record(area, scope, name, stamped(header)) and not area.exists(scope, name):
+        # Another poster claimed it but has not made it visible yet: a write
+        # now would be refused. Threads have no owner; any poster's header does.
+        area.save(scope, name, stamped(header), {})
     comment_id = new_comment_id(random)
     _append(area, scope, name, "comment", env, host, id=comment_id, text=text,
             reply_to=reply_to, anchor=anchor,

@@ -51,6 +51,19 @@ def test_claim_race_keeps_every_comment(tmp_path):
     assert texts == ["c0", "c1", "c2", "c3"]
 
 
+def test_a_comment_posted_mid_claim_is_kept(tmp_path):
+    """Another poster claimed the thread (its folder made) but has not made it
+    visible yet (no metadata.yml): this comment still lands, not refused as
+    a write into a record that does not exist."""
+    store = _store(tmp_path)
+    (tmp_path / "comments" / "root-svc" / VERSTR).mkdir(parents=True)
+
+    comments.add(store, RUN, "mid-claim", random=RealRandom(), env=real_io().env,
+                 host=real_io().host)
+
+    assert [c["text"] for c in comments.thread(store, RUN)] == ["mid-claim"]
+
+
 def test_edit_resolve_delete_fold(tmp_path):
     store = _store(tmp_path)
     first = comments.add(store, RUN, "first", anchor={"metric": "loss", "step": 3}, random=RealRandom(), env=real_io().env, host=real_io().host)
