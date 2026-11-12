@@ -47,7 +47,8 @@ which of these it is busy with, between refreshes too.
 
 This module is the facade: :class:`ExperimentIndex` is assembled from mixins
 that keep all state on the index — :mod:`~vmn_exp.core.index_surface`
-(properties, freshness, snapshots) — and :mod:`~vmn_exp.core.index_direct`
+(properties, freshness, snapshots), :mod:`~vmn_exp.core.index_persist`
+(its store) and :mod:`~vmn_exp.core.index_read` (reading records) — and :mod:`~vmn_exp.core.index_direct`
 builds snapshots without it. What tests patch here (the chunk size, the
 retry interval, the record readers, the process-wide registry) is read here,
 the moved code reaching it through seam methods such as ``_chunk()``.
@@ -88,7 +89,8 @@ from vmn_exp.core.index_record import refresh_record, update_record
 from vmn_exp.core.index_reread import hint_unloaded
 from vmn_exp.core.index_unreadable import Unreadable
 from vmn_exp.core.index_vmx_check import VmxCheck
-from vmn_exp.core.index_remote_workers import RemoteLoaders, worker_count
+from vmn_exp.core.index_persist import IndexPersist
+from vmn_exp.core.index_read import IndexRead
 from vmn_exp.core.index_rows import adopted as _adopted
 from vmn_exp.core.index_rows import row_copies as _row_copies
 from vmn_exp.core.index_snapshot import IndexSnapshot, RowCache  # noqa: F401  (importers' name)
@@ -100,7 +102,6 @@ from vmn_exp.core.index_sweep import (
     Sweep,
 )
 from vmn_exp.core.index_load_pool import LoadPool
-from vmn_exp.core.index_workers import load_new_records
 from vmn_exp.core.log import load_log
 from vmn_exp.core.ports import wall_seconds
 from vmn_exp.core.real_io import real_io
@@ -135,7 +136,7 @@ def _listed_at(work_item):
     return sig[1] if isinstance(sig, (list, tuple)) and len(sig) > 1 else 0
 
 
-class ExperimentIndex(IndexSurface):
+class ExperimentIndex(IndexSurface, IndexPersist, IndexRead):
     """Incrementally maintained rows for one app of one storage backend.
 
     *clock* (a :class:`~vmn_exp.core.ports.Clock`) times its refreshes,
@@ -701,12 +702,6 @@ class ExperimentIndex(IndexSurface):
         if number_later is not None:
             number_later(self.app_name, later)
 
-    def _keeps_baseline(self):
-        """Whether listing baselines persist: not for a journaled sweep, one
-        whose listings run in the I/O helper process, or one listing fully
-        every time (nothing to carry on from)."""
-        return self._io is None and not self._sweep.journaled and bool(self.full_sweep_sec)
-
     def _publish_persisted(self):
         """Serve the records as persisted until the listing under way
         revalidates them."""
@@ -731,115 +726,6 @@ class ExperimentIndex(IndexSurface):
         if changed or removed or self._snapshot is None:
             self.generation += 1
             self._snapshot = self._build_snapshot(None if removed else changed)
-
-    def _load_records(self):
-        if self._io:
-            return self._io.load()
-        lazy_of = getattr(self._store, "load_lazy", None) if self._lean else None
-        lazy = lazy_of(self.app_name) if lazy_of else None
-        if lazy is not None:
-            return lazy
-        warm = getattr(self._store, "load_warm", None)
-        loaded = warm(self.app_name) if warm else None
-        if loaded is None:
-            self._cold = True
-            return self._store.load(self.app_name)
-        records, self._order, lean, self._stamps = loaded
-        self._rows.seed(lean)
-        return records
-
-    def _refresh_and_persist(self, work, removed):
-        """``(key, record, dirty, moved, state moved)`` per item of *work*,
-        persisted with *removed*: what the helper process's index answers
-        (``None`` records stand for those it found unchanged)."""
-        results = self._refresh_local(work)
-        self._persist(results, removed)
-        self._unreadable.forget(removed)
-        return results
-
-    def _refresh_local(self, work):
-        direct_files = getattr(self._storage, "direct_files", None)
-        return self._refresh_records(work, direct_files() if direct_files else self._storage)
-
-    def _persist(self, results, removed, started=None):
-        """Save *results* with *removed*, then — given the refresh's
-        *started* — the listing baseline: in the same transaction when the
-        store joins them, else only once nothing is left unsaved."""
-        baseline = started is not None and self._keeps_baseline()
-        joins = getattr(self._store, "JOINS_KV", False)
-        joint = baseline and joins
-        puts = self._baseline.puts(self._sweep, started) if joint else None
-        marks = self._mark_puts(results, removed) if started is not None else []
-        saved = self._unsaved.save(
-            self._store, self.app_name,
-            {key: record for key, record, dirty, _, _ in results if dirty},
-            removed,
-            {key: record for key, record, _, _, state_moved in results if state_moved},
-            (puts or []) + marks if joins else puts,
-        )
-        if puts and not saved:
-            self._baseline.forget()
-        elif baseline and not joint and saved:
-            self._baseline.save(self._sweep, started)
-        if saved:
-            self._mark.saved(marks) if joins else self._save_mark(marks)
-
-    def _mark_puts(self, results, removed):
-        changed = bool(removed) or any(dirty or state_moved for _, _, dirty, _, state_moved in results)
-        return self._mark.puts(self._sweep.persistable_mark(), changed)
-
-    def _save_mark(self, puts):
-        for put in puts:
-            self._store.kv_put(*put)
-        self._mark.saved(puts)
-
-    def _refresh_records(self, work, direct):
-        """``(key, record, dirty, moved, state moved)`` per ``(key, names,
-        record)`` in *work*.
-
-        A cold build's many new local records load in worker processes; a
-        remote backend's records are re-read concurrently: each costs a few
-        round trips, and a cold index on S3 would otherwise pay them serially.
-        """
-        done = load_new_records(self._storage, direct, self.app_name, work)
-        if not done and self._backlog():
-            done = self._remote_loaders().load(self.app_name, work, self._unreadable)
-        todo = [w for w in work if w[0] not in done]
-        done.update(zip((w[0] for w in todo), self._refresh_all(todo, direct)))
-        return [(key, *done[key]) for key, _, _ in work]
-
-    def _remote_loaders(self):
-        """The worker processes a bulk load of a remote backend reads its new
-        records in (:mod:`~vmn_exp.core.index_remote_workers`): started once,
-        none when the backend cannot be opened again elsewhere."""
-        if self._loaders is None:
-            spec_of = getattr(self._storage, "worker_spec", None)
-            spec = spec_of() if spec_of and self._remote() else None
-            self._loaders = RemoteLoaders(spec, worker_count() if spec else 0)
-        return self._loaders
-
-    def _close_loaders(self):
-        loaders, self._loaders = self._loaders, None
-        if loaders is not None:
-            loaders.close()
-
-    def _refresh_all(self, work, direct):
-        if len(work) > 1 and self._remote():
-            # A warm start's lazy records read their stored head here, in
-            # order (a chunk per query), never from the pool's threads.
-            for _, _, record in work:
-                if record is not None:
-                    record.get("meta_sig")
-            try:
-                return self._pool.map(lambda w: self._refresh_one(*w, direct), work)
-            finally:
-                if not self._unread and not self._backlog():  # else the next chunk reuses it
-                    self._pool.close()
-        return [self._refresh_one(*w, direct) for w in work]
-
-    def _remote(self):
-        is_remote = getattr(self._storage, "is_remote", None)
-        return bool(is_remote and is_remote())
 
     def _refresh_one(self, key, names, record, direct):
         """:func:`refresh_record` of one record; one that fails is set aside
