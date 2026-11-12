@@ -13,11 +13,6 @@ from vmn_exp.core.status import MIN_STALE_SEC, RUNNING, derive_status, observed_
 
 
 class SweepState:
-    def _is_settled(self, record, now=None):
-        """:func:`_settled` of *record* at *now* (None: the clock's), on the
-        sweep's stuck floor."""
-        return _settled(record, now or self._status_now(), self.min_stale_sec)
-
     def export_state(self, now, wall):
         """The sweep's state for a later process, in wall time *wall* (a
         monotonic clock does not cross processes; ms keep it from drifting

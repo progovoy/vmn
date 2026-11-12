@@ -17,7 +17,6 @@ import logging
 import threading
 
 from vmn_exp.core.index_views import schema_key
-from vmn_exp.core.status import MIN_STALE_SEC
 from vmn_exp.core.tree import annotate_rows
 from vmn_exp.ui.search_pg import search_entries
 from vmn_exp.ui.tenancy import current_org, org_context
@@ -25,17 +24,15 @@ from vmn_exp.ui.tenancy import current_org, org_context
 _LOGGER = logging.getLogger(__name__)
 
 
-def search_rows(snapshot, now, min_stale_sec=MIN_STALE_SEC):
-    """The rows of *snapshot* a search answers with (statuses annotated at *now*
-    on *min_stale_sec*)."""
+def search_rows(snapshot, now):
+    """The rows of *snapshot* a search answers with (statuses annotated at *now*)."""
     return annotate_rows(snapshot.rows, snapshot.run_states, snapshot.run_state_observed_at,
-                         now=now, min_stale_sec=min_stale_sec)
+                         now=now)
 
 
 class SearchRowsWriter:
-    def __init__(self, sql, now, min_stale_sec=MIN_STALE_SEC):
+    def __init__(self, sql, now):
         self._sql, self._now = sql, now  # a PgRowSearch; the time statuses are written at
-        self._stale_sec = min_stale_sec  # and their stuck floor
         self._scopes = {}  # index -> (org, workspace, app, schema_of)
         self._written = {}  # index -> (generation, schema key)
         self._stored = {}  # index -> {verstr: (pos, digest of its JSON)} last written
@@ -68,8 +65,7 @@ class SearchRowsWriter:
         mark = (snapshot.generation, schema_key(schema))
         if self._written.get(index) == mark:
             return
-        entries = search_entries(search_rows(snapshot.summarized(schema), self._now(),
-                                             self._stale_sec))
+        entries = search_entries(search_rows(snapshot.summarized(schema), self._now()))
         stored = {verstr: (pos, _digest(data)) for verstr, pos, data in entries}
         last = self._stored.get(index)
         with org_context(org):

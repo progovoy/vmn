@@ -31,6 +31,7 @@ from version_stamp.api import (
 from vmn_exp.cli.exp_parser.actions import EXPERIMENT_ACTIONS  # noqa: F401  (main.py, tests)
 from vmn_exp.cli.snapshot_arg import from_snapshot_metadata
 from vmn_exp.core.real_io import real_io
+from vmn_exp.core.status import min_stale_sec
 
 
 def _add_experiment_parser(subparsers, name):
@@ -135,16 +136,19 @@ def _exp_run_without_repo(args):
         experiment_storage_params,
     )
 
+    stale_sec = min_stale_sec(io.env)
     dispatch = {
         "create": functools.partial(experiment_create, clock=io.clock, env=io.env,
                                     host=io.host),
         "run": functools.partial(experiment_run, io=io),
         "add": functools.partial(experiment_add, io=io),
-        "list": functools.partial(experiment_list, console=io.console, clock=io.clock),
-        "show": functools.partial(experiment_show, console=io.console, clock=io.clock),
+        "list": functools.partial(experiment_list, console=io.console, clock=io.clock,
+                                  stale_sec=stale_sec),
+        "show": functools.partial(experiment_show, console=io.console, clock=io.clock,
+                                  stale_sec=stale_sec),
         "compare": functools.partial(experiment_compare, console=io.console),
         "prune": functools.partial(experiment_prune, clock=io.clock),
-        "compact": functools.partial(experiment_compact, clock=io.clock),
+        "compact": functools.partial(experiment_compact, clock=io.clock, stale_sec=stale_sec),
         "rewind": functools.partial(experiment_rewind, io=io),
         "push": functools.partial(experiment_push, clock=io.clock, env=io.env),
         "similar": functools.partial(experiment_similar, clock=io.clock),

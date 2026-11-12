@@ -166,7 +166,7 @@ def build_app(
         from vmn_exp.ui.search_rows_writer import SearchRowsWriter
 
         search_sql = PgRowSearch(search_dsn)
-        search_rows = SearchRowsWriter(search_sql, deps.status_clock.now, stale_sec)
+        search_rows = SearchRowsWriter(search_sql, deps.status_clock.now)
     upkeep = app.state.store_upkeep = deps.upkeep
     source = ExperimentSource(manager.data_dir, use_index=use_index, refresher=refresher,
                               cache_dsn=cache_dsn, search_rows=search_rows,

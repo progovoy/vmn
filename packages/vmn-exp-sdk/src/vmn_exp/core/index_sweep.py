@@ -64,28 +64,25 @@ from vmn_exp.core.index_lazy import has_meta
 from vmn_exp.core.index_listing import METADATA_FILE, ListingWatch, as_sigs  # noqa: F401
 from vmn_exp.core.index_sweep_behind import SweepBehind
 from vmn_exp.core.index_sweep_failed import SweepRetake
-from vmn_exp.core.index_sweep_state import SweepState
+from vmn_exp.core.index_sweep_state import SweepState, _settled
 from vmn_exp.core.status import MIN_STALE_SEC, heartbeat_interval_sec, stale_after_sec
 
 DEFAULT_FULL_SWEEP_SEC = 300  # 0: every refresh is a full listing
-# The most records one refresh re-lists for the consistency check (and the
-# most credit it keeps), whatever the store's size or the last refresh's
-# length. On S3 a record's files are three delimited LISTs (the record, log/,
-# metrics/), so 500 are ~1500 requests: a few seconds at S3_WORKERS in
-# parallel, which the refresh, and so every new run, waits for; a local store
-# lists them in milliseconds; at a ~1 s refresh, its 300 s rounds stay
-# within 300 s up to 150k records.
+# The most records one refresh re-lists for the consistency check (and the most credit it
+# keeps), whatever the store's size or the last refresh's length. On S3 a record's files are
+# three delimited LISTs (the record, log/, metrics/), so 500 are ~1500 requests: a few seconds
+# at S3_WORKERS in parallel, which the refresh, and so every new run, waits for; a local store
+# lists them in milliseconds; at a ~1 s refresh, its 300 s rounds stay within 300 s up to 150k
+# records.
 SLICE_BUDGET = 500
-# The most records a second a journaled sweep's consistency check (the ui on
-# a store) re-lists, sustained: a safety net beside the journal, ~150 S3 LISTs
-# a second is plenty (486k records every 3600 s would be 135 records, ~400
-# LISTs, a second forever). Stores up to 50 * full_sweep_sec records (the
-# ui: 180k) still come round every full_sweep_sec; a 486k one takes ~2.7 h.
-# A rolling (local) sweep's stat()s are cheap: it keeps its 300 s rounds.
+# The most records a second a journaled sweep's consistency check (the ui on a store)
+# re-lists, sustained: a safety net beside the journal, ~150 S3 LISTs a second is plenty (486k
+# records every 3600 s would be 135 records, ~400 LISTs, a second forever). Stores up to 50 *
+# full_sweep_sec records (the ui: 180k) still come round every full_sweep_sec; a 486k one
+# takes ~2.7 h. A rolling (local) sweep's stat()s are cheap: it keeps its 300 s rounds.
 MAX_RECHECK_PER_SEC = 50
-# The shortest period a journaled sweep re-lists a live record the journal
-# did not name at (and a pending claim's): the journal names every write but
-# a heartbeat-only run_state.yml (see live_relist_sec).
+# The shortest period a journaled sweep re-lists a live record the journal did not name at
+# (and a pending claim's): the journal names every write but a heartbeat-only run_state.yml.
 LIVE_RELIST_SEC = 10
 # How long a changed record keeps being listed (capped by full_sweep_sec).
 TOUCH_WINDOW_SEC = 300
@@ -138,6 +135,9 @@ class Sweep(SweepBehind, SweepRetake, SweepState):
 
     def _status_now(self):
         return self._clock.now()
+
+    def _is_settled(self, record, now=None):  # _settled on this sweep's stuck floor
+        return _settled(record, now or self._status_now(), self.min_stale_sec)
 
     def reset(self):
         """Forget every baseline: the next listing is full and compares all."""
