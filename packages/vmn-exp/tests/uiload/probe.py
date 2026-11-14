@@ -193,15 +193,22 @@ def fetch_all_rows(base_url, ws, app, token=None, page_size=MAX_PAGE, archived=F
         params["archived"] = 1
     if query:
         params["q"] = query
-    deadline = time.monotonic() + timeout
     with _client(base_url, token) as client:
-        while True:
-            rows = _all_pages(client, f"{app_path(ws, app)}/experiments", params)
-            if rows is not None:
-                return rows
-            if time.monotonic() > deadline:
-                raise TimeoutError(f"index not loaded after {timeout}s")
-            time.sleep(poll_sec)
+        return rows_once_loaded(client, f"{app_path(ws, app)}/experiments", params, time,
+                                poll_sec, timeout)
+
+
+def rows_once_loaded(client, url, params, clock, poll_sec, timeout):
+    """Every row of *url*, asked again every *poll_sec* of *clock* (its
+    ``monotonic`` and ``sleep``) while a page says ``indexing``."""
+    deadline = clock.monotonic() + timeout
+    while True:
+        rows = _all_pages(client, url, params)
+        if rows is not None:
+            return rows
+        if clock.monotonic() > deadline:
+            raise TimeoutError(f"index not loaded after {timeout}s")
+        clock.sleep(poll_sec)
 
 
 def _all_pages(client, url, params):

@@ -12,9 +12,12 @@ import yaml
 pytest.importorskip("fastapi")
 uvicorn = pytest.importorskip("uvicorn")
 
+import httpx  # noqa: E402
+from fakes.clock import FakeClock  # noqa: E402
 from uiload import probe as probe_mod  # noqa: E402
 from uiload.inproc_server import serve_root  # noqa: E402
-from uiload.probe import Probe, by_name, fetch_all_rows, status_counts  # noqa: E402
+from uiload.probe import (Probe, by_name, fetch_all_rows, rows_once_loaded,  # noqa: E402
+                          status_counts)
 
 APP = "loadapp"
 EXPECTED = {"succeeded": 20, "failed": 8, "created": 4, "running": 2}
@@ -165,7 +168,6 @@ def test_fetch_all_rows_filters_by_query(server):
 def _answers_indexing_first(answers):
     """A client of a board answering ``indexing`` (no rows yet) until its
     *answers*-th request, then every row of three in pages."""
-    import httpx
     rows = [{"verstr": f"v{i}", "name": f"n{i}", "status": "succeeded"} for i in range(3)]
     asked = []
 
@@ -177,15 +179,24 @@ def _answers_indexing_first(answers):
         offset, limit = int(request.url.params["offset"]), int(request.url.params["limit"])
         return httpx.Response(200, json={"rows": rows[offset:offset + limit], "total": len(rows)})
 
-    return lambda base_url, token: httpx.Client(base_url="http://ui/api/v1",
-                                                transport=httpx.MockTransport(handle))
+    return httpx.Client(base_url="http://ui/api/v1", transport=httpx.MockTransport(handle))
 
 
-def test_fetch_all_rows_waits_out_a_loading_index(monkeypatch):
+def test_the_rows_of_a_loading_index_are_waited_for():
     """A cold index answers at once with no rows, saying ``indexing``: that is
-    not the whole board, so the fetch waits for the loaded one."""
-    monkeypatch.setattr(probe_mod, "_client", _answers_indexing_first(3))
+    not the whole board, so the fetch asks again every poll until it loaded."""
+    clock = FakeClock()
+    started = clock.monotonic()
 
-    rows = fetch_all_rows("http://ui", "ws", APP, page_size=2, poll_sec=0)
+    rows = rows_once_loaded(_answers_indexing_first(3), "/experiments", {"limit": 2}, clock,
+                            poll_sec=0.5, timeout=600)
 
     assert sorted(by_name(rows)) == ["n0", "n1", "n2"]
+    assert clock.monotonic() - started == 1.0  # two polls
+
+
+def test_an_index_that_never_loads_is_given_up_on():
+    clock = FakeClock()
+    with pytest.raises(TimeoutError):
+        rows_once_loaded(_answers_indexing_first(10 ** 9), "/experiments", {"limit": 2}, clock,
+                         poll_sec=0.5, timeout=600)
