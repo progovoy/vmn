@@ -37,9 +37,20 @@ def fastest_each(measure, budgets, attempts=ATTEMPTS, contention=contention):
     """``{step: fewest uncontended seconds}`` over up to *attempts* calls of
     *measure()* (each ``{step: seconds}``), stopping once every step is
     within its ``budgets[step]``."""
+    def within(best):
+        return all(best[step] <= budget for step, budget in budgets.items())
+
+    return fastest_until(measure, within, attempts, contention)
+
+
+def fastest_until(measure, within, attempts=ATTEMPTS, contention=contention):
+    """``{step: fewest uncontended seconds}`` over up to *attempts* calls of
+    *measure()* (each ``{step: seconds}``), stopping once ``within(best)``:
+    for a budget bounding several steps together (one step's time minus
+    another's)."""
     best = _uncontended(measure, contention)
     for _ in range(attempts - 1):
-        if all(best[step] <= budget for step, budget in budgets.items()):
+        if within(best):
             break
         best = {step: min(seconds, best[step])
                 for step, seconds in _uncontended(measure, contention).items()}

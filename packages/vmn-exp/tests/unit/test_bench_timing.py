@@ -3,7 +3,7 @@ run on an uncontended box (its wall time over how much slower than its CPU
 time a busy loop runs now), measured again only while over budget, the
 fastest attempt kept."""
 import pytest
-from bench_timing import contention, fastest, fastest_each
+from bench_timing import contention, fastest, fastest_each, fastest_until
 
 QUIET = lambda: 1.0  # noqa: E731
 
@@ -48,6 +48,19 @@ def test_steps_with_their_own_budgets_keep_each_ones_fastest():
     assert fastest_each(measure, {"a": 1.0, "b": 1.0}, contention=QUIET) == {"a": 0.2, "b": 0.9}
     assert len(calls) == 2
 
+
+
+def test_steps_bounded_together_are_measured_again_until_their_best_fits():
+    attempts = [{"a": 0.9, "b": 0.1}, {"a": 0.7, "b": 0.2}, {"a": 0.4, "b": 0.1}, {"a": 0.1, "b": 0.0}]
+    calls = []
+
+    def measure():
+        calls.append(None)
+        return attempts.pop(0)
+
+    best = fastest_until(measure, lambda b: b["a"] - b["b"] <= 0.4, contention=QUIET)
+    assert best == {"a": 0.4, "b": 0.1}
+    assert len(calls) == 3
 
 def test_a_step_slowed_by_other_processes_is_held_to_its_uncontended_time():
     measure, calls = _measures(2.4)

@@ -15,6 +15,7 @@ import threading
 import time
 
 import pytest
+from bench_timing import fastest
 from exp_helpers import _SRC_PATH, _PY, _bootstrap, _storage
 
 from vmn_exp.snapshot import LocalSnapshotStorage
@@ -117,6 +118,10 @@ def test_observed_at_handles_second_resolution_and_absent_support():
 # ---------------------------------------------------------------------------
 
 
+BEATS_SEC = 10  # three beats of a 0.05 s interval, on an uncontended box
+BEATS_HANG_SEC = 60  # a run's beats given up on, however busy the box
+
+
 def _wait_for(predicate, timeout=10):
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
@@ -136,9 +141,17 @@ def test_sdk_heartbeat_seq_increases_every_beat(app_layout):
     _bootstrap(app_layout)
     storage = _storage(app_layout)
 
-    with start_run(app_layout.app_name, heartbeat_interval_sec=0.05) as run:
-        assert _seq(storage, app_layout.app_name, run.id) == 0
-        assert _wait_for(lambda: _seq(storage, app_layout.app_name, run.id) >= 3)
+    def three_beats():
+        with start_run(app_layout.app_name, heartbeat_interval_sec=0.05) as run:
+            assert _seq(storage, app_layout.app_name, run.id) == 0
+            start = time.monotonic()
+            assert _wait_for(lambda: _seq(storage, app_layout.app_name, run.id) >= 3,
+                             timeout=BEATS_HANG_SEC)
+            return time.monotonic() - start
+
+    took = fastest(three_beats, budget=BEATS_SEC)
+    print(f"\nthree heartbeats in {took:.2f}s")
+    assert took <= BEATS_SEC
 
 
 class _StallingRemote:
