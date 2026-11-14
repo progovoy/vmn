@@ -225,7 +225,7 @@ Invariants worth knowing without opening a doc:
 
 ## Environment Variables
 
-Core: `VMN_WORKING_DIR`, `VMN_LOCK_FILE_PATH` (user override only; vmn never injects it into a child), `GITHUB_TOKEN`/`GH_TOKEN`, `VMN_GIT_PUSH_USER`/`VMN_GIT_PUSH_TOKEN`, `VMN_SNAPSHOT_MAX_FILE_MB`/`VMN_SNAPSHOT_MAX_TOTAL_MB`.
+Core: `VMN_WORKING_DIR`, `VMN_LOCK_FILE_PATH` (user override only; vmn never injects it into a child), `GITHUB_TOKEN`/`GH_TOKEN`, `VMN_GIT_PUSH_USER`/`VMN_GIT_PUSH_TOKEN`, `VMN_SNAPSHOT_MAX_FILE_MB`/`VMN_SNAPSHOT_MAX_TOTAL_MB`, `VMN_STORE`/`VMN_STORE_BUCKET`/`VMN_STORE_PREFIX`/`VMN_STORE_ENDPOINT_URL` (snapshot store; each read before its `VMN_EXPERIMENT_*` twin; conf `store:`, legacy `experiment.storage` moved on stamp).
 vmn-exp (`VMN_EXP_*`, `VMN_EXPERIMENT_*`, `VMN_MODE`, `VMN_CAPTURE_ENV`, `VMN_SYSTEM_METRICS`, `VMN_UI_TOKEN`, …): see docs/vmn-exp/experiments.md. `VMN_EXPERIMENT_ID` set in the environment auto-parents any new run.
 
 ## Docs Layout

@@ -1714,7 +1714,12 @@ them. The local root is `--experiment-dir` > conf
 `experiment.storage.experiment_dir` > `VMN_EXPERIMENT_DIR` > the checkout. With a remote store and a
 local root, runs record locally and sync to the store; without a local root
 they go straight to the store. [`VMN_EXP_OFFLINE`](#offline-recording-and-push)
-drops the remote.
+drops the remote. `VMN_STORE`/`VMN_STORE_BUCKET`/`_PREFIX`/`_ENDPOINT_URL` and a
+top-level conf `store: {uri, bucket, prefix, endpoint_url}` are the preferred
+names (core vmn's [snapshot store](../snapshots.md)); `VMN_EXPERIMENT_*` and
+`experiment.storage` are the legacy ones, each read after its new twin, and the
+next `vmn stamp` moves `experiment.storage`'s store keys to `store`
+(`writer_id`/`experiment_dir` stay).
 
 ```yaml
 # .vmn/my_app/conf.yml
@@ -2073,8 +2078,8 @@ Read by `vmn-exp` (most also by the SDK):
 
 | Variable | Effect |
 |---|---|
-| `VMN_EXPERIMENT_STORE` | store URI fallback for `--store` |
-| `VMN_EXPERIMENT_BUCKET` / `_PREFIX` / `_ENDPOINT_URL` | fallbacks for the `s3://` shorthand flags |
+| `VMN_STORE` (legacy `VMN_EXPERIMENT_STORE`) | store URI fallback for `--store` |
+| `VMN_STORE_BUCKET` / `_PREFIX` / `_ENDPOINT_URL` (legacy `VMN_EXPERIMENT_*`) | fallbacks for the `s3://` shorthand flags |
 | `VMN_EXPERIMENT_DIR` | local experiment root (`--experiment-dir`) |
 | `VMN_SNAPSHOT_METADATA` | [git-free mode](#git-free-mode) (`--from-snapshot`) |
 | `VMN_EXP_OFFLINE` | `1`/`true`/`yes`/`on`: [record locally only](#offline-recording-and-push) |

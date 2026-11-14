@@ -287,12 +287,13 @@ conf:
 | `version_backends` | none | Files to write the version into (below) |
 | `create_snapshots` | `false` | Also write a version file per stamp, readable with `vmn show --from-file` |
 | `extra_info` | `false` | Record host/environment information in the stamp metadata |
-| `experiment` | none | vmn-exp settings (storage URI, metrics, alerts); ignored by core vmn |
+| `store` | none | Shared snapshot store: `{uri: s3://bucket/prefix}` (or `file:///dir`), or the `{bucket, prefix, endpoint_url}` shorthand for `s3://` (prefix default `vmn`); `--store`, `--local` and `VMN_STORE*` override it |
+| `experiment` | none | vmn-exp settings (metrics, alerts); ignored by core vmn |
 
 Root apps: `root_conf.yml` accepts `external_services`, recorded in each root
 version. Deprecated keys (`create_verinfo_files`, `default_release_mode:
 optional|strict`, `conventional_commits.default_release_mode`, the
-`vmn_version_file` backend) are honoured silently and rewritten in the conf
+`vmn_version_file` backend, `experiment.storage`, now `store`) are honoured silently and rewritten in the conf
 file (comments kept) by the next `vmn stamp`, which commits the change.
 
 </details>
@@ -558,6 +559,8 @@ default) takes `--island-name`, `-fv, --from-version`, `-fb, --from-branch`,
 | `VMN_LOCK_FILE_PATH` | Lock file path (default `.vmn/vmn.lock`) |
 | `VMN_GIT_PUSH_USER` / `VMN_GIT_PUSH_TOKEN` | Fallbacks for `--git-push-user` / `--git-push-token` |
 | `GITHUB_TOKEN` / `GH_TOKEN` | Needed for `github_release` |
+| `VMN_STORE` | Snapshot store URI, below `--store` and above conf `store` (legacy `VMN_EXPERIMENT_STORE` still read after it) |
+| `VMN_STORE_BUCKET` / `VMN_STORE_PREFIX` / `VMN_STORE_ENDPOINT_URL` | `s3://` shorthand for the store (each before its `VMN_EXPERIMENT_*` twin) |
 | `VMN_SNAPSHOT_MAX_FILE_MB` / `VMN_SNAPSHOT_MAX_TOTAL_MB` | Caps on untracked files captured into a snapshot (default 50 / 200) |
 | `EDITOR` | Editor for `vmn config --vim` (default `vim`) |
 

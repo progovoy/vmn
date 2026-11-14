@@ -7,7 +7,6 @@ each store param is filled from the flags, then ``VMN_STORE*``, then
 ``store`` URI from any source beats the bucket shorthand.
 """
 import pytest
-
 from version_stamp.store.config import (
     drop_remote_if_offline,
     resolve_store,

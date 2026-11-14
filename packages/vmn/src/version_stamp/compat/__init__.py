@@ -10,6 +10,7 @@ Modules:
     version_file_084   – vmn 0.8.4 version file (separate prerelease fields)
     template_format    – old default template → new default
     config_keys        – deprecated/renamed config keys
+    store_conf         – experiment.storage → top-level store
     release_mode       – "micro" → "hotfix" alias
     completion         – legacy shell completion script stripping
     local_file_paths   – verinfo/ → snapshots/ directory fallback

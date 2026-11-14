@@ -4,7 +4,6 @@ Loading only flags the legacy section (the store resolver reads both);
 ``vmn stamp`` rewrites the conf file text, keeping comments and key order.
 """
 import yaml
-
 from version_stamp.compat.store_conf import has_legacy_storage, move_storage_lines
 from version_stamp.core.models import VMN_DEFAULT_CONF, AppConf
 
@@ -100,6 +99,31 @@ def test_an_experiment_holding_only_storage_is_dropped():
 def test_comments_of_a_dropped_experiment_move_out_with_it():
     text = "conf:\n  experiment:\n    # shared\n    storage:\n      bucket: b\n"
     assert _moved(text) == "conf:\n  # shared\n  store:\n    bucket: b\n"
+
+
+def test_vmn_exp_only_storage_keys_stay_in_experiment_storage():
+    text = (
+        "conf:\n  experiment:\n    storage:\n      uri: gs://b/t\n"
+        "      writer_id: ci  # w\n      experiment_dir: /runs\n"
+    )
+    assert _moved(text) == (
+        "conf:\n  experiment:\n    storage:\n"
+        "      writer_id: ci  # w\n      experiment_dir: /runs\n"
+        "  store:\n    uri: gs://b/t\n"
+    )
+
+
+def test_vmn_exp_only_storage_keys_stay_in_flow_storage():
+    text = "conf:\n  experiment:\n    storage: {bucket: b, writer_id: ci}\n"
+    assert _moved(text) == (
+        "conf:\n  experiment:\n    storage: {writer_id: ci}\n  store: {bucket: b}\n"
+    )
+
+
+def test_a_storage_without_store_keys_is_unchanged():
+    text = "conf:\n  experiment:\n    storage:\n      writer_id: ci\n"
+    assert not has_legacy_storage({"experiment": {"storage": {"writer_id": "ci"}}})
+    assert _moved(text) == text
 
 
 def test_flow_storage_in_a_block_experiment():
