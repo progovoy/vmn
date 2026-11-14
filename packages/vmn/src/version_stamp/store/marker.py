@@ -8,7 +8,8 @@ writers also refuse while ``migrating`` is set.
 
 The same checks and marker bytes as ``vmn_exp.storage.store_marker``, with the
 time a writer stamps and waits on injected: ``check_store(storage, writer,
-clock, sleep)`` (``clock() -> epoch seconds``).
+now, monotonic, sleep)`` (``now() -> epoch seconds`` for ``created_at``,
+``monotonic()`` for the wait on another creator).
 """
 import datetime
 
@@ -75,7 +76,7 @@ def _parse(text):
     return marker if isinstance(marker, dict) else {}
 
 
-def check_store(storage, writer, clock, sleep):
+def check_store(storage, writer, now, monotonic, sleep):
     """Refuse *storage*'s root if it isn't a usable layout-2 store; a writer
     creates the marker when absent. Checked once per root and mode."""
     where = root_of(storage)
@@ -85,12 +86,12 @@ def check_store(storage, writer, clock, sleep):
     with _lock:
         if cache_key in _checked:
             return
-    _check(where, writer, clock, sleep)
+    _check(where, writer, now, monotonic, sleep)
     with _lock:
         _checked.add(cache_key)
 
 
-def _check(where, writer, clock, sleep):
+def _check(where, writer, now, monotonic, sleep):
     text = where.read()
     if text is None:
         if _has_records(where):
@@ -99,7 +100,7 @@ def _check(where, writer, clock, sleep):
                 "run `vmn-exp migrate`")
         if not writer:
             return
-        where.create(yaml.safe_dump(new_marker(clock()), sort_keys=False), clock, sleep)
+        where.create(yaml.safe_dump(new_marker(now()), sort_keys=False), monotonic, sleep)
         text = where.read()
     marker = _parse(text)
     if marker.get("layout") != LAYOUT:
@@ -120,7 +121,7 @@ def _label(where):
 def require_store(storage, uri=None):
     """The reader's check of *storage*'s root: StoreLayoutError when it is
     unusable and, given its *uri*, MissingStoreError when it holds no vmn
-    store at all. A reader never creates the marker, so needs no clock."""
+    store at all. A reader never creates the marker, so needs no time."""
     backend = authoritative(storage)
     where = root_of(backend)
     if where is None:
@@ -128,7 +129,7 @@ def require_store(storage, uri=None):
     if uri and where.read() is None and not any(
             not n.startswith(".") for n in where.entries()):
         raise MissingStoreError(f"no vmn store at {uri}")
-    check_store(backend, writer=False, clock=None, sleep=None)
+    check_store(backend, writer=False, now=None, monotonic=None, sleep=None)
 
 
 def authoritative(storage):

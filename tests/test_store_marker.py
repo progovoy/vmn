@@ -109,7 +109,7 @@ def _marker_of(s3):
 
 
 def _check(storage, writer, clock):
-    marker.check_store(storage, writer, clock, clock.sleep)
+    marker.check_store(storage, writer, clock, clock, clock.sleep)
 
 
 def test_new_marker_is_deterministic_given_now():
@@ -262,3 +262,41 @@ def test_the_module_lock_is_per_process():
     from version_stamp.store.per_process import PerProcessLock
 
     assert isinstance(marker._lock, PerProcessLock)
+
+
+class FakeTime:
+    """A wall clock that can jump and a monotonic one only ``sleep`` advances."""
+
+    def __init__(self, wall_jump):
+        self.wall, self.mono = NOW, 0.0
+        self.sleeps = []
+        self._wall_jump = wall_jump
+
+    def now(self):
+        return self.wall
+
+    def monotonic(self):
+        return self.mono
+
+    def sleep(self, seconds):
+        if not self.sleeps:
+            self.wall += self._wall_jump
+        self.sleeps.append(seconds)
+        self.mono += seconds
+        self.wall += seconds
+
+
+@pytest.mark.parametrize("wall_jump", [3600.0, -3600.0])
+def test_publish_locked_waits_on_monotonic_time_across_wall_clock_jumps(tmp_path, wall_jump):
+    time = FakeTime(wall_jump)
+    os.mkdir(str(tmp_path / ".store.yml.lock"))
+    marker._publish_locked(str(tmp_path / "store.yml"), str(tmp_path / "tmp"),
+                           monotonic=time.monotonic, sleep=time.sleep, wait_sec=30.0)
+    assert sum(time.sleeps) == pytest.approx(30.0, abs=0.011)
+
+
+def test_check_store_stamps_created_at_from_now_not_monotonic(s3):
+    time = FakeTime(0.0)
+    marker.check_store(FakeS3Storage(s3), True, now=time.now,
+                       monotonic=time.monotonic, sleep=time.sleep)
+    assert _marker_of(s3)["created_at"] == "2026-01-01T00:00:00Z"

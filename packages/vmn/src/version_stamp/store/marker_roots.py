@@ -13,17 +13,17 @@ _V1_PREFIXES = ("vmn-experiments", "vmn-snapshots")
 _POLL_SEC = 0.01
 
 
-def _publish_locked(path, tmp, clock, sleep, wait_sec=30.0):
+def _publish_locked(path, tmp, monotonic, sleep, wait_sec=30.0):
     """Publish *tmp* as *path* unless it exists — for filesystems without hard
     links. An exclusive ``mkdir`` elects the one creator, which publishes with
     an atomic rename, so no reader ever sees a partial marker; a loser waits
-    (``sleep``, up to *wait_sec* of ``clock``) for the winner's marker."""
+    (``sleep``, up to *wait_sec* of ``monotonic`` time) for the winner's marker."""
     lock = os.path.join(os.path.dirname(path), f".{os.path.basename(path)}.lock")
     try:
         os.mkdir(lock)
     except FileExistsError:
-        deadline = clock() + wait_sec
-        while not os.path.exists(path) and clock() < deadline:
+        deadline = monotonic() + wait_sec
+        while not os.path.exists(path) and monotonic() < deadline:
             sleep(_POLL_SEC)
         return
     try:
@@ -48,7 +48,7 @@ class LocalRoot:
         except FileNotFoundError:
             return None
 
-    def create(self, text, clock, sleep):
+    def create(self, text, monotonic, sleep):
         os.makedirs(self.root, exist_ok=True)
         fd, tmp = tempfile.mkstemp(dir=self.root, prefix=".store.yml.")
         try:
@@ -59,7 +59,7 @@ class LocalRoot:
         except FileExistsError:
             pass
         except OSError:
-            _publish_locked(self._path(), tmp, clock, sleep)
+            _publish_locked(self._path(), tmp, monotonic, sleep)
         finally:
             if os.path.exists(tmp):
                 os.unlink(tmp)
@@ -124,7 +124,7 @@ class ObjectRoot:
             raise
         return body["Body"].read().decode()
 
-    def create(self, text, clock, sleep):
+    def create(self, text, monotonic, sleep):
         try:
             self.client.put_object(Bucket=self.bucket, Key=self._key(),
                                    Body=text.encode(), IfNoneMatch="*")
