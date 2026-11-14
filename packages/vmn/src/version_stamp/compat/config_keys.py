@@ -5,6 +5,7 @@ Handles:
 2. ``conventional_commits.default_release_mode`` (nested dict) → top-level ``release_mode_policy``
 3. Top-level ``default_release_mode`` with policy values → ``release_mode_policy``
 4. ``vmn_version_file`` backend (dropped)
+5. ``experiment.storage`` → top-level ``store`` (``compat/store_conf.py``)
 
 Loading migrates in memory (debug log only); ``vmn stamp`` rewrites the
 deprecated keys in the conf file via ``rewrite_deprecated_conf_keys``
@@ -14,6 +15,7 @@ Safe to remove when: all conf.yml files have gone through at least one stamp
 cycle that rewrites them.
 """
 from version_stamp.compat.conf_rewrite import POLICY_VALUES, VMN_VERSION_FILE
+from version_stamp.compat.store_conf import has_legacy_storage
 from version_stamp.core.logging import VMN_LOGGER
 
 
@@ -28,6 +30,7 @@ def migrate_config_keys(data_conf, app_conf_path):
         _migrate_nested_release_mode_policy(data_conf, app_conf_path),
         _migrate_top_level_release_mode_policy(data_conf, app_conf_path),
         _drop_vmn_version_file_backend(data_conf, app_conf_path),
+        has_legacy_storage(data_conf),
     ]
     return any(migrated)
 

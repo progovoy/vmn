@@ -174,8 +174,10 @@ storage directory carries a `.gitignore` of `*`.
 experiment run is a snapshot plus an append-only metrics log, and runs share
 the code objects above. Installing it adds:
 
-- **A shared store**: `--store <uri>` > `VMN_EXPERIMENT_STORE` > conf
-  `experiment.storage.uri` (`s3://`, `gs://`, `az://`, `file://`; see
+- **A shared store**: `--store <uri>` > `VMN_STORE` (legacy
+  `VMN_EXPERIMENT_STORE`) > conf `store.uri` (legacy `experiment.storage.uri`,
+  moved to `store` by the next `vmn stamp`; `VMN_STORE_BUCKET`/`_PREFIX`/
+  `_ENDPOINT_URL` give the `s3://` shorthand) (`s3://`, `gs://`, `az://`, `file://`; see
   [Storage](vmn-exp/experiments.md#storage-local-s3-gcs-azure-plugins)) puts records in
   the store's `snapshots/` area and code objects in its `code/` area (shared
   with runs), so
