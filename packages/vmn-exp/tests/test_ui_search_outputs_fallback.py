@@ -12,6 +12,7 @@ from vmn_exp.core.writer import append_to_log, create_log_entry, flush_log  # no
 from vmn_exp.snapshot import LocalSnapshotStorage  # noqa: E402
 from vmn_exp.ui import routes_search  # noqa: E402
 from vmn_exp.core.real_io import RealClock
+from vmn_exp.core.status import MIN_STALE_SEC
 from writer_args import process_writer
 
 APP = "app"
@@ -50,7 +51,7 @@ def client(tmp_path):
     app.state.manager = _Manager()
     sql = FakeSql()
     routes_search.register(app, "/api", lambda names: iter([("ws", APP, snap)]), sql,
-                           now=RealClock().now)
+                           now=RealClock().now, stale_sec=MIN_STALE_SEC)
     return TestClient(app), sql
 
 

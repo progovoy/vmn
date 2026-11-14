@@ -17,7 +17,6 @@ from fastapi import HTTPException, Request
 from vmn_exp.core.log import filter_archived
 from vmn_exp.core.query import QueryError
 from vmn_exp.core.query_extra import reads_off_row
-from vmn_exp.core.status import MIN_STALE_SEC
 from vmn_exp.ui.auth.authz import allowed, require
 from vmn_exp.ui.auth.principal import VIEWER
 from vmn_exp.ui.readers import experiments as exp_reader
@@ -66,7 +65,7 @@ def _sql_search(sql, scopes, names, text, limit, archived, now):
     return sql.search(names, text, limit, archived, now)
 
 
-def register(app, api_prefix, scopes_of, sql=None, *, now, stale_sec=MIN_STALE_SEC):
+def register(app, api_prefix, scopes_of, sql=None, *, now, stale_sec):
     """*scopes_of(names)* yields ``(workspace, app, snapshot)`` of those
     workspaces in order, *now()* the time statuses and ``ago()`` read (on the
     stuck floor *stale_sec*); *sql*

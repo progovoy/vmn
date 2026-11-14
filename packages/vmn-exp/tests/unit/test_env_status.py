@@ -23,7 +23,8 @@ from vmn_exp.core.alerts.config import load_alert_config
 from vmn_exp.core.ports import IO
 from vmn_exp.storage.local import LocalSnapshotStorage
 from vmn_exp.ui.app_deps import real_deps
-from vmn_exp.ui.search_rows_writer import SearchRowsWriter
+from vmn_exp.ui import routes_search
+from vmn_exp.ui.search_rows_writer import SearchRowsWriter, search_rows
 from vmn_exp.ui.server import build_app
 from vmn_exp.ui.workspaces import WorkspaceManager
 
@@ -214,3 +215,13 @@ def test_the_search_rows_writer_writes_statuses_on_its_floor():
     writer.refreshed(index, _Snapshot())
 
     assert [json.loads(data)["status"] for _, _, data in written] == [status.RUNNING]
+
+
+def test_search_statuses_are_not_derived_without_a_stuck_floor():
+    """Leaving the floor out is an error, not the default floor."""
+    with pytest.raises(TypeError):
+        search_rows(_Snapshot(), LATER)
+    with pytest.raises(TypeError):
+        SearchRowsWriter(None, lambda: LATER)
+    with pytest.raises(TypeError):
+        routes_search.register(None, "/api", None, now=lambda: LATER)

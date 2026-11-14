@@ -19,6 +19,7 @@ from vmn_exp.core import index_views
 from vmn_exp.core.index_snapshot import IndexSnapshot, RowCache
 from vmn_exp.core.index_views import SchemaRows, kept_lean
 from vmn_exp.core.real_io import RealClock
+from vmn_exp.core.status import MIN_STALE_SEC
 
 SCHEMA = {"loss": {"goal": "min"}}
 SUMMARY = {"loss": {"last": 0.5, "first": 0.9, "mean": 0.6, "min": 0.1, "max": 0.9}}
@@ -260,7 +261,8 @@ def test_the_search_rows_writer_writes_the_generation_it_was_given(monkeypatch):
     monkeypatch.setattr(search_rows_writer, "search_rows",
                         lambda snap, now, *floor: written.append(snap.generation) or real(snap, now, *floor))
     writer = search_rows_writer.SearchRowsWriter(types.SimpleNamespace(write=lambda *a: None),
-                                                 now=RealClock().now)
+                                                 now=RealClock().now,
+                                                 min_stale_sec=MIN_STALE_SEC)
     leader = _Leader()
     writer.note(leader, "ws", "app", lambda: SCHEMA)
     computing = _Computing(monkeypatch, second, after=0.2)
