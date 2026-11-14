@@ -27,12 +27,14 @@ def _checkout(root, name):
 def _run(tests, log_dir, *args):
     env = {k: v for k, v in os.environ.items() if not k.startswith("PYTEST_")}
     env["PYTHON"] = sys.executable
+    env["VMN_TEST_WORKERS"] = "2"  # one empty test: not the suite's 29
     result = subprocess.run(
         [str(tests / "run_pytest.sh"), "--module_name", str(tests), "--base_log_dir",
          str(log_dir), *args],
         cwd=tests, env=env, capture_output=True, text=True,
     )
     assert result.returncode == 0, result.stdout + result.stderr
+    return result
 
 
 def _logs(log_dir):
@@ -67,14 +69,15 @@ def test_two_suites_of_one_checkout_write_their_own_logs(tmp_path):
 def test_the_run_says_where_its_log_is(tmp_path):
     log_dir = tmp_path / "logs"
     log_dir.mkdir()
-    tests = _checkout(tmp_path, "one")
-    env = {k: v for k, v in os.environ.items() if not k.startswith("PYTEST_")}
-    env["PYTHON"] = sys.executable
-    result = subprocess.run(
-        [str(tests / "run_pytest.sh"), "--module_name", str(tests), "--base_log_dir",
-         str(log_dir)],
-        cwd=tests, env=env, capture_output=True, text=True,
-    )
+    result = _run(_checkout(tmp_path, "one"), log_dir)
 
     (log,) = _logs(log_dir)
     assert f"Log: {log_dir / log}" in result.stdout
+
+
+def test_the_run_starts_as_many_workers_as_it_is_told(tmp_path):
+    log_dir = tmp_path / "logs"
+    log_dir.mkdir()
+    result = _run(_checkout(tmp_path, "one"), log_dir)
+
+    assert "2/2 workers" in result.stdout

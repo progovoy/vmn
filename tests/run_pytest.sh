@@ -19,6 +19,7 @@ cat << EOF
     Default values: --base_log_dir='/tmp'
     The log is <base_log_dir>/tests_output_<suite>_<checkout>_<key>.log, one per
     checkout and suite, so parallel worktrees never write into one log.
+    VMN_TEST_WORKERS=<n> runs the parallel pass on n workers instead of 29.
 EOF
 }
 
@@ -137,10 +138,11 @@ fi
 # Timing benchmarks (marker "serial") run in a second, one-process pass:
 # under 29 busy workers they measure the contention, not the code. Storage
 # emulator tests (marker "emulator") run only in CI's tests_storage_emulators.
-cmd='${PYTHON} -m coverage run -m pytest  -n 29 -m "not serial and not emulator" --html=report_${html_report_suffix}.html --self-contained-html -vv ${COVERAGE} ${COLOR} "${K_ARGS[@]}" ${module_name} | tee "${LOG_PATH}"'
+cmd='${PYTHON} -m coverage run -m pytest  -n ${WORKERS} -m "not serial and not emulator" --html=report_${html_report_suffix}.html --self-contained-html -vv ${COVERAGE} ${COLOR} "${K_ARGS[@]}" ${module_name} | tee "${LOG_PATH}"'
 serial_cmd='${PYTHON} -m coverage run -a -m pytest -m serial --html=report_${html_report_suffix}_serial.html --self-contained-html -vv ${COVERAGE:+${COVERAGE} --cov-append} ${COLOR} "${K_ARGS[@]}" ${module_name} | tee -a "${LOG_PATH}"'
 
 # pytest exits 5 when a filter leaves a pass nothing to run; only both empty fails.
+WORKERS=${VMN_TEST_WORKERS:-29}
 NO_TESTS=5
 
 echo "${cmd}"
