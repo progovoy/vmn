@@ -427,9 +427,11 @@ vmn snapshot restore my_app --latest                  # your current work is aut
 ```
 
 Actions are `create` (default), `list`, `show`, `note`, `delete`, `restore`,
-`export` and `diff`. The app must be stamped once first. With vmn-exp
-installed, `--store <uri>` keeps snapshots in a shared experiment store and
-`vmn goto -v <snapshot>` restores them. See
+`export` and `diff`. The app must be stamped once first. `--store <uri>` keeps
+snapshots in a shared store: `s3://bucket/prefix` with `pip install 'vmn[s3]'`,
+or a directory (`file:///dir`, NFS) with plain vmn. vmn-exp adds `gs://`,
+`az://`, plugin schemes and local-first caching, and `vmn goto -v <snapshot>`
+restores them. See
 [docs/snapshots.md](https://github.com/progovoy/vmn/blob/master/docs/snapshots.md).
 
 ## Experiment tracking (vmn-exp)
