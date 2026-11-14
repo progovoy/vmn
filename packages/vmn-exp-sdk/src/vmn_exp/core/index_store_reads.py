@@ -120,10 +120,12 @@ class LeanReads:
     def _lazy(self, app_name):
         if not self.generation(app_name):
             return None
-        # Keys alone come off the primary key's index, never the table's pages.
-        seqs = dict.fromkeys(key for (key,) in self._conn.execute(
-            "SELECT key FROM exp_index WHERE app = ?", (app_name,)
-        ))
+        # Keys alone come off the primary key's index, never the table's pages,
+        # as one JSON array: a row per key costs twice as much at 100k.
+        (keys,) = self._conn.execute(
+            "SELECT json_group_array(key) FROM exp_index WHERE app = ?", (app_name,)
+        ).fetchone()
+        seqs = dict.fromkeys(json.loads(keys))
         return LazyRecords(seqs, _Prefetch(self, app_name, seqs, first_chunk=1))
 
     def lazy_records(self, app_name, records):
