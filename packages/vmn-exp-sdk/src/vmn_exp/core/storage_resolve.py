@@ -12,14 +12,17 @@ The local root (highest wins):
 3. ``repo_root`` argument, or auto-detected git/.vmn root from cwd: its
    repo-local store ``<repo>/.vmn/store``
 
-It fronts the remote store, if any: ``store`` (--store) >
-``VMN_EXPERIMENT_STORE`` > conf ``experiment.storage.uri``, else the
-``bucket``/``prefix``/``endpoint_url`` shorthand for an ``s3://`` URI. Without
-a local root the store is used directly; a ``file://`` store is the root.
+It fronts the remote store, if any, resolved by ``version_stamp.store.config``
+(the table core's ``vmn snapshot`` uses): ``store`` (--store) > ``VMN_STORE`` >
+``VMN_EXPERIMENT_STORE`` > conf ``store.uri`` > conf ``experiment.storage.uri``,
+else the ``bucket``/``prefix``/``endpoint_url`` shorthand for an ``s3://`` URI.
+Without a local root the store is used directly; a ``file://`` store is the root.
 """
 from __future__ import annotations
 
 import os
+
+from version_stamp.store import config as store_config
 
 from vmn_exp.storage.areas import DEFAULT_ROOT, RUNS, local_store_root
 
@@ -67,20 +70,7 @@ def resolve_experiment_storage(
 def store_uri(params, default_prefix=DEFAULT_ROOT):
     """The store URI *params* name: ``store``, else the bucket shorthand
     (its prefix is the store root)."""
-    from vmn_exp.storage.uri import s3_uri
-
-    if params.get("store"):
-        return params["store"]
-    if params.get("bucket"):
-        return s3_uri(
-            params["bucket"],
-            params.get("prefix") or default_prefix,
-            params.get("endpoint_url"),
-        )
-    return None
-
-
-_REMOTE_PARAMS = ("store", "bucket", "prefix", "endpoint_url")
+    return store_config.store_uri(params, default_prefix)
 
 
 def drop_remote_if_offline(params, root):
@@ -91,16 +81,12 @@ def drop_remote_if_offline(params, root):
     local root alone (``vmn exp push`` uploads them later): ValueError when
     there is none. Never a silent fallback when a remote is unreachable.
     """
-    from vmn_exp.core.writer import OFFLINE_ENV, offline_mode
-
-    if not offline_mode():
-        return params
-    if not root:
+    if store_config.offline_mode(os.environ) and not root:
         raise ValueError(
-            f"{OFFLINE_ENV} records to a local experiment dir: set "
+            f"{store_config.OFFLINE_ENV} records to a local experiment dir: set "
             "VMN_EXPERIMENT_DIR (or --experiment-dir/--dir, or run in a checkout)"
         )
-    return {k: v for k, v in params.items() if k not in _REMOTE_PARAMS}
+    return store_config.drop_remote_if_offline(params, os.environ)
 
 
 def _open(root, params, writer=True):
@@ -108,14 +94,7 @@ def _open(root, params, writer=True):
 
     params = drop_remote_if_offline(params, root)
     return open_storage(store_uri(params), root, area=RUNS, buffer_logs=True,
-                        writer=writer, lent_options=_lent_options(params))
-
-
-def _lent_options(params):
-    """A configured ``endpoint_url`` for absolute ``s3://`` downloads when
-    no remote store carries it."""
-    endpoint_url = params.get("endpoint_url")
-    return {"s3": {"endpoint_url": endpoint_url}} if endpoint_url else None
+                        writer=writer, lent_options=store_config.store_options(params))
 
 
 def try_repo_root() -> "str | None":
@@ -149,7 +128,7 @@ def add_storage_flags(parser):
     no default: :func:`store_uri` supplies it, so an explicit one always wins."""
     parser.add_argument("--store", default=None,
                         help="Storage URI: s3://bucket/prefix, gs://..., az://..., "
-                             "file:///dir (or VMN_EXPERIMENT_STORE)")
+                             "file:///dir (or VMN_STORE)")
     parser.add_argument("--bucket", default=None,
                         help="S3 bucket name (shorthand for --store s3://BUCKET/PREFIX)")
     parser.add_argument("--prefix", default=None,

@@ -36,7 +36,7 @@ from vmn_exp.storage.registry import open_store
 
 _NO_REMOTE = (
     "exp push needs a remote store: pass --store (or --bucket), or set "
-    "VMN_EXPERIMENT_STORE or conf experiment.storage.uri"
+    "VMN_STORE or conf store.uri"
 )
 
 

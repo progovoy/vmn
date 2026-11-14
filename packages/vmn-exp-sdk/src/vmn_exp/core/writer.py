@@ -38,37 +38,26 @@ from vmn_exp.core.streams import clean_writer_id, process_owner, stream_key
 from vmn_exp.core.values import sanitize_entry
 from vmn_exp.storage.files import user_artifact_path
 
-# Storage params an app's conf.yml may supply (param -> conf key).
+from version_stamp.store import config as store_config
+from version_stamp.store.config import OFFLINE_ENV, STORE_ENV, is_true  # noqa: F401
+
+# vmn-exp's own params in conf ``experiment.storage`` (param -> conf key);
+# the store params resolve through ``version_stamp.store.config``.
 _STORAGE_CONF_KEYS = {
-    "store": "uri",
-    "bucket": "bucket",
-    "prefix": "prefix",
-    "endpoint_url": "endpoint_url",
     "experiment_dir": "experiment_dir",
     "writer_id": "writer_id",
 }
 
 WRITER_ID_ENV = "VMN_WRITER_ID"
-OFFLINE_ENV = "VMN_EXP_OFFLINE"
-_TRUE_VALUES = ("1", "true", "yes", "on")
 
-# Storage params a pod can set without a conf.yml (see merge_env_into_params).
-STORAGE_ENV = {
-    "store": "VMN_EXPERIMENT_STORE",
-    "bucket": "VMN_EXPERIMENT_BUCKET",
-    "prefix": "VMN_EXPERIMENT_PREFIX",
-    "endpoint_url": "VMN_EXPERIMENT_ENDPOINT_URL",
-}
+# Store param -> its legacy ``VMN_EXPERIMENT_*`` name. Each is read after its
+# ``VMN_STORE*`` twin (``STORE_ENV`` holds both, in order).
+STORAGE_ENV = {key: names[-1] for key, names in STORE_ENV.items()}
 
 
 def offline_mode():
     """Whether ``VMN_EXP_OFFLINE`` asks to record to the local root only."""
-    return is_true(os.environ.get(OFFLINE_ENV))
-
-
-def is_true(value):
-    """Whether an env value (maybe None) says yes: 1/true/yes/on."""
-    return (value or "").strip().lower() in _TRUE_VALUES
+    return store_config.offline_mode(os.environ)
 
 
 _WRITER_ID = None
@@ -110,22 +99,38 @@ def set_default_writer_id(writer_id):
     return _WRITER_ID
 
 
+def _fill_store_params(params, conf):
+    """Set each unset store param *params* gets from ``os.environ`` and *conf*
+    (``version_stamp.store.config.store_params``); unset ones stay absent."""
+    resolved = store_config.store_params(params, os.environ, conf)
+    for key in STORE_ENV:
+        if resolved[key] and not params.get(key):
+            params[key] = resolved[key]
+
+
 def merge_env_into_params(params):
-    """Fill unset storage params from ``VMN_EXPERIMENT_*`` (flags override env).
+    """Fill unset store params from ``VMN_STORE*``, then ``VMN_EXPERIMENT_*``
+    (flags override env).
 
     A pod has no conf.yml and often no checkout; the environment is how it is
     pointed at a bucket.
     """
-    for key, var in STORAGE_ENV.items():
-        if not params.get(key) and os.environ.get(var):
-            params[key] = os.environ[var]
+    _fill_store_params(params, {})
+
+
+def _store_conf(vcs):
+    """The conf sections of *vcs* that name a store, as core reads them."""
+    return {"store": getattr(vcs, "store", None) or {},
+            "experiment": experiment_conf(vcs)}
 
 
 def merge_conf_into_params(vcs, params):
-    """Fill unset storage params: CLI flags, then ``VMN_EXPERIMENT_*``, then conf.yml."""
-    merge_env_into_params(params)
-    exp_conf = experiment_conf(vcs)
-    storage_conf = exp_conf.get("storage", {}) or {}
+    """Fill unset storage params: CLI flags, then env, then conf.yml — the store
+    ones through ``version_stamp.store.config`` (conf ``store`` before the
+    legacy ``experiment.storage``), ``experiment_dir``/``writer_id`` from
+    ``experiment.storage``."""
+    _fill_store_params(params, _store_conf(vcs))
+    storage_conf = experiment_conf(vcs).get("storage", {}) or {}
     for key, conf_key in _STORAGE_CONF_KEYS.items():
         if not params.get(key):
             conf_val = storage_conf.get(conf_key)

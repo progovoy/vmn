@@ -1706,27 +1706,40 @@ refused with a hint to run [`vmn-exp migrate`](#migrate). Per-host state
 outside the store, in the user cache/state dirs (`$VMN_EXP_CACHE_DIR`
 overrides both).
 
-**Resolution.** `--store` > `VMN_EXPERIMENT_STORE` > conf
-`experiment.storage.uri`. `--bucket`/`--prefix`/`--endpoint-url` (env
-`VMN_EXPERIMENT_BUCKET`/`_PREFIX`/`_ENDPOINT_URL`, conf `bucket`/`prefix`/
-`endpoint_url`) are shorthand for an `s3://` URI; any store URI wins over
-them. The local root is `--experiment-dir` > conf
-`experiment.storage.experiment_dir` > `VMN_EXPERIMENT_DIR` > the checkout. With a remote store and a
-local root, runs record locally and sync to the store; without a local root
-they go straight to the store. [`VMN_EXP_OFFLINE`](#offline-recording-and-push)
-drops the remote. `VMN_STORE`/`VMN_STORE_BUCKET`/`_PREFIX`/`_ENDPOINT_URL` and a
-top-level conf `store: {uri, bucket, prefix, endpoint_url}` are the preferred
-names (core vmn's [snapshot store](../snapshots.md)); `VMN_EXPERIMENT_*` and
-`experiment.storage` are the legacy ones, each read after its new twin, and the
-next `vmn stamp` moves `experiment.storage`'s store keys to `store`
-(`writer_id`/`experiment_dir` stay).
+**Resolution.** vmn-exp, the SDK and core vmn's [`vmn snapshot`](../snapshots.md)
+resolve the store through one table (`version_stamp.store.config`), so
+installing vmn-exp never moves snapshots. Each store setting comes from the
+first source that sets it: the flag, then `VMN_STORE*`, then its legacy
+`VMN_EXPERIMENT_*` twin, then conf `store`, then the legacy conf
+`experiment.storage`:
+
+| Setting | Flag | Env (legacy after) | Conf `store` / `experiment.storage` key |
+|---|---|---|---|
+| store URI | `--store` | `VMN_STORE` (`VMN_EXPERIMENT_STORE`) | `uri` |
+| bucket | `--bucket` | `VMN_STORE_BUCKET` (`VMN_EXPERIMENT_BUCKET`) | `bucket` |
+| prefix | `--prefix` | `VMN_STORE_PREFIX` (`VMN_EXPERIMENT_PREFIX`) | `prefix` |
+| endpoint | `--endpoint-url` | `VMN_STORE_ENDPOINT_URL` (`VMN_EXPERIMENT_ENDPOINT_URL`) | `endpoint_url` |
+
+The bucket/prefix/endpoint are shorthand for an `s3://` URI (prefix default
+`vmn`); a store URI from any source wins over them. The local root is
+`--experiment-dir` > conf `experiment.storage.experiment_dir` >
+`VMN_EXPERIMENT_DIR` > the checkout. With a remote store and a local root,
+runs record locally and sync to the store; without a local root they go
+straight to the store. [`VMN_EXP_OFFLINE`](#offline-recording-and-push) drops
+the remote.
+
+The next `vmn stamp` migrates an app's conf: it moves `uri`/`bucket`/`prefix`/
+`endpoint_url` from `experiment.storage` to a top-level `store`, leaving
+`writer_id` and `experiment_dir` (vmn-exp's own settings) under
+`experiment.storage`. Both layouts keep resolving the same store.
 
 ```yaml
 # .vmn/my_app/conf.yml
 conf:
+  store:
+    uri: gs://ml-experiments/team
   experiment:
     storage:
-      uri: gs://ml-experiments/team
       writer_id: ci-runner        # optional; VMN_WRITER_ID and --writer-id win
 ```
 
