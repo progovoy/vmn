@@ -44,9 +44,19 @@ def test_vmn_depends_on_neither_exp_package():
     assert not [r for r in _project("vmn")["dependencies"] if r.startswith("vmn-exp")]
 
 
-def test_the_sdk_needs_only_yaml_filelock_and_psutil():
-    names = sorted(r.split(">")[0].split("=")[0] for r in _project("vmn-exp-sdk")["dependencies"])
-    assert names == ["PyYAML", "filelock", "psutil"]
+def test_the_sdk_needs_only_yaml_filelock_psutil_and_vmn():
+    # vmn for version_stamp.store, the git-free store layer (docs/packaging.md).
+    from packaging.requirements import Requirement
+
+    reqs = {Requirement(r).name: Requirement(r) for r in _project("vmn-exp-sdk")["dependencies"]}
+    assert sorted(reqs) == ["PyYAML", "filelock", "psutil", "vmn"]
+    vmn = reqs["vmn"].specifier
+    # vmn 0.11.2 is the last release without version_stamp.store.
+    assert not vmn.contains("0.11.2")
+    assert vmn.contains("0.11.3")
+    assert not vmn.contains("1.0.0")
+    # The workspace's own vmn must satisfy it, or editable installs conflict.
+    assert vmn.contains(_project("vmn")["version"], prereleases=True)
 
 
 @pytest.mark.parametrize("dist, extras", [

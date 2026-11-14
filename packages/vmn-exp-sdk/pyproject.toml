@@ -16,6 +16,9 @@ dependencies = [
     "filelock>=3.2.0",
     # System metrics are on by default; CPU/RAM sampling needs it.
     "psutil>=5.9",
+    # version_stamp.store, the git-free store layer; 0.11.2 is the last vmn
+    # without it.
+    "vmn>0.11.2,<1",
 ]
 
 [project.optional-dependencies]

@@ -1,8 +1,9 @@
 """Tests that ``import vmn_exp.sdk`` does not pull in the CLI's heavy deps.
 
 The SDK should be importable without dragging in git, rich, prompt_toolkit, jinja2,
-tomlkit, questionary, argcomplete, version_stamp.backends, version_stamp.stamping,
-version_stamp.cli.commands, or vmn_exp.ui.
+tomlkit, questionary, argcomplete, vmn_exp.ui, or any of vmn's git side
+(version_stamp.backends, .stamping, .snapshot, .devversion, .cli). It may load
+the git-free version_stamp.store.
 
 P0.1 from the roadmap: lazy ``version_stamp/cli/__init__.py``.
 """
@@ -27,10 +28,9 @@ _HEAVY_MODULES = [
     "argcomplete",
     "version_stamp.backends",
     "version_stamp.stamping",
-    "version_stamp.cli.commands",
-    "version_stamp.cli.config_tui",
-    "version_stamp.cli.entry",
-    "version_stamp.cli.args",
+    "version_stamp.snapshot",
+    "version_stamp.devversion",
+    "version_stamp.cli",
     "vmn_exp.ui",
 ]
 

@@ -87,7 +87,8 @@ def full_venv(tmp_path_factory, wheelhouse):
 
 @pytest.fixture(scope="session")
 def sdk_venv(tmp_path_factory, wheelhouse):
-    return _venv(tmp_path_factory, "sdk_only", str(wheelhouse["vmn-exp-sdk"]))
+    return _venv(tmp_path_factory, "sdk_only", str(wheelhouse["vmn"]),
+                 str(wheelhouse["vmn-exp-sdk"]))
 
 
 def _in_venv(python, code, cwd):
@@ -196,19 +197,25 @@ def test_the_sdk_alone_records_and_reads_a_git_free_run(sdk_venv, tmp_path):
         "    run.log_metric('accuracy', 0.95)\n"
         "[row] = list_runs('slim', storage=snapshot_mode_storage())\n"
         "assert row['metrics']['accuracy'] == 0.95, row\n"
-        "assert not any(m == 'git' or m.startswith('version_stamp') for m in sys.modules)\n",
+        "assert not [m for m in sys.modules if m.split('.')[0] in ('git', 'gitdb')]\n"
+        "vs = [m for m in sys.modules if m.split('.')[0] == 'version_stamp']\n"
+        "allowed = ('version_stamp', 'version_stamp.version')\n"
+        "assert not [m for m in vs if m not in allowed\n"
+        "            and not m.startswith(('version_stamp.core.', 'version_stamp.store'))], vs\n",
         cwd=str(tmp_path),
     )
     assert proc.returncode == 0, proc.stdout + proc.stderr
 
 
-def test_the_sdk_alone_has_neither_vmn_nor_the_platform(sdk_venv, tmp_path):
+def test_the_sdk_alone_has_no_platform_and_loads_no_git(sdk_venv, tmp_path):
+    # The SDK installs vmn (for version_stamp.store), so git is installed too,
+    # but importing the SDK must not load it.
     proc = _in_venv(
         sdk_venv,
-        "import importlib.util as u\n"
-        "assert u.find_spec('version_stamp') is None\n"
-        "assert u.find_spec('git') is None\n"
-        "assert u.find_spec('vmn_exp.cli') is None\n",
+        "import importlib.util as u, sys\n"
+        "assert u.find_spec('vmn_exp.cli') is None\n"
+        "import vmn_exp.sdk\n"
+        "assert not [m for m in sys.modules if m.split('.')[0] in ('git', 'gitdb')]\n",
         cwd=str(tmp_path),
     )
     assert proc.returncode == 0, proc.stdout + proc.stderr

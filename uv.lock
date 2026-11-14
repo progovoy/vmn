@@ -5284,7 +5284,7 @@ wheels = [
 
 [[package]]
 name = "vmn"
-version = "0.11.2"
+version = "0.11.3.dev0"
 source = { editable = "packages/vmn" }
 dependencies = [
     { name = "argcomplete", version = "3.7.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.10'" },
@@ -5342,6 +5342,11 @@ mlflow = [
     { name = "mlflow-skinny", version = "3.1.4", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version == '3.9.*'" },
     { name = "mlflow-skinny", version = "3.16.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.10'" },
 ]
+orjson = [
+    { name = "orjson", version = "3.10.15", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.9'" },
+    { name = "orjson", version = "3.11.5", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version == '3.9.*'" },
+    { name = "orjson", version = "3.12.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.10'" },
+]
 parquet = [
     { name = "pyarrow", version = "17.0.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.9'" },
     { name = "pyarrow", version = "21.0.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version == '3.9.*'" },
@@ -5361,9 +5366,6 @@ ui = [
     { name = "fastapi", version = "0.124.4", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.9'" },
     { name = "fastapi", version = "0.128.8", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version == '3.9.*'" },
     { name = "fastapi", version = "0.141.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.10'" },
-    { name = "orjson", version = "3.10.15", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.9'" },
-    { name = "orjson", version = "3.11.5", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version == '3.9.*'" },
-    { name = "orjson", version = "3.12.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.10'" },
     { name = "uvicorn", version = "0.33.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.9'" },
     { name = "uvicorn", version = "0.39.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version == '3.9.*'" },
     { name = "uvicorn", version = "0.54.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.10'" },
@@ -5373,7 +5375,7 @@ ui = [
 requires-dist = [
     { name = "fastapi", marker = "extra == 'ui'", specifier = ">=0.110" },
     { name = "mlflow-skinny", marker = "extra == 'mlflow'" },
-    { name = "orjson", marker = "extra == 'ui'", specifier = ">=3.9" },
+    { name = "orjson", marker = "extra == 'orjson'", specifier = ">=3.9" },
     { name = "psycopg", extras = ["binary"], marker = "extra == 'postgres'", specifier = ">=3" },
     { name = "psycopg-pool", marker = "extra == 'postgres'", specifier = ">=3.2" },
     { name = "pyarrow", marker = "extra == 'parquet'" },
@@ -5384,7 +5386,7 @@ requires-dist = [
     { name = "vmn-exp-sdk", extras = ["gcs"], marker = "extra == 'gcs'", editable = "packages/vmn-exp-sdk" },
     { name = "vmn-exp-sdk", extras = ["s3"], marker = "extra == 's3'", editable = "packages/vmn-exp-sdk" },
 ]
-provides-extras = ["ui", "s3", "gcs", "azure", "mlflow", "postgres", "parquet"]
+provides-extras = ["ui", "orjson", "s3", "gcs", "azure", "mlflow", "postgres", "parquet"]
 
 [[package]]
 name = "vmn-exp-sdk"
@@ -5396,6 +5398,7 @@ dependencies = [
     { name = "filelock", version = "4.0.4", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.10'" },
     { name = "psutil" },
     { name = "pyyaml" },
+    { name = "vmn" },
 ]
 
 [package.optional-dependencies]
@@ -5430,6 +5433,7 @@ requires-dist = [
     { name = "pandas", marker = "extra == 'pandas'" },
     { name = "psutil", specifier = ">=5.9" },
     { name = "pyyaml", specifier = ">=5.4.1" },
+    { name = "vmn", editable = "packages/vmn" },
 ]
 provides-extras = ["s3", "pandas", "gcs", "azure"]
 
