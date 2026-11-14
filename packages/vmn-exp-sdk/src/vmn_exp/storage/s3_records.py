@@ -1,126 +1,24 @@
 #!/usr/bin/env python3
-"""S3 record writes: ``metadata.yml`` is what makes a record visible, so it is
-written last and deleted first.
-
-A name is claimed with a separate ``.claim`` object under ``If-None-Match``;
-only the winner uploads the body and then the metadata. A crash mid-create
-leaves an invisible, still-claimed name; a crash mid-delete leaves invisible
-leftovers — never a listed record with half its files.
+"""S3 record writes: core's (:class:`~version_stamp.store.s3_records.S3RecordWrites`
+— ``metadata.yml`` written last and deleted first, names claimed by a
+``.claim`` object under ``If-None-Match``), stamped with the record format
+this SDK writes (:mod:`vmn_exp.core.record_format`: 2) instead of core's 1.
 """
 
-import yaml
-
-from vmn_exp import _base
+from version_stamp.store.s3_records import (  # noqa: F401  (re-exported)
+    CLAIM_FILE,
+    DELETE_BATCH,
+    S3RecordWrites,
+)
 from vmn_exp.core.record_format import with_format_version
-from vmn_exp.storage.files import (
-    METADATA_FILE,
-    PATCH_FILES,
-    apply_metadata_updates,
-    safe_dep_name,
-)
-from vmn_exp.storage.s3_base import (
-    is_taken,
-    parallel_map,
-)
 
-CLAIM_FILE = ".claim"
-_DELETE_BATCH = 1000  # the most keys one DeleteObjects takes
-_NOTE_ATTEMPTS = 20
+_DELETE_BATCH = DELETE_BATCH  # the most keys one DeleteObjects takes (patchable)
 
 
-class S3Records:
-    def _put_patches(self, prefix, patches):
-        for key, filename, _ in PATCH_FILES:
-            if patches.get(key):
-                self._put(f"{prefix}/{filename}", patches[key])
-
-    def _put_record_body(self, prefix, patches):
-        self._put_patches(prefix, patches)
-        for dep_path, dp in patches.get("deps", {}).items():
-            self._put_patches(f"{prefix}/deps/{safe_dep_name(dep_path)}", dp)
-
-    def _put_metadata(self, prefix, metadata, **condition):
-        self._put(
-            f"{prefix}/{METADATA_FILE}",
-            yaml.dump(with_format_version(_base.redact_record_remotes(metadata)), sort_keys=True),
-            **condition,
-        )
-
-    def save(self, app_name, verstr, metadata, patches):
-        prefix = self._record_prefix(app_name, verstr)
-        self._put_record_body(prefix, patches)
-        self._put_metadata(prefix, metadata)
-
-    def create_exclusive(self, app_name, verstr, metadata, patches, claim_token=None):
-        """Create the record only if *verstr* is free; True when created.
-
-        The ``.claim`` object's body is *claim_token* (empty without one). A
-        claim that carries the same non-empty token but has no metadata yet
-        is this claimer's own crashed attempt, and is resumed; any other
-        claim, and any existing metadata, means taken.
-        """
-        prefix = self._key_prefix(app_name, verstr)
-        # A record written before claims existed has metadata but no claim.
-        if self._head(f"{prefix}/{METADATA_FILE}"):
-            return False
-        if not self._claim(prefix, claim_token):
-            return False
-        self._put_record_body(prefix, patches)
-        self._put_metadata(prefix, metadata)
-        return True
-
-    def _claim(self, prefix, claim_token):
-        key = f"{prefix}/{CLAIM_FILE}"
-        token = (claim_token or "").encode("utf-8")
-        try:
-            # The conditional PUT is the claim: exactly one writer wins it.
-            self._put(key, token, IfNoneMatch="*")
-            return True
-        except Exception as e:
-            if not is_taken(e):
-                raise
-        return bool(token) and self._get_or_raise(key) == token
-
-    def delete(self, app_name, verstr):
-        prefix = self._record_prefix(app_name, verstr)
-        # First: from here on the record is invisible, whatever else fails.
-        self._s3.delete_object(Bucket=self.bucket, Key=f"{prefix}/{METADATA_FILE}")
-        self._delete_keys([o["Key"] for o in self._objects(prefix + "/")])
+class S3Records(S3RecordWrites):
+    _stamped = staticmethod(with_format_version)
 
     def _delete_keys(self, keys):
         """Delete *keys*: batches of :data:`_DELETE_BATCH`, sent concurrently."""
-        batches = [
-            keys[i : i + _DELETE_BATCH] for i in range(0, len(keys), _DELETE_BATCH)
-        ]
-        parallel_map(self._delete_batch, batches)
-
-    def _delete_batch(self, keys):
-        resp = self._s3.delete_objects(
-            Bucket=self.bucket,
-            Delete={"Objects": [{"Key": key} for key in keys], "Quiet": True},
-        )
-        errors = resp.get("Errors") or []
-        if errors:
-            raise RuntimeError(
-                f"S3 refused to delete {len(errors)} objects: {errors[0]}"
-            )
-
-    def update_note(self, app_name, verstr, note):
-        return self.update_metadata(app_name, verstr, {"note": note})
-
-    def update_metadata(self, app_name, verstr, updates):
-        """Rewrite only ``metadata.yml``, under its ETag: a concurrent edit
-        makes this retry on the new content instead of being overwritten."""
-        prefix = self._record_prefix(app_name, verstr)
-        for _ in range(_NOTE_ATTEMPTS):
-            raw, etag = self._get_with_etag(f"{prefix}/{METADATA_FILE}")
-            if raw is None:
-                return False
-            metadata = apply_metadata_updates(_base.yaml_safe_load(raw), updates)
-            try:
-                self._put_metadata(prefix, metadata, IfMatch=etag)
-                return True
-            except Exception as e:
-                if not is_taken(e):
-                    raise
-        raise RuntimeError(f"Could not update the metadata of {verstr}: too many writers")
+        batches = [keys[i : i + _DELETE_BATCH] for i in range(0, len(keys), _DELETE_BATCH)]
+        self._map(self._delete_batch, batches)
