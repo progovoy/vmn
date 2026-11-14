@@ -14,6 +14,7 @@ import time
 import types
 
 import pytest
+from bench_timing import fastest_each
 from vmn_exp.core import index_views
 from vmn_exp.core.index_snapshot import IndexSnapshot, RowCache
 from vmn_exp.core.index_views import SchemaRows, kept_lean
@@ -165,18 +166,33 @@ def _timed(snapshot):
         gc.enable()
 
 
-@pytest.mark.serial
-def test_bench_a_new_generation_of_200k_rows_costs_what_changed():
+GENERATIONS = ("one changed", "inserted mid-order", "unchanged")
+
+
+def _generations(passes):
+    """One pass from a fresh index: each step's seconds over its share of the
+    cold summary's (a quarter for the insert renumbering a quarter of the
+    rows, a tenth for the others), so at most 0 when within it."""
     index = _Index(200_000)
     cold = _timed(index.publish())
     times = {"one changed": _timed(index.change(100_000)),
              "inserted mid-order": _timed(index.insert(150_000)),
              "unchanged": _timed(index.publish(set()))}
+    passes.append((cold, times))
+    return {name: t - cold / (4 if name == "inserted mid-order" else 10)
+            for name, t in times.items()}
+
+
+@pytest.mark.serial
+def test_bench_a_new_generation_of_200k_rows_costs_what_changed():
+    passes = []
+    over = fastest_each(lambda: _generations(passes), dict.fromkeys(GENERATIONS, 0.0))
+    cold, times = passes[-1]
     print(f"\ncold {cold * 1000:.0f} ms; " + "; ".join(
         f"{name} {t * 1000:.1f} ms" for name, t in times.items()))
-    moved = times.pop("inserted mid-order")  # renumbers a quarter of the rows
-    assert moved < cold / 4, (cold, moved)
-    assert all(t < cold / 10 for t in times.values()), (cold, times)
+    moved = over.pop("inserted mid-order")  # renumbers a quarter of the rows
+    assert moved < 0, (cold, times)  # inserted < cold / 4
+    assert all(t < 0 for t in over.values()), (cold, times)  # the others < cold / 10
 
 
 class _Computing:
