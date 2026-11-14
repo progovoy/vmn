@@ -34,7 +34,7 @@ def test_without_opener_stores_are_local(tmp_path):
 
 def test_store_flag_without_opener_is_an_error(tmp_path):
     with pytest.raises(SnapshotStoreError, match="pip install vmn-exp"):
-        open_snapshot_stores(_vcs(tmp_path), {"store": "s3://b/p"})
+        open_snapshot_stores(_vcs(tmp_path), {"store": "gs://bucket/prefix"})
 
 
 def test_registered_opener_is_used(tmp_path):
