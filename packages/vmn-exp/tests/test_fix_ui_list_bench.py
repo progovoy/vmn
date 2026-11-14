@@ -18,11 +18,11 @@ from fastapi.testclient import TestClient
 from vmn_exp.snapshot import LocalSnapshotStorage
 from vmn_exp.ui import leaderboard_cache
 from vmn_exp.core.real_io import real_io
+from vmn_exp.ui.refresher import WARM_THREAD
 
 APP = "app"
 RUNS = 5000
 REQUESTS = 20
-WARM_THREAD = "vmn-ui-warm"
 BASE = f"/api/v1/workspaces/ws/apps/{APP}/experiments"
 
 
