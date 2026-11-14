@@ -19,10 +19,9 @@ Writers of one identity store identical content, so a concurrent rewrite is
 harmless: each file is replaced atomically, the marker only follows a full
 payload, and last writer wins.
 """
+from version_stamp.store import code as _core
+from version_stamp.store.code import CODE_MISSING, code_key  # noqa: F401
 from vmn_exp.storage.areas import CODE
-
-# Set (never stored) on a run whose code object is gone or incomplete.
-CODE_MISSING = "code_missing"
 
 
 def code_storage(storage):
@@ -30,20 +29,15 @@ def code_storage(storage):
     return storage.in_area(CODE)
 
 
-def code_key(code_verstr, diff_hash):
-    return f"{code_verstr}.{diff_hash}"
-
-
 def stored_code(storage, app_name, key):
     """The payload summary of *key*'s complete code object, or None when
     there is none."""
-    marker = code_storage(storage).load_metadata(app_name, key)
-    return None if marker is None else {k: v for k, v in marker.items() if k not in ("verstr", "format_version")}
+    return _core.stored_code(code_storage(storage), app_name, key)
 
 
 def store_code(storage, app_name, key, payload, summary):
     """Write *key*'s code object: the *payload* files, then the marker."""
-    code_storage(storage).save(app_name, key, dict(summary, verstr=key), payload)
+    _core.store_code(code_storage(storage), app_name, key, payload, summary)
 
 
 def copy_code(src, dst, app_name, key):
@@ -60,22 +54,17 @@ def publish_code(storage, app_name, key):
     """Upload *key*'s code object to the remote when only the local cache
     holds it (``stored_code`` reads local-first): a run created there must
     not point at a code object the remote lacks."""
-    mirror = getattr(code_storage(storage), "mirror_record", None)
-    if mirror is not None:
-        mirror(app_name, key)
+    _core.publish_code(code_storage(storage), app_name, key)
 
 
 def resolve_code(storage, app_name, metadata, patches):
     """``(metadata, patches)`` of a run record with its code object's patches
     in place of its own; a run whose object is unusable gets empty patches
-    and :data:`CODE_MISSING` set."""
-    key = (metadata or {}).get("code")
-    if not key:
+    and :data:`CODE_MISSING` set. A record naming no code object never opens
+    the code area."""
+    if not (metadata or {}).get("code"):
         return metadata, patches
-    found, code_patches = code_storage(storage).load_record(app_name, key)
-    if found is None:
-        return dict(metadata, **{CODE_MISSING: True}), {}
-    return metadata, code_patches
+    return _core.resolve_code(code_storage(storage), app_name, metadata, patches)
 
 
 def find_code_key(storage, app_name, code_verstr, names=None):

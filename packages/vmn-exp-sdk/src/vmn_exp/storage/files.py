@@ -1,10 +1,24 @@
 #!/usr/bin/env python3
 """File-level helpers shared by the snapshot storage backends: record file
-names, atomic writes and patch files (log naming/parsing: core.experiment_logfiles)."""
+names, atomic writes and patch files (log naming/parsing: core.experiment_logfiles).
+
+The record format's names are core's (``version_stamp.store.names``). The
+patch-file reads and writes stay here: reading skips a non-file patch path,
+and a rewrite takes the umask mode without fsync (core's ``atomic_write``
+keeps the old mode and fsyncs)."""
 import os
 import tempfile
 
-from vmn_exp._base import valid_app_path, valid_path_component
+from version_stamp.store.names import (  # noqa: F401  (re-exported)
+    METADATA_FILE,
+    PATCH_FILES,
+    apply_metadata_updates,
+    checked_app_path,
+    safe_dep_name,
+    safe_verstr,
+    unsafe_verstr,
+)
+from vmn_exp._base import valid_path_component
 
 # Log file naming and parsing live in core, shared with the experiment index.
 from vmn_exp.core.logfiles import (  # noqa: F401  (re-exported)
@@ -20,7 +34,6 @@ from vmn_exp.core.rewind import drop_rewound
 from vmn_exp.core.series_reader import SeriesReader
 from vmn_exp.core.streams import display_writer
 
-METADATA_FILE = "metadata.yml"
 # A parent record's child markers (:mod:`vmn_exp.storage.child_markers`).
 CHILDREN_DIR = "children"
 # Beside an app's records: every child in the app has its marker. A dot name,
@@ -28,36 +41,8 @@ CHILDREN_DIR = "children"
 CHILDREN_COMPLETE_FILE = ".children_complete"
 # The derived experiment-index cache, beside the records it summarizes.
 INDEX_CACHE_FILE = ".index.sqlite"
-# (patches key, file name, binary?)
-PATCH_FILES = (
-    ("working_tree", "working_tree.patch", False),
-    ("local_commits", "local_commits.patch", False),
-    ("untracked_files", "untracked_files.tar.gz", True),
-)
 # Rewritten while a run lives, so a copy fetched from a remote is stale at once.
 VOLATILE_FILES = ("run_state.yml",)
-
-
-def safe_verstr(verstr):
-    """*verstr* as a record directory/key name; ValueError if it would walk."""
-    if not valid_path_component(verstr):
-        raise ValueError(f"Invalid record name: {verstr!r}")
-    return verstr.replace("+", "_plus_")
-
-
-def checked_app_path(app_name):
-    """*app_name* unchanged; ValueError if it is not a relative app path."""
-    if not valid_app_path(app_name):
-        raise ValueError(f"Invalid app name: {app_name!r}")
-    return app_name
-
-
-def unsafe_verstr(name):
-    return name.replace("_plus_", "+")
-
-
-def safe_dep_name(dep_path):
-    return dep_path.replace(os.sep, "_").replace("/", "_")
 
 
 def is_volatile_file(name):
@@ -132,16 +117,6 @@ def list_record_artifacts(record_dir):
             for a in list_artifact_tree(os.path.join(record_dir, tree))
         )
     return sorted(found, key=lambda a: a["name"])
-
-
-def apply_metadata_updates(metadata, updates):
-    """*metadata* with *updates* merged in; a None value drops the field."""
-    for key, value in updates.items():
-        if value is None:
-            metadata.pop(key, None)
-        else:
-            metadata[key] = value
-    return metadata
 
 
 def log_sizes_of(files):
