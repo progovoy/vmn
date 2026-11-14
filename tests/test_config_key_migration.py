@@ -335,3 +335,36 @@ def test_dry_run_with_vmn_version_file_leaves_conf_without_warning(app_layout, c
     assert _read(conf_path) == VMN_VERSION_FILE_CONF
     assert f"Would migrate deprecated keys in {conf_path}" in out
     assert "WARNING" not in out + serr
+
+
+LEGACY_STORAGE = """\
+conf:
+  experiment:
+    # shared store
+    storage:
+      uri: s3://bucket/team  # the bucket
+  template: '[{major}][.{minor}][.{patch}]'
+"""
+
+
+def test_stamp_moves_experiment_storage_to_store(app_layout, capfd):
+    conf_path = _stamped(app_layout)
+    _commit_conf(app_layout, conf_path, LEGACY_STORAGE)
+    _change(app_layout)
+
+    capfd.readouterr()
+    err, ver_info, _ = _stamp_app(app_layout.app_name)
+    out, _ = capfd.readouterr()
+
+    assert err == 0
+    assert ver_info["stamping"]["app"]["_version"] == "0.0.2"
+    expected = (
+        "conf:\n"
+        "  # shared store\n"
+        "  store:\n"
+        "    uri: s3://bucket/team  # the bucket\n"
+        "  template: '[{major}][.{minor}][.{patch}]'\n"
+    )
+    assert _read(conf_path) == expected
+    assert _committed(app_layout, conf_path) == expected
+    assert f"Migrated deprecated keys in {conf_path}" in out

@@ -195,6 +195,17 @@ class AppConf:
             "ui_type": "nested_dict",
         },
     )
+    store: dict = field(
+        default_factory=dict,
+        metadata={
+            "ui_desc": (
+                "Shared snapshot store (vmn snapshot --store). "
+                "Supports: uri (s3://bucket/prefix, file:///dir) or "
+                "bucket, prefix, endpoint_url."
+            ),
+            "ui_type": "nested_dict",
+        },
+    )
 
     def __post_init__(self):
         if not self.template:

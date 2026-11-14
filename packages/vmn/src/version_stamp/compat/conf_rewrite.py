@@ -4,6 +4,7 @@ Edits the conf file line by line so comments and key order survive:
 - top-level ``default_release_mode: optional|strict`` → ``release_mode_policy``
 - ``conventional_commits.default_release_mode`` (block or flow style) → same
 - the ``vmn_version_file`` entry of ``version_backends`` is dropped
+- ``experiment.storage`` moves to a top-level ``store`` (``store_conf.py``)
 """
 import re
 
@@ -21,6 +22,8 @@ _OPENERS = {"{": "}", "[": "]"}
 def rewrite_deprecated_conf_keys(path, dry_run=False):
     """Rewrite the deprecated keys of the conf file at ``path`` in place,
     keeping comments and key order. Returns whether it changes."""
+    from version_stamp.compat.store_conf import move_storage_lines
+
     with open(path) as f:
         lines = f.readlines()
     new_lines = _rewrite_conf_child(
@@ -30,6 +33,7 @@ def rewrite_deprecated_conf_keys(path, dry_run=False):
     new_lines = _rewrite_conf_child(
         new_lines, "version_backends", _drop_block_backend, _drop_flow_backend
     )
+    new_lines = move_storage_lines(new_lines)
     new_lines = _keep_conf_a_mapping(lines, new_lines)
     if new_lines == lines:
         return False
