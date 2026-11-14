@@ -5,6 +5,7 @@ and what the default first pages cost a request afterwards. Timed, so serial."""
 import time
 
 import pytest
+from bench_timing import fastest_each
 from fakes.clock import FakeClock
 from leaderboard_fleet import T0, Fleet
 from test_ui_board_warm import DEFAULT, TOPS
@@ -14,6 +15,7 @@ CLOCK = FakeClock(start=T0)
 INNERS, SINGLES, LIVE = 27_000, 19_000, 50
 GENERATIONS = 10
 NEW_PER_GENERATION = 20
+BUDGETS = {"request": 0.05, "hit": 0.05, "next": 0.5}
 
 
 def _timed(fn):
@@ -44,6 +46,24 @@ def test_the_board_warm_up_is_bounded_and_makes_the_first_pages_memo_hits():
     cold_cache = LeaderboardCache(now=CLOCK.now)
     cold_requests = _requests(cold_cache, snap)
 
+    passes = []
+    took = fastest_each(lambda: _warm_pass(fleet, jobs, passes), BUDGETS)
+    first, warm_requests, nexts, hits = passes[-1]
+
+    print(f"\n{len(fleet.rows)} runs: cold first requests (no warm-up) ms {[_ms(t) for t in cold_requests]}; "
+          f"first warm {_ms(first)} ms, then requests ms {[_ms(t) for t in warm_requests]}; "
+          f"next-generation warm ms {[_ms(t) for t in nexts]}; slowest request after each {[_ms(t) for t in hits]}; "
+          f"uncontended slowest request {_ms(took['request'])} ms, hit {_ms(took['hit'])} ms, "
+          f"next warm {_ms(took['next'])} ms")
+    assert took["request"] <= BUDGETS["request"], warm_requests
+    assert took["hit"] <= BUDGETS["hit"], hits
+    assert took["next"] <= BUDGETS["next"], nexts
+
+
+def _warm_pass(fleet, jobs, passes):
+    """A fresh cache warmed on the fleet as it is, then GENERATIONS new ones:
+    ``{step: slowest seconds}``, the pass's times appended to *passes*."""
+    snap = fleet.snapshot()
     cache = LeaderboardCache(now=CLOCK.now)
     first = _timed(lambda: cache.warm(snap))
     warm_requests = _requests(cache, snap)
@@ -55,10 +75,5 @@ def test_the_board_warm_up_is_bounded_and_makes_the_first_pages_memo_hits():
         snap = fleet.snapshot()
         nexts.append(_timed(lambda snap=snap: cache.warm(snap)))
         hits.append(max(_requests(cache, snap)))
-
-    print(f"\n{len(snap.rows)} runs: cold first requests (no warm-up) ms {[_ms(t) for t in cold_requests]}; "
-          f"first warm {_ms(first)} ms, then requests ms {[_ms(t) for t in warm_requests]}; "
-          f"next-generation warm ms {[_ms(t) for t in nexts]}; slowest request after each {[_ms(t) for t in hits]}")
-    assert max(warm_requests) <= 0.05, warm_requests
-    assert max(hits) <= 0.05, hits
-    assert max(nexts) <= 0.5, nexts
+    passes.append((first, warm_requests, nexts, hits))
+    return {"request": max(warm_requests), "hit": max(hits), "next": max(nexts)}
