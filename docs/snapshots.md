@@ -149,6 +149,31 @@ snapshots differing only inside a dep get different version strings; so do
 snapshots whose deps sit at different commits. Every
 storage directory carries a `.gitignore` of `*`.
 
+## Shared stores
+
+A shared store lets teammates (and their agents) list, diff, export and restore
+each other's snapshots:
+
+```sh
+pip install 'vmn[s3]'                                  # boto3, for s3://
+vmn snapshot create my_app --store s3://team-bucket/vmn
+vmn snapshot list my_app --store /mnt/nfs/vmn-store    # or file:///mnt/nfs/vmn-store
+```
+
+`s3://bucket/prefix` (S3 or a compatible endpoint: `?endpoint_url=...` or
+`VMN_STORE_ENDPOINT_URL`) needs `pip install 'vmn[s3]'`; a directory
+(`file:///dir` or a plain path, e.g. NFS) needs nothing extra. The store is
+chosen by `--store <uri>` > `VMN_STORE` (legacy `VMN_EXPERIMENT_STORE`) > conf
+`store.uri` (legacy `experiment.storage.uri`, moved to `store` by the next
+`vmn stamp`); `VMN_STORE_BUCKET`/`_PREFIX`/`_ENDPOINT_URL` and conf
+`store: {bucket, prefix, endpoint_url}` give the `s3://` shorthand (prefix
+default `vmn`). Records go in the store's `snapshots/` area and code objects in
+its `code/` area; the first writer creates the root's `store.yml`, and `list`,
+`show`, `diff` and `export` refuse a location holding no store. `--local`
+forces the repo-local store; `VMN_EXP_OFFLINE=1` keeps snapshots local too.
+Other schemes (`gs://`, `az://`) fail with `<scheme>:// snapshot stores need
+vmn-exp: pip install vmn-exp`.
+
 ## All flags
 
 | Flag | Actions | Description |
@@ -166,7 +191,7 @@ storage directory carries a `.gitignore` of `*`.
 | `--tool` | diff | External diff tool (default: `git config diff.tool`) |
 | `-o`, `--output` | export | Output directory or `.tar.gz`/`.tgz` (default: `<verstr>.tar.gz`) |
 | `--force` | restore | Restore even if untracked files over the size caps would be deleted |
-| `--store`, `--local` | all | Snapshot store (see below; `--store` needs vmn-exp) |
+| `--store`, `--local` | all | Snapshot store URI or directory; `--local` forces the repo-local store (see [Shared stores](#shared-stores)) |
 
 ## With vmn-exp installed
 
@@ -174,17 +199,11 @@ storage directory carries a `.gitignore` of `*`.
 experiment run is a snapshot plus an append-only metrics log, and runs share
 the code objects above. Installing it adds:
 
-- **A shared store**: `--store <uri>` > `VMN_STORE` (legacy
-  `VMN_EXPERIMENT_STORE`) > conf `store.uri` (legacy `experiment.storage.uri`,
-  moved to `store` by the next `vmn stamp`; `VMN_STORE_BUCKET`/`_PREFIX`/
-  `_ENDPOINT_URL` give the `s3://` shorthand) (`s3://`, `gs://`, `az://`, `file://`; see
-  [Storage](vmn-exp/experiments.md#storage-local-s3-gcs-azure-plugins)) puts records in
-  the store's `snapshots/` area and code objects in its `code/` area (shared
-  with runs), so
-  teammates can list, diff, export and restore each other's snapshots.
-  `--local` forces the local store; `VMN_EXP_OFFLINE=1` keeps snapshots local
-  too. Without vmn-exp, `--store` fails with `remote snapshot stores need
-  vmn-exp: pip install vmn-exp`.
+- **More stores**: `gs://`, `az://` and plugin schemes, and local-first
+  caching of a remote store (see
+  [Storage](vmn-exp/experiments.md#storage-local-s3-gcs-azure-plugins)), chosen
+  the same way as [above](#shared-stores); the store's `code/` area is shared
+  with runs.
 - **`vmn goto -v <snapshot-verstr> <app>`** (a full verstr, not a prefix or
   `@N`) restores a snapshot. `vmn goto -v <dev-version>` and `vmn-exp restore`
   run this same restore (auto-save, size-cap refusal, `--force`), with the hint

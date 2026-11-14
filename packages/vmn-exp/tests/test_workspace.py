@@ -60,6 +60,7 @@ def test_the_sdk_needs_only_yaml_filelock_psutil_and_vmn():
 
 
 @pytest.mark.parametrize("dist, extras", [
+    ("vmn", {"s3"}),
     ("vmn-exp-sdk", {"s3"}),
     ("vmn-exp", {"ui", "s3", "mlflow"}),
 ])
