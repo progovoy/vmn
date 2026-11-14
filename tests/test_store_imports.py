@@ -41,7 +41,8 @@ def _module_name(path):
 
 
 def test_the_store_package_has_its_leaf_modules():
-    expected = {"__init__", "names", "areas", "uri", "per_process", "code", "s3_errors"}
+    expected = {"__init__", "names", "areas", "uri", "per_process", "code", "s3_errors",
+                "marker", "marker_roots"}
     assert expected <= {p.stem for p in STORE_FILES}
 
 
