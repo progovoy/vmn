@@ -101,8 +101,7 @@ class InlineRefresher(_Listeners):
     a snapshot sees every write made before it (what ``create_app`` embeds
     without ``background_refresh``)."""
 
-    # False: a snapshot costs a refresh, and its run states are left to be
-    # read from storage.
+    # False: a snapshot costs a refresh; its run states are left to be read from storage.
     background = False
     # None leaves the sweep interval to snapshot(), whatever reconcile_sec says.
     full_sweep_sec = None
