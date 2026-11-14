@@ -24,6 +24,9 @@ dependencies = [
     "git-cliff>=2.5.0,<3",
 ]
 
+[project.optional-dependencies]
+s3 = ["boto3"]
+
 [project.scripts]
 vmn = "version_stamp.cli:main"
 vmn-argcomplete-tcsh = "version_stamp.cli.completion:tcsh_completion_main"

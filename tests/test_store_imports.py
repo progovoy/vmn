@@ -45,6 +45,11 @@ def test_the_store_package_has_its_leaf_modules():
     assert expected <= {p.stem for p in STORE_FILES}
 
 
+
+def test_the_store_package_has_its_s3_modules():
+    expected = {"s3_client", "s3_base", "s3_records", "s3_reads", "s3_store"}
+    assert expected <= {p.stem for p in STORE_FILES}
+
 def test_importing_the_store_loads_no_git_boto3_or_vcs_packages():
     out = subprocess.run(
         [sys.executable, "-c", _CHECK.format(forbidden=FORBIDDEN),
