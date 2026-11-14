@@ -13,7 +13,8 @@ design, the section says so under "Differs from the design".
 | Recording metrics from a training job or container | `pip install vmn-exp-sdk` (`[s3]` for a bucket, `pynvml` for GPU `sys_*`) | none; `from vmn_exp.sdk import start_run` |
 
 `vmn-exp` pulls in `vmn` and `vmn-exp-sdk`, so one install gives you all three.
-A job image needs only `vmn-exp-sdk`: it records runs git-free, with
+A job image needs only `vmn-exp-sdk` (which pulls in `vmn` for its git-free
+store layer, without loading git): it records runs git-free, with
 `VMN_SNAPSHOT_METADATA` (from `vmn-exp export`) and `VMN_EXPERIMENT_DIR` or
 `VMN_EXPERIMENT_BUCKET`.
 
@@ -53,7 +54,7 @@ From a checkout (development): see "Repository layout" below, or run `uv sync`.
 |---|---|---|---|
 | `vmn` | `version_stamp` | `vmn` | GitPython, PyYAML, Jinja2, git-cliff, … (as today) |
 | `vmn-exp` | `vmn_exp.cli`, `.ui`, `.snapshot`, `.importers`, `.gitmode` | `vmn-exp` | `vmn<1`, `vmn-exp-sdk==<same version>`; extras `ui`, `s3`, `gcs`, `azure`, `mlflow`, `postgres`, `parquet` |
-| `vmn-exp-sdk` | `vmn_exp.sdk`, `.storage`, `.core`, `.registry`, `.integrations`, `._base` | none | PyYAML, filelock, psutil; extras `s3`, `gcs`, `azure`, `pandas` |
+| `vmn-exp-sdk` | `vmn_exp.sdk`, `.storage`, `.core`, `.registry`, `.integrations`, `._base` | none | PyYAML, filelock, psutil, `vmn>0.11.2,<1` (for `version_stamp.store`); extras `s3`, `gcs`, `azure`, `pandas` |
 
 `vmn_exp` is a PEP 420 namespace package: it has no `__init__.py`, and each
 subpackage belongs to exactly one distribution.
@@ -81,6 +82,11 @@ subpackage belongs to exactly one distribution.
   - names are deprecated before they are removed.
 - `import version_stamp.api` loads no `git` module (its names resolve lazily),
   so no change to the GitPython imports was needed.
+- `version_stamp.store` is a second public contract, the one the SDK uses: the
+  git-free store layer (record names, store areas and URIs, code objects,
+  per-process locks, S3 helpers). It imports only the stdlib, `yaml`,
+  `version_stamp.core.{utils,constants}` and itself (boto3 only lazily), and
+  follows the same rules as `version_stamp.api`.
 
 ### vmn-exp
 
@@ -106,19 +112,25 @@ subpackage belongs to exactly one distribution.
 - `vmn_exp._base` holds the few helpers the SDK used to take from
   `version_stamp` (logger, `now_iso`, path validation, `yaml_safe_load`,
   `sha256_file`, `resolve_root_path`, the repo lock); packages/vmn-exp/tests/test_exp_base.py
-  keeps each copy behaving like the original. They are copied, not shared, so the SDK has no dependency on
-  `vmn`. `parse_record_metadata` moves here, since the record format belongs to
+  keeps each copy behaving like the original. They were copied, not shared, when the SDK had no dependency on
+  `vmn`; it now depends on vmn for `version_stamp.store` only, and the copies
+  stay until they are folded into it (plan 37 P6). `parse_record_metadata` moves here, since the record format belongs to
   experiments.
 
 ## Import rules (enforced by tests)
 
 1. `version_stamp.*` never imports `vmn_exp` (packages/vmn-exp/tests/test_packaging_split.py).
-2. `vmn-exp-sdk` subpackages import neither `version_stamp` nor the `vmn-exp`
-   subpackages, except a lazy `vmn_exp.gitmode` import (same file).
+2. `vmn-exp-sdk` subpackages import `version_stamp` only through
+   `version_stamp.store`, and none of the `vmn-exp` subpackages except a lazy
+   `vmn_exp.gitmode` import (same file). `version_stamp.store` imports nothing
+   from vmn outside `version_stamp.core.{utils,constants}` (same file).
 3. `vmn-exp` subpackages import `version_stamp` only through `version_stamp.api`
    (same file).
-4. No path appears in two built wheels, and the SDK wheel alone records a run
-   with no `git` or `version_stamp` installed (packages/vmn-exp/tests/test_installation.py).
+4. No path appears in two built wheels, and the SDK and vmn wheels alone record
+   a run without `vmn_exp.cli` installed, loading no `git` and nothing of
+   `version_stamp` beyond `.store`, `.core` and `.version`
+   (packages/vmn-exp/tests/test_installation.py; packages/vmn-exp/tests/test_exp_import_boundary.py
+   checks the checkout).
 
 ## Repository layout
 
@@ -194,6 +206,11 @@ the PyPI release.
   version with its own `vmn exp`), since vmn-exp requires `vmn>0.10.2rc9,<1`;
   then vmn-exp and vmn-exp-sdk together (`make minor NAME=vmn_exp`, giving
   0.1.0 — 0.0.1 is taken by the placeholder).
+- Release vmn first whenever the exp packages need something new from it:
+  vmn-exp-sdk requires `vmn>0.11.2,<1` (0.11.2 is the last vmn without
+  `version_stamp.store`), so vmn 0.11.3 or later must be on PyPI before the
+  vmn_exp release that adds the pin. Between releases the workspace vmn carries
+  a `.devN` version above the pin, so editable installs satisfy it.
 - A project is created by its first upload, which needs an account-wide token.
   After that, switch to per-project tokens.
 
