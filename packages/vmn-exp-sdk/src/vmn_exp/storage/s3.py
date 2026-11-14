@@ -14,13 +14,12 @@ import hashlib
 import os
 import tempfile
 
-from vmn_exp import _base
+from version_stamp.store.s3_reads import read_record
 from vmn_exp._base import VMN_LOGGER
 from vmn_exp.storage.base import NO_FILE, SnapshotStorage
 from vmn_exp.storage.child_markers import S3Children
 from vmn_exp.storage.files import (
     METADATA_FILE,
-    PATCH_FILES,
     artifact_file_path,
     FILE_TREES,
     artifact_name_for,
@@ -53,36 +52,8 @@ class S3SnapshotStorage(
             return False  # not a record name, so certainly no record
         return self._head(f"{prefix}/{METADATA_FILE}")
 
-    def _get_patches(self, prefix):
-        patches = {}
-        for key, filename, binary in PATCH_FILES:
-            data = self._get(f"{prefix}/{filename}")
-            if data:
-                patches[key] = data if binary else data.decode("utf-8")
-        return patches
-
     def load_record(self, app_name, verstr):
-        prefix = self._record_prefix(app_name, verstr)
-        raw = self._get(f"{prefix}/{METADATA_FILE}")
-        if raw is None:
-            return None, None
-        metadata = _base.redact_record_remotes(_base.yaml_safe_load(raw))
-        if metadata.get("code"):
-            return metadata, {}  # a run's code lives in its code object
-        patches = self._get_patches(prefix)
-
-        dep_prefix = f"{prefix}/deps/"
-        dep_patches = {}
-        try:
-            for cp in self._common_prefixes(dep_prefix):
-                dp = self._get_patches(cp.rstrip("/"))
-                if dp:
-                    dep_patches[cp[len(dep_prefix) :].rstrip("/")] = dp
-        except Exception:
-            VMN_LOGGER.debug("Failed to list S3 dep patches", exc_info=True)
-        if dep_patches:
-            patches["deps"] = dep_patches
-        return metadata, patches
+        return read_record(self, self._record_prefix(app_name, verstr))
 
     def load_file(self, app_name, verstr, filename):
         return self._get(f"{self._record_prefix(app_name, verstr)}/{filename}")

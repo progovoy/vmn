@@ -1,16 +1,33 @@
 #!/usr/bin/env python3
-"""The S3 backend's client and key helpers, shared by its listing, record and
-log halves (:mod:`snapshot_storage_s3`)."""
+"""The S3 backend's client, shared by its listing, record and log halves
+(:mod:`vmn_exp.storage.s3`); key helpers and object primitives are core's
+(:mod:`version_stamp.store.s3_base`), error codes and client settings too.
 
-import copy
+:data:`S3_WORKERS` requests a call keeps in flight hide S3 latency at 10k+
+runs; a client pools :data:`MAX_POOL_CONNECTIONS` for every thread sharing
+it: the threads starting fan-outs plus the workers fan-outs share (fanout)."""
+
 import datetime
 import email.utils
 import functools
 import os
 
-from vmn_exp._base import VMN_LOGGER
-from vmn_exp.storage.base import NO_FILE
-from vmn_exp.storage.files import checked_app_path, safe_verstr
+from version_stamp.store.areas import app_key  # noqa: F401  (re-exported)
+from version_stamp.store.s3_base import S3_WORKERS, S3ObjectBase
+from version_stamp.store.s3_client import (  # noqa: F401  (re-exported)
+    CONNECT_TIMEOUT_SEC,
+    MAX_POOL_CONNECTIONS,
+    READ_TIMEOUT_SEC,
+    RETRIES,
+)
+from version_stamp.store.s3_errors import (  # noqa: F401  (re-exported)
+    MISSING_CODES,
+    TAKEN_CODES,
+    error_code,
+    is_missing,
+    is_taken,
+    put_condition,
+)
 from vmn_exp.storage.registry import missing_extra
 from vmn_exp.storage.s3_prefix_cap import cap_prefixes
 from vmn_exp.storage.s3_stats import instrument
@@ -18,53 +35,11 @@ from vmn_exp.storage.fanout import fan_out
 from vmn_exp.storage.fork_proxies import child_factory, environment_proxies_only
 from vmn_exp.storage.per_process import PerProcess
 
-# Requests one call keeps in flight: enough to hide S3 latency at 10k+ runs.
-S3_WORKERS = 10
-# Connections a client pools, for every thread sharing it (boto3's default: 10):
-# the threads starting fan-outs plus the workers fan-outs share (fanout).
-MAX_POOL_CONNECTIONS = 32 * S3_WORKERS
-# Every call is bounded: a stalled connection fails and is retried (adaptive
-# mode: standard's backoff with jitter and retry quota, plus a client-side
-# rate limit that a throttling store's SlowDown lowers) instead of holding an
-# index refresh; read_timeout is per socket read, not per transfer.
-CONNECT_TIMEOUT_SEC = 10
-READ_TIMEOUT_SEC = 30
-RETRIES = {"mode": "adaptive", "total_max_attempts": 5}
-MISSING_CODES = ("404", "NoSuchKey", "NotFound")
-TAKEN_CODES = ("412", "PreconditionFailed", "409", "ConditionalRequestConflict")
-
-
-def error_code(exc):
-    return ((getattr(exc, "response", None) or {}).get("Error") or {}).get("Code")
-
-
-def is_missing(exc):
-    """Whether *exc* says the object does not exist (not an access/transport error)."""
-    return error_code(exc) in MISSING_CODES or "NoSuchKey" in str(exc)
-
-
-def is_taken(exc):
-    """Whether *exc* is a failed write precondition (someone else got there)."""
-    return error_code(exc) in TAKEN_CODES
-
-
-def put_condition(etag):
-    """The ``put_object`` precondition of a write on version token *etag*
-    (:data:`NO_FILE`: only create; none: unconditional)."""
-    if etag == NO_FILE:
-        return {"IfNoneMatch": "*"}
-    return {"IfMatch": etag} if etag else {}
-
 
 def parallel_map(fn, items):
     """``[fn(item)]`` in order, at most :data:`S3_WORKERS` at a time, within
     the workers all fan-outs share (:mod:`~vmn_exp.storage.fanout`)."""
     return fan_out(fn, items, S3_WORKERS, "vmn-s3-parallel")
-
-
-def app_key(app_name):
-    """The app's key segment: the tag form (``root/svc`` → ``root-svc``)."""
-    return app_name.replace("/", "-")
 
 
 def boto3_client(endpoint_url=None, proxies=None):
@@ -146,17 +121,20 @@ def _injected(pid):
     )
 
 
-class S3Base:
-    """``client`` speaks the boto3 S3 client subset these halves use; other
-    object stores pass an adapter (:mod:`vmn_exp.storage.object_client`)."""
-
-    scheme = "s3"
+class S3Base(S3ObjectBase):
+    """Core's object primitives (:class:`~version_stamp.store.s3_base.S3ObjectBase`)
+    over a per-process, instrumented and prefix-capped client. ``client``
+    speaks the boto3 S3 client subset these halves use; other object stores
+    pass an adapter (:mod:`vmn_exp.storage.object_client`)."""
 
     def __init__(self, bucket, prefix="vmn/snapshots", endpoint_url=None, client=None,
                  client_factory=None, options=None):
         """*client_factory* builds *client* again in a forked child; without
         one an injected *client* refuses use there. *options*: the store
-        URI's query options (:meth:`uri_options`)."""
+        URI's query options (:meth:`uri_options`).
+
+        Not ``super().__init__``: core's assigns ``_s3``, a per-process
+        property here."""
         self.bucket = bucket
         self.prefix = prefix
         self.endpoint_url = endpoint_url
@@ -179,89 +157,11 @@ class S3Base:
     def _s3(self):
         return self._clients.get()
 
-    @property
-    def area(self):
-        return self.prefix.rpartition("/")[2]
+    # Fan-outs run in the workers all of them share (fanout), not a pool per call.
+    _map = staticmethod(parallel_map)
 
     def _open_area(self, name):
-        """This store's sibling area: ``<root>/<name>``, sharing the client."""
-        clone = copy.copy(self)
+        """Core's sibling area, minus this store's cached area clones."""
+        clone = super()._open_area(name)
         clone.__dict__.pop("_areas", None)
-        clone.prefix = f"{self.prefix.rpartition('/')[0]}/{name}".lstrip("/")
         return clone
-
-    # -- keys -----------------------------------------------------------------
-
-    def _key_prefix(self, app_name, verstr=None):
-        base = f"{self.prefix}/{app_key(checked_app_path(app_name))}"
-        return f"{base}/{safe_verstr(verstr)}" if verstr else base
-
-    def _record_prefix(self, app_name, verstr):
-        return self._key_prefix(app_name, verstr)
-
-    # -- client ---------------------------------------------------------------
-
-    def _head(self, key):
-        try:
-            self._s3.head_object(Bucket=self.bucket, Key=key)
-            return True
-        except Exception as e:
-            if not is_missing(e):
-                VMN_LOGGER.warning(f"S3 error checking {key}: {e}")
-            return False
-
-    def _get(self, key):
-        try:
-            return self._s3.get_object(Bucket=self.bucket, Key=key)["Body"].read()
-        except Exception as e:
-            if not is_missing(e):
-                VMN_LOGGER.debug(f"S3 error reading {key}", exc_info=True)
-            return None
-
-    def _get_or_raise(self, key):
-        """*key*'s bytes, None when it is missing; any other failure raises."""
-        return self._get_with_etag(key)[0]
-
-    def _get_with_etag(self, key):
-        """``(bytes, etag)`` of *key*, ``(None, None)`` when it is missing."""
-        try:
-            resp = self._s3.get_object(Bucket=self.bucket, Key=key)
-        except Exception as e:
-            if is_missing(e):
-                return None, None
-            raise
-        return resp["Body"].read(), resp["ETag"]
-
-    def _put(self, key, data, **kwargs):
-        body = data.encode("utf-8") if isinstance(data, str) else data
-        return self._s3.put_object(Bucket=self.bucket, Key=key, Body=body, **kwargs)
-
-    def _create(self, key, data):
-        """Create *key* unless it exists (``If-None-Match``); whether it did."""
-        try:
-            self._put(key, data, IfNoneMatch="*")
-        except Exception as e:
-            if is_taken(e):
-                return False
-            raise
-        return True
-
-    def _pages(self, **params):
-        """Every ``list_objects_v2`` page for *params*, following continuations."""
-        params = dict(params, Bucket=self.bucket)
-        while True:
-            page = self._s3.list_objects_v2(**params)
-            yield page
-            if not page.get("IsTruncated"):
-                return
-            params["ContinuationToken"] = page["NextContinuationToken"]
-
-    def _objects(self, prefix):
-        for page in self._pages(Prefix=prefix):
-            yield from page.get("Contents", [])
-
-    def _common_prefixes(self, prefix):
-        found = []
-        for page in self._pages(Prefix=prefix, Delimiter="/"):
-            found.extend(cp["Prefix"] for cp in page.get("CommonPrefixes", []))
-        return found
