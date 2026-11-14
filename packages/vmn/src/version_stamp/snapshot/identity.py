@@ -1,31 +1,22 @@
 """Snapshot identity: record names, diff hashes and dev verstrs.
 
-A leaf module (it imports only ``version_stamp.core``), shared by
-:mod:`version_stamp.devversion.capture` and :mod:`version_stamp.snapshot.record`.
+A leaf module (it imports only ``version_stamp.core`` and
+``version_stamp.store``), shared by :mod:`version_stamp.devversion.capture` and
+:mod:`version_stamp.snapshot.record`. The record names live in
+:mod:`version_stamp.store.names` and are re-exported here.
 """
 import hashlib
-import os
 
-from version_stamp.core.utils import parse_record_metadata, valid_path_component
+from version_stamp.core.utils import parse_record_metadata
+from version_stamp.store.names import (  # noqa: F401  (re-exported)
+    safe_dep_name,
+    safe_verstr,
+    unsafe_verstr,
+)
 
 # Diff-hash prefix lengths tried, shortest first, when a verstr is taken by a
 # snapshot with different content (a 7-hex prefix is only 28 bits).
 _DIFF_HASH_LENGTHS = (7, 12, 16, 24, 32, 64)
-
-
-def safe_verstr(verstr):
-    """*verstr* as a record directory name; ValueError if it would walk."""
-    if not valid_path_component(verstr):
-        raise ValueError(f"Invalid record name: {verstr!r}")
-    return verstr.replace("+", "_plus_")
-
-
-def unsafe_verstr(name):
-    return name.replace("_plus_", "+")
-
-
-def safe_dep_name(dep_path):
-    return dep_path.replace(os.sep, "_").replace("/", "_")
 
 
 def _compute_diff_hash(patches):

@@ -1,7 +1,7 @@
 """The snapshot record format: file names, record names and metadata fields.
 
 Public:
-  - ``METADATA_FILE``, ``PATCH_FILES`` — same as ``vmn_exp.storage.files``.
+  - ``METADATA_FILE``, ``PATCH_FILES`` — re-exported from :mod:`version_stamp.store.names`.
   - ``skipped_untracked(patches) -> list``, ``patch_summary(patches) -> dict``.
   - ``build_record_metadata(vcs, verstr, base_version, commit_hash,
     dirty_states, patches, ver_info, note=None, code=None, diff_hash=None)
@@ -10,14 +10,7 @@ Public:
 """
 from version_stamp.core.utils import now_iso, redact_record_remotes
 from version_stamp.snapshot import identity
-
-METADATA_FILE = "metadata.yml"
-# (patches key, file name, binary?)
-PATCH_FILES = (
-    ("working_tree", "working_tree.patch", False),
-    ("local_commits", "local_commits.patch", False),
-    ("untracked_files", "untracked_files.tar.gz", True),
-)
+from version_stamp.store.names import METADATA_FILE, PATCH_FILES  # noqa: F401  (re-exported)
 
 
 def skipped_untracked(patches):

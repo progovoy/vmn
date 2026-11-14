@@ -33,33 +33,21 @@ from version_stamp.core.utils import (
     atomic_write,
     parse_record_metadata,
     redact_record_remotes,
-    valid_app_path,
     yaml_safe_load,
 )
-from version_stamp.snapshot.code_store import resolve_code
-from version_stamp.snapshot.identity import safe_dep_name, safe_verstr, unsafe_verstr
-from version_stamp.snapshot.record import METADATA_FILE, PATCH_FILES
-
-
-def _write_patches(directory, patches):
-    """Write the patch files *patches* carries and drop the ones it lacks."""
-    for key, filename, binary in PATCH_FILES:
-        path = os.path.join(directory, filename)
-        content = patches.get(key)
-        if not content:
-            if os.path.lexists(path):
-                os.unlink(path)
-            continue
-        atomic_write(path, content if binary else content.encode("utf-8"))
-
-
-def _read_file(path):
-    try:
-        with open(path, "rb") as f:
-            return f.read()
-    except (FileNotFoundError, NotADirectoryError):
-        return None
-
+from version_stamp.store.areas import CODE, SNAPSHOTS, app_key, local_store_root
+from version_stamp.store.code import resolve_code
+from version_stamp.store.names import (
+    METADATA_FILE,
+    apply_metadata_updates,
+    checked_app_path,
+    read_file,
+    read_patches_from_dir,
+    safe_dep_name,
+    safe_verstr,
+    unsafe_verstr,
+    write_patches_to_dir,
+)
 
 # The record format vmn-exp reads these records as (vmn_exp.core.record_format).
 RECORD_FORMAT_VERSION = 1
@@ -70,15 +58,6 @@ def _write_metadata(record_dir, metadata):
     atomic_write(os.path.join(record_dir, METADATA_FILE), yaml.dump(metadata, sort_keys=True))
 
 
-def _read_patches(directory):
-    patches = {}
-    for key, filename, binary in PATCH_FILES:
-        data = _read_file(os.path.join(directory, filename))
-        if data is not None:
-            patches[key] = data if binary else data.decode("utf-8")
-    return patches
-
-
 def _read_dep_patches(record_dir):
     deps_dir = os.path.join(record_dir, "deps")
     if not os.path.isdir(deps_dir):
@@ -86,22 +65,16 @@ def _read_dep_patches(record_dir):
     found = {}
     for name in os.listdir(deps_dir):
         dep_dir = os.path.join(deps_dir, name)
-        patches = _read_patches(dep_dir) if os.path.isdir(dep_dir) else None
+        patches = read_patches_from_dir(dep_dir) if os.path.isdir(dep_dir) else None
         if patches:
             found[name] = patches
     return found
 
 
-def _app_key(app_name):
-    if not valid_app_path(app_name):
-        raise ValueError(f"Invalid app name: {app_name!r}")
-    return app_name.replace("/", "-")
-
-
 def _v1_parts(kind, app_name):
-    if kind == "snapshots":
+    if kind == SNAPSHOTS:
         return [*app_name.split("/"), "snapshots"]
-    if kind == "code":
+    if kind == CODE:
         return ["vmn-code", app_name.replace("/", "~"), "experiments"]
     return None
 
@@ -113,7 +86,7 @@ def _is_snapshot_record(metadata):
 
 
 def _move_v1_record(src, dst):
-    raw = _read_file(os.path.join(src, METADATA_FILE))
+    raw = read_file(os.path.join(src, METADATA_FILE))
     if raw is None or os.path.lexists(dst):
         return
     metadata = yaml_safe_load(raw)
@@ -142,10 +115,10 @@ class LocalRecordStore:
         self._adopted = set()
 
     def _store_root(self):
-        return os.path.join(self.vmn_root_path, ".vmn", "store")
+        return local_store_root(self.vmn_root_path)
 
     def _base_dir(self, app_name):
-        base = os.path.join(self._store_root(), self.kind, _app_key(app_name))
+        base = os.path.join(self._store_root(), self.kind, app_key(checked_app_path(app_name)))
         if app_name not in self._adopted:
             self._adopted.add(app_name)
             self._adopt_v1(app_name, base)
@@ -177,25 +150,25 @@ class LocalRecordStore:
         self._ensure_base_dir(app_name)
         record_dir = self._record_dir(app_name, verstr)
         Path(record_dir).mkdir(exist_ok=True)
-        _write_patches(record_dir, patches)
+        write_patches_to_dir(record_dir, patches)
         for dep_path, dep_patches in patches.get("deps", {}).items():
             dep_dir = os.path.join(record_dir, "deps", safe_dep_name(dep_path))
             Path(dep_dir).mkdir(parents=True, exist_ok=True)
-            _write_patches(dep_dir, dep_patches)
+            write_patches_to_dir(dep_dir, dep_patches)
         _write_metadata(record_dir, metadata)
 
     def load_file(self, app_name, verstr, filename):
-        return _read_file(os.path.join(self._record_dir(app_name, verstr), filename))
+        return read_file(os.path.join(self._record_dir(app_name, verstr), filename))
 
     def load_metadata(self, app_name, verstr):
         return parse_record_metadata(self.load_file(app_name, verstr, METADATA_FILE))
 
     def load_record(self, app_name, verstr):
         record_dir = self._record_dir(app_name, verstr)
-        raw = _read_file(os.path.join(record_dir, METADATA_FILE))
+        raw = read_file(os.path.join(record_dir, METADATA_FILE))
         if raw is None:
             return None, None
-        patches = _read_patches(record_dir)
+        patches = read_patches_from_dir(record_dir)
         deps = _read_dep_patches(record_dir)
         if deps:
             patches["deps"] = deps
@@ -230,23 +203,17 @@ class LocalRecordStore:
 
     def list_snapshots(self, app_name):
         found = (
-            parse_record_metadata(_read_file(os.path.join(entry.path, METADATA_FILE)))
+            parse_record_metadata(read_file(os.path.join(entry.path, METADATA_FILE)))
             for entry in self._record_dirs(app_name)
         )
         return sorted((m for m in found if m is not None), key=lambda m: m.get("timestamp", ""))
 
     def update_metadata(self, app_name, verstr, updates):
         record_dir = self._record_dir(app_name, verstr)
-        raw = _read_file(os.path.join(record_dir, METADATA_FILE))
+        raw = read_file(os.path.join(record_dir, METADATA_FILE))
         if raw is None:
             return False
-        metadata = yaml_safe_load(raw)
-        for key, value in updates.items():
-            if value is None:
-                metadata.pop(key, None)
-            else:
-                metadata[key] = value
-        _write_metadata(record_dir, metadata)
+        _write_metadata(record_dir, apply_metadata_updates(yaml_safe_load(raw), updates))
         return True
 
     def update_note(self, app_name, verstr, note):
