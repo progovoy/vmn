@@ -5,7 +5,7 @@ import statistics
 import time
 
 import pytest
-from bench_timing import fastest_each
+from bench_timing import fastest_until
 from fakes.clock import FakeClock
 from leaderboard_fleet import T0, Fleet
 from vmn_exp.ui.leaderboard_cache import LeaderboardCache
@@ -38,10 +38,12 @@ def fleet():
 @pytest.mark.parametrize("group,slack", [("parent", 0.05), ("code_verstr", 0.3), ("status", 0.05)])
 def test_a_grouped_page_costs_about_what_a_flat_page_costs(fleet, group, slack):
     passes = []
-    # Each step is how far the grouped page went past what its check allows:
-    # within its budget is the check holding.
-    budgets = {"cold": slack, "next": slack, "warm": 0.0, "warm_floor": 0.005}
-    took = fastest_each(lambda: _pass(fleet, group, passes), budgets)
+    # Each step is how far the grouped page went past what its check allows.
+    def holds(took):
+        return (took["cold"] < slack and took["next"] < slack
+                and (took["warm"] < 0 or took["warm_floor"] < 0.005))
+
+    took = fastest_until(lambda: _pass(fleet, group, passes), holds)
     (grouped_cold, flat_cold), (grouped_warm, flat_warm), nexts = passes[-1]
     print(f"\n{group}: uncontended excess {took}")
     assert took["cold"] < slack, (grouped_cold, flat_cold)

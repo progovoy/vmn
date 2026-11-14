@@ -94,10 +94,11 @@ def _cold_load(storage, db, indexes):
 
 @pytest.mark.serial
 def test_a_cold_index_loads_a_remote_store_at_a_sustained_rate(endpoint, tmp_path):
-    storage = open_store(f"s3://{s3bench.BUCKET}/{s3bench.ROOT}?endpoint_url={endpoint}", env=os.environ)
+    url = f"s3://{s3bench.BUCKET}/{s3bench.ROOT}?endpoint_url={endpoint}"
     indexes = []
-    took = fastest_each(
-        lambda: _cold_load(storage, str(tmp_path / f"idx{len(indexes)}.sqlite"), indexes), BUDGETS)
+    took = fastest_each(  # each load by a storage that has read nothing yet
+        lambda: _cold_load(open_store(url, env=os.environ),
+                           str(tmp_path / f"idx{len(indexes)}.sqlite"), indexes), BUDGETS)
     first = None if took["first"] == float("inf") else took["first"]
     rate = PARAMS["runs"] / took["rest"]
     print(f"\n{PARAMS['runs']} runs at {LATENCY_MS} ms: first publish {first}s, "
