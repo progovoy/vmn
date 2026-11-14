@@ -12,6 +12,12 @@ The v1 layout's snapshots (``.vmn/<app>/snapshots/``) and code objects
 (``.vmn/vmn-code/<app~>/experiments/``) move here on first use of an app
 (docs/plans/14-store-layout.md §4); runs are left to ``vmn-exp migrate``.
 
+``LocalRecordStore.at_root(store_root, kind, code_store=None)`` is the same
+store on a shared directory (``file://``, NFS):
+``<store_root>/<kind>/<app-key>/<safe verstr>/``, the ``.gitignore`` in
+*store_root*, no v1 adoption. Its ``root``/``area`` make it a marker root
+(``version_stamp.store.marker.root_of``).
+
 ``LocalRecordStore(vmn_root_path, kind="snapshots", code_store=None)``:
   - ``save(app, verstr, metadata, patches)``
   - ``load_record(app, verstr) -> (metadata, patches) | (None, None)``
@@ -113,13 +119,21 @@ class LocalRecordStore:
         self.kind = kind
         self.code_store = self if code_store is None else code_store
         self._adopted = set()
+        self._root = None
+
+    @classmethod
+    def at_root(cls, store_root, kind, code_store=None):
+        store = cls(None, kind, code_store)
+        store._root = store.root = store_root
+        store.area = kind
+        return store
 
     def _store_root(self):
-        return local_store_root(self.vmn_root_path)
+        return self._root or local_store_root(self.vmn_root_path)
 
     def _base_dir(self, app_name):
         base = os.path.join(self._store_root(), self.kind, app_key(checked_app_path(app_name)))
-        if app_name not in self._adopted:
+        if self._root is None and app_name not in self._adopted:
             self._adopted.add(app_name)
             self._adopt_v1(app_name, base)
         return base
