@@ -11,6 +11,7 @@ from version_stamp.store.config import (
     drop_remote_if_offline,
     resolve_store,
     resolve_store_uri,
+    store_options,
     store_params,
 )
 
@@ -182,3 +183,11 @@ def test_resolve_store_local_and_offline_have_no_options():
     assert resolve_store({"local": True}, env, NO_CONF) == (None, None)
     offline = dict(env, VMN_EXP_OFFLINE="1")
     assert resolve_store({}, offline, NO_CONF) == (None, None)
+
+
+def test_store_options_carry_a_configured_endpoint():
+    assert store_options({"endpoint_url": "http://m"}) == {"s3": {"endpoint_url": "http://m"}}
+
+
+def test_store_options_are_none_without_an_endpoint():
+    assert store_options({"store": "s3://b/p"}) is None

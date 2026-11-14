@@ -101,11 +101,15 @@ def resolve_store_uri(params, env, conf):
     return store_uri(_resolved_params(params, env, conf))
 
 
+def store_options(params):
+    """The backend options a configured ``endpoint_url`` gives absolute
+    ``s3://`` reads when no store URI carries it (the SDK's lent options),
+    None without one."""
+    endpoint_url = params.get("endpoint_url")
+    return {"s3": {"endpoint_url": endpoint_url}} if endpoint_url else None
+
+
 def resolve_store(params, env, conf):
-    """``(uri, options)``: :func:`resolve_store_uri` and the backend options a
-    configured ``endpoint_url`` gives absolute ``s3://`` reads (the SDK's
-    lent options), None without one."""
+    """``(uri, options)``: :func:`resolve_store_uri` and :func:`store_options`."""
     resolved = _resolved_params(params, env, conf)
-    endpoint_url = resolved.get("endpoint_url")
-    options = {"s3": {"endpoint_url": endpoint_url}} if endpoint_url else None
-    return store_uri(resolved), options
+    return store_uri(resolved), store_options(resolved)
