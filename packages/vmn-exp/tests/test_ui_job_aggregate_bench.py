@@ -5,6 +5,7 @@ of a few changed trials in under ~20 ms. Timed, so serial."""
 import time
 
 import pytest
+from bench_timing import fastest
 from vmn_exp.core.index_snapshot import IndexSnapshot
 from vmn_exp.core.log import experiment_row
 from vmn_exp.ui.job_aggregate import JobAgg
@@ -14,6 +15,7 @@ TRAININGS, DATES, TRIALS = 45, 16, 1000
 SCHEMA = {"best_value": {"goal": "max", "primary": True}, "date.best_value": {"goal": "max"}}
 AGGS = [JobAgg("median"), JobAgg("median", "field:params.trade_date", "own", "date.best_value")]
 DONE = {"state": "finished", "exit_code": 0}
+ROLLED_SEC = 0.020
 
 
 def _row(i, verstr, parent, params, values):
@@ -61,7 +63,9 @@ def test_rolled_answers_a_new_generation_in_milliseconds():
     for agg in AGGS:
         assert len(cache.job_aggregates.rolled(snap, SCHEMA, agg)) == TRAININGS
     timings = []
-    for _ in range(3):
+
+    def rolled():
+        """A new generation of a few improved trials: seconds to roll it."""
         board.improve(5)
         snap = board.snapshot()
         # The Jobs page derives what every answer shares: base, job tree, rollups.
@@ -70,5 +74,9 @@ def test_rolled_answers_a_new_generation_in_milliseconds():
         for agg in AGGS:
             cache.job_aggregates.rolled(snap, SCHEMA, agg)
         timings.append(time.perf_counter() - start)
-    print(f"\nrolled after a delta (ms): {[round(t * 1000, 1) for t in timings]}")
-    assert min(timings) <= 0.020, timings
+        return timings[-1]
+
+    took = fastest(rolled, ROLLED_SEC)
+    print(f"\nrolled after a delta (ms): {[round(t * 1000, 1) for t in timings]}, "
+          f"fastest uncontended {took * 1000:.1f}")
+    assert took <= ROLLED_SEC, timings
