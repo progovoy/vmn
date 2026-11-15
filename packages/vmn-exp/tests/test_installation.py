@@ -199,7 +199,7 @@ def test_the_sdk_alone_records_and_reads_a_git_free_run(sdk_venv, tmp_path):
         "assert row['metrics']['accuracy'] == 0.95, row\n"
         "assert not [m for m in sys.modules if m.split('.')[0] in ('git', 'gitdb')]\n"
         "vs = [m for m in sys.modules if m.split('.')[0] == 'version_stamp']\n"
-        "allowed = ('version_stamp', 'version_stamp.version')\n"
+        "allowed = ('version_stamp', 'version_stamp.version', 'version_stamp.core')\n"
         "assert not [m for m in vs if m not in allowed\n"
         "            and not m.startswith(('version_stamp.core.', 'version_stamp.store'))], vs\n",
         cwd=str(tmp_path),

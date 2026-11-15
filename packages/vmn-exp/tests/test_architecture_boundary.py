@@ -46,6 +46,18 @@ EXEMPT_PREFIXES = ()
 # The ONE stamping module that experiments are allowed to import (future facade)
 ALLOWED_FACADE = "version_stamp.api"
 
+# The git-free store layer: the second public contract experiments may import,
+# with its submodules (docs/plans/37-s3-snapshot-store-in-core.md).
+ALLOWED_CONTRACT_PACKAGE = "version_stamp.store"
+
+
+def _is_allowed_contract(mod: str) -> bool:
+    return (
+        mod == ALLOWED_FACADE
+        or mod == ALLOWED_CONTRACT_PACKAGE
+        or mod.startswith(ALLOWED_CONTRACT_PACKAGE + ".")
+    )
+
 # Future vmn_exp package also counts as experiments if it exists
 VMN_EXP_PACKAGE = "vmn_exp"
 
@@ -168,8 +180,8 @@ def _scan_violations() -> frozenset:
             # stamping → experiments (never allowed)
             if is_stamp_mod and _is_exp(imp):
                 violations.add((mod_name, imp))
-            # experiments → stamping (only ALLOWED_FACADE is ok)
-            elif is_exp_mod and _is_stamping(imp) and imp != ALLOWED_FACADE:
+            # experiments → stamping (only the facade and the store layer are ok)
+            elif is_exp_mod and _is_stamping(imp) and not _is_allowed_contract(imp):
                 violations.add((mod_name, imp))
 
     # Also scan vmn_exp/ if it exists (future package)
@@ -178,7 +190,7 @@ def _scan_violations() -> frozenset:
             mod_name = _module_name(py_file)
             source = py_file.read_text()
             for imp in _collect_raw_imports(source, mod_name):
-                if imp.startswith("version_stamp") and _is_stamping(imp) and imp != ALLOWED_FACADE:
+                if imp.startswith("version_stamp") and _is_stamping(imp) and not _is_allowed_contract(imp):
                     violations.add((mod_name, imp))
 
     return frozenset(violations)
