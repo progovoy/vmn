@@ -42,16 +42,33 @@ def _asgi_get(app, raw_path, headers=()):
     }
     out = {"status": None, "body": b""}
 
-    async def receive():
-        return {"type": "http.request", "body": b"", "more_body": False}
+    async def run():
+        # As a server does: the request once, then receive blocks until the
+        # response is complete and reports the client gone. An app that
+        # watches for a disconnect while it streams (starlette's FileResponse)
+        # would otherwise spin on an always-ready receive.
+        requested = False
+        responded = asyncio.Event()
 
-    async def send(message):
-        if message["type"] == "http.response.start":
-            out["status"] = message["status"]
-        elif message["type"] == "http.response.body":
-            out["body"] += message.get("body", b"")
+        async def receive():
+            nonlocal requested
+            if not requested:
+                requested = True
+                return {"type": "http.request", "body": b"", "more_body": False}
+            await responded.wait()
+            return {"type": "http.disconnect"}
 
-    asyncio.run(app(scope, receive, send))
+        async def send(message):
+            if message["type"] == "http.response.start":
+                out["status"] = message["status"]
+            elif message["type"] == "http.response.body":
+                out["body"] += message.get("body", b"")
+                if not message.get("more_body", False):
+                    responded.set()
+
+        await app(scope, receive, send)
+
+    asyncio.run(run())
     return out["status"], out["body"]
 
 
