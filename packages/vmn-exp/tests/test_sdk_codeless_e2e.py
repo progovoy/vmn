@@ -6,11 +6,24 @@ import subprocess
 
 from exp_helpers import _PY, _SRC_PATH
 
-# As if only vmn-exp-sdk were installed: no git mode, no core vmn.
+# As if only vmn-exp-sdk were installed: no git mode, no GitPython, and of
+# core vmn (an SDK dependency since plan 45) only the git-free store layer.
 _SDK_ONLY = """
 import sys
 sys.modules["vmn_exp.gitmode"] = None
-sys.modules["version_stamp"] = None
+sys.modules["git"] = None
+
+class _OnlyTheStore:
+    _VMN = ("version_stamp", "version_stamp.version", "version_stamp.core",
+            "version_stamp.core.utils", "version_stamp.core.constants", "version_stamp.store")
+
+    def find_spec(self, name, path=None, target=None):
+        if name.startswith("version_stamp") and name not in self._VMN \\
+                and not name.startswith("version_stamp.store."):
+            raise ImportError(f"{name} is not part of an SDK-only install")
+        return None
+
+sys.meta_path.insert(0, _OnlyTheStore())
 """
 
 _LOG_LOSS = """
