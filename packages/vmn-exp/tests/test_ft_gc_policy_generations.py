@@ -2,12 +2,13 @@
 off and collects on a clock that stretches to an hour while collections
 find little. That is safe only while serving index generations makes no
 cyclic garbage: each generation's old snapshot must be freed by reference
-counting, not wait up to an hour for the collector. The S3 storage path and
-an HTTP board poll make a few dozen cyclic objects each (botocore, the test
-client), far below what shortens the clock (``MUCH_GARBAGE``)."""
+counting, not wait up to an hour for the collector. The S3 storage path
+makes a few dozen cyclic objects (botocore), and an HTTP board poll at most
+a few, far below what shortens the clock (``MUCH_GARBAGE``)."""
 import gc
 
 import pytest
+from asgi_driver import AsgiDriver
 from fakes.clock import FakeClock
 from leaderboard_fleet import T0
 from test_ui_generation_memory import SCHEMA, _fleet, _serve, _snapshot
@@ -107,19 +108,21 @@ def test_an_s3_index_refresh_makes_little_cyclic_garbage(monkeypatch, tmp_path):
 
 
 def test_an_http_board_poll_makes_little_cyclic_garbage(tmp_path):
-    from fastapi.testclient import TestClient
-
+    """Polls drive the app as uvicorn serves it (:mod:`asgi_driver`): since
+    starlette 1.9 its TestClient leaves ~170 cyclic objects per request of its
+    own (an ``EndOfStream`` traceback through anyio's blocking portal)."""
     app, storage = _app(tmp_path)
     for i in range(300):
         _run(storage, i, loss=i * 0.1, lr=i)
-    client = TestClient(app)
     routes = [f"{BASE}/experiments?limit=50", f"{BASE}/experiments-status",
               f"{BASE}/experiments-facets", f"{BASE}/experiments-baselines"]
-    for route in routes:
-        client.get(route)
-    gc.collect()
-    garbage = []
-    for route in routes * 5:
-        assert client.get(route).status_code == 200
-        garbage.append(gc.collect())
+    with AsgiDriver(app) as server:
+        for route in routes:
+            server.get(route)
+        gc.collect()
+        garbage = []
+        for route in routes * 5:
+            status, _ = server.get(route)
+            assert status == 200
+            garbage.append(gc.collect())
     assert max(garbage) < PER_HTTP_POLL, garbage
