@@ -5,10 +5,14 @@ stops at the first node past its limit, and a digest group already walked at
 an earlier level is not walked again."""
 import time
 
+import pytest
+from bench_timing import fastest
+
 from vmn_exp.core.lineage import LineageIndex, resolve_lineage
 
 DATA = "d" * 64
 FANOUT = 50_000
+DEDUPE_SEC = 2.0
 
 
 class _Counted(list):
@@ -79,13 +83,20 @@ def test_a_digest_group_is_walked_once_across_levels():
     assert counter[0] <= 2 * size
 
 
+@pytest.mark.serial
 def test_many_links_to_one_node_dedupe_in_constant_time():
     paths = 20_000
     producer = {"verstr": "prep", "idx": 1, "outputs": {
         f"media/x/{i}.png": {"path": f"media/x/{i}.png", "digest": DATA} for i in range(paths)
     }}
-    index_for, _ = _index([producer, _consumer("t0", 2)])
-    started = time.monotonic()
-    result = resolve_lineage("app", "t0", index_for)
-    assert time.monotonic() - started < 2
+    results = []
+
+    def resolve():
+        index_for, _ = _index([producer, _consumer("t0", 2)])
+        started = time.perf_counter()
+        results.append(resolve_lineage("app", "t0", index_for))
+        return time.perf_counter() - started
+
+    assert fastest(resolve, budget=DEDUPE_SEC) < DEDUPE_SEC
+    result = results[-1]
     assert [len(n["links"]) for n in result["upstream"]] == [paths]

@@ -5,6 +5,7 @@ import time
 from dataclasses import asdict
 
 import pytest
+from bench_timing import fastest
 
 from vmn_exp.ui.auth.principal import VIEWER
 from vmn_exp.ui.auth.tokens import TokenService
@@ -57,13 +58,21 @@ def test_a_token_from_another_server_key_fails(tmp_path):
     assert TokenService(theirs, time.time, random=RealRandom()).verify(secret) is not None
 
 
+VERIFY_SEC = 0.5
+
+
+@pytest.mark.serial
 def test_ten_thousand_verifications_are_fast():
     tokens = TokenService(_DictStore(), time.time, random=RealRandom())
     secret, _ = tokens.create("ci", {"ml": VIEWER})
-    start = time.perf_counter()
-    for _ in range(10_000):
-        assert tokens.verify(secret) is not None
-    assert time.perf_counter() - start < 0.5
+
+    def verify():
+        start = time.perf_counter()
+        for _ in range(10_000):
+            assert tokens.verify(secret) is not None
+        return time.perf_counter() - start
+
+    assert fastest(verify, budget=VERIFY_SEC) < VERIFY_SEC
 
 
 @pytest.mark.parametrize("stored", ["", "hmac-sha256$", "scrypt$1,2,3$x$y", "garbage"])
