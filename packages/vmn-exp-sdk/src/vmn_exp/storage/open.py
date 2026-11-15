@@ -44,7 +44,7 @@ def open_storage(store=None, root=None, area=SNAPSHOTS, buffer_logs=False, write
     if remote is None:
         raise ValueError(
             "No experiment storage: pass --store/--dir (or set "
-            "VMN_EXPERIMENT_STORE / VMN_EXPERIMENT_DIR)"
+            "VMN_STORE / VMN_EXPERIMENT_DIR)"
         )
     if buffer_logs:
         from vmn_exp.storage.buffered import BufferedRemoteStorage
