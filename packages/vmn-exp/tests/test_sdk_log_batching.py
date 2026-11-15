@@ -283,17 +283,22 @@ def test_logging_to_a_deleted_run_warns_once(storage, monkeypatch, caplog):
     run = _open_run(storage, heartbeat=3600)
     storage.delete(APP, VERSTR)
 
-    with caplog.at_level("WARNING", logger="vmn_exp.sdk.run"):
-        run.log_metric("loss", 0.5, step=1)
-        run.log_note("lost")
-        run._log_buffer.flush()
-        run.log_metric("loss", 0.4, step=2)
-        run._log_buffer.flush()
+    try:
+        with caplog.at_level("WARNING", logger="vmn_exp.sdk.run"):
+            run.log_metric("loss", 0.5, step=1)
+            run.log_note("lost")
+            run._log_buffer.flush()
+            run.log_metric("loss", 0.4, step=2)
+            run._log_buffer.flush()
 
-    warnings = [r.getMessage() for r in caplog.records if "no longer exists" in r.getMessage()]
-    assert warnings == [f"vmn: run {run.id} no longer exists in the store; "
-                        "1 entries were not recorded"]
-    run._log_buffer.discard()
+        warnings = [r.getMessage() for r in caplog.records if "no longer exists" in r.getMessage()]
+        assert warnings == [f"vmn: run {run.id} no longer exists in the store; "
+                            "1 entries were not recorded"]
+    finally:
+        # The run was opened, so it must be closed: discarding the buffer
+        # alone left its heartbeat thread (and its registry entry) behind.
+        run._log_buffer.discard()
+        run.finish()
 
 
 @pytest.fixture
