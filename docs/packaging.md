@@ -15,8 +15,9 @@ design, the section says so under "Differs from the design".
 `vmn-exp` pulls in `vmn` and `vmn-exp-sdk`, so one install gives you all three.
 A job image needs only `vmn-exp-sdk` (which pulls in `vmn` for its git-free
 store layer, without loading git): it records runs git-free, with
-`VMN_SNAPSHOT_METADATA` (from `vmn-exp export`) and `VMN_EXPERIMENT_DIR` or
-`VMN_EXPERIMENT_BUCKET`.
+`VMN_SNAPSHOT_METADATA` (from `vmn-exp export`) and `VMN_EXPERIMENT_DIR` and/or
+`VMN_STORE` (the legacy `VMN_EXPERIMENT_STORE`/`VMN_EXPERIMENT_BUCKET` still
+work).
 
 Upgrading from vmn 0.10.x or earlier, where `vmn exp`, `vmn model` and `vmn ui`
 were part of `vmn`: install `vmn-exp` and use `vmn-exp …` instead (for example
@@ -52,9 +53,9 @@ From a checkout (development): see "Repository layout" below, or run `uv sync`.
 
 | Install | Import packages | Commands | Depends on |
 |---|---|---|---|
-| `vmn` | `version_stamp` | `vmn` | GitPython, PyYAML, Jinja2, git-cliff, … (as today) |
+| `vmn` | `version_stamp` | `vmn` | GitPython, PyYAML, Jinja2, git-cliff, …; extra `s3` (boto3, for `vmn snapshot --store s3://`) |
 | `vmn-exp` | `vmn_exp.cli`, `.ui`, `.snapshot`, `.importers`, `.gitmode` | `vmn-exp` | `vmn<1`, `vmn-exp-sdk==<same version>`; extras `ui`, `s3`, `gcs`, `azure`, `mlflow`, `postgres`, `parquet` |
-| `vmn-exp-sdk` | `vmn_exp.sdk`, `.storage`, `.core`, `.registry`, `.integrations`, `._base` | none | PyYAML, filelock, psutil, `vmn>0.11.2,<1` (for `version_stamp.store`); extras `s3`, `gcs`, `azure`, `pandas` |
+| `vmn-exp-sdk` | `vmn_exp.sdk`, `.storage`, `.core`, `.registry`, `.integrations`, `._base` | none | PyYAML, filelock, psutil, `vmn>0.11.2,<1` (for `version_stamp.store`); extras `s3` (boto3, the same package `vmn[s3]` adds), `gcs`, `azure`, `pandas` |
 
 `vmn_exp` is a PEP 420 namespace package: it has no `__init__.py`, and each
 subpackage belongs to exactly one distribution.
@@ -72,10 +73,13 @@ subpackage belongs to exactly one distribution.
   alone cannot restore one; installing `vmn-exp` adds it. The plugin hook
   replaced the hardcoded `BUILTIN_PLUGINS` list rather than being removed.
 - **`vmn snapshot`** is built in (`version_stamp.snapshot`): it records and
-  restores working state in local stores with `vmn` alone. `vmn-exp` registers
-  a snapshot store opener (`plugin_api.register_snapshot_store_opener`) so
-  `--store`/`VMN_EXPERIMENT_STORE`/conf `experiment.storage.uri` put snapshots
-  in a remote store. See [snapshots.md](snapshots.md).
+  restores working state with `vmn` alone, in the repo-local stores or in an
+  `s3://` (`pip install 'vmn[s3]'`) or `file://` store named by `--store`,
+  `VMN_STORE*` (then the legacy `VMN_EXPERIMENT_*`) or conf `store:` (then the
+  legacy `experiment.storage`, which `vmn stamp` moves to `store:`). `vmn-exp`
+  registers a snapshot store opener
+  (`plugin_api.register_snapshot_store_opener`) that takes over when it is
+  installed and adds its other backends (`gs://`, `az://`). See [snapshots.md](snapshots.md).
 - `version_stamp.api` becomes vmn's public, versioned contract:
   - documented;
   - covered by contract tests;
@@ -83,10 +87,15 @@ subpackage belongs to exactly one distribution.
 - `import version_stamp.api` loads no `git` module (its names resolve lazily),
   so no change to the GitPython imports was needed.
 - `version_stamp.store` is a second public contract, the one the SDK uses: the
-  git-free store layer (record names, store areas and URIs, code objects,
-  per-process locks, S3 helpers). It imports only the stdlib, `yaml`,
-  `version_stamp.core.{utils,constants}` and itself (boto3 only lazily), and
-  follows the same rules as `version_stamp.api`.
+  git-free store layer, with the same rules as `version_stamp.api`. Modules:
+  `names` (record file names, metadata patches), `areas`, `uri`, `code` (code
+  objects), `per_process` (locks), `s3_errors`, `s3_client`, `s3_base` (key
+  helpers, object primitives), `s3_records` (record writes), `s3_reads`,
+  `s3_store`, `marker` (`store.yml`), `config` (which store: flags >
+  `VMN_STORE*` > `VMN_EXPERIMENT_*` > conf `store:` > `experiment.storage`)
+  and `open`. It imports only the stdlib, `yaml`,
+  `version_stamp.core.{utils,constants}` and itself; boto3 only lazily, from
+  the `vmn[s3]` extra.
 
 ### vmn-exp
 
@@ -99,7 +108,8 @@ subpackage belongs to exactly one distribution.
 - `vmn_exp.gitmode` holds the git-dependent parts of the SDK: cold start
   (`_init_app`, `handle_init`) and snapshot capture. `start_run()` loads it only
   when needed.
-- Reaches `version_stamp` only through `version_stamp.api`.
+- Its subpackages reach `version_stamp` only through `version_stamp.api`; the
+  store layer (`version_stamp.store`) comes in through the SDK.
 
 ### vmn-exp-sdk
 

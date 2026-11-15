@@ -97,10 +97,12 @@ vmn --version  # e.g. 0.10.2-rc.11+dev: a source checkout adds +dev
 web UI first; a bare `uv build` ships whatever bundle is on disk).
 
 Import rules (packages/vmn-exp/tests/test_packaging_split.py): `version_stamp` never imports
-`vmn_exp`; the vmn-exp-sdk subpackages reach `version_stamp` only through the
-git-free `version_stamp.store` (the SDK depends on vmn for it) and import no
-vmn-exp subpackage (except a lazy `vmn_exp.gitmode`); vmn-exp reaches
-`version_stamp` only through `version_stamp.api`. `api` and `store` are vmn's
+`vmn_exp`; the vmn-exp-sdk subpackages reach vmn only through the git-free
+`version_stamp.store` (the SDK depends on vmn for it), never the rest of
+`version_stamp`, and import no vmn-exp subpackage (except a lazy
+`vmn_exp.gitmode`); vmn-exp reaches `version_stamp` through `version_stamp.api`
+and `version_stamp.store` (its own subpackages import only `version_stamp.api`
+directly; the store layer comes through the SDK). `api` and `store` are vmn's
 public cross-package contracts. vmn loads `vmn goto` of dev
 versions (`register_dev_version`) from the `vmn.plugins` entry point that
 vmn-exp declares.
@@ -121,6 +123,11 @@ Two suites (vmn-exp will become a separate product):
 Tests require Docker. Activate the test venv first — the suites run through the
 active interpreter's `coverage`/`pytest`, and the release-notes tests need the
 `git-cliff` binary that `tests/test_requirements.txt` installs into it.
+In a git worktree, SDK helper subprocesses import the *installed* vmn: set
+`PYTHONPATH` to the worktree's three `packages/*/src` roots (or re-run
+`pip install -e` from it). The web UI bundle (`vmn_exp/ui/static`) is
+git-ignored, so a fresh worktree needs `make _build_ui` (or a copy) for the UI
+load tests.
 ```sh
 source ./venv/bin/activate
 ./tests/run_pytest.sh                        # core suite (= --suite core)
@@ -217,7 +224,7 @@ Full flag reference: README.md `<details>` blocks and `vmn <cmd> --help`.
 | Model/dataset registry, sweeps, reports | `models.md`, `sweeps.md`, `reports.md` |
 
 Invariants worth knowing without opening a doc:
-- Packages: `vmn_exp/sdk` depends only on `vmn_exp.core|storage|registry|_base` and `version_stamp.store`, never the rest of `version_stamp` (no git), nor `vmn_exp.snapshot`/`ui`/`cli`; git-mode creation (`vmn_exp.gitmode`) is imported lazily.
+- Packages: `vmn_exp/sdk` depends only on `vmn_exp.core|storage|registry|_base` and `version_stamp.store`; the SDK subpackages reach vmn only through `version_stamp.store` (git-free), never the rest of `version_stamp`, nor `vmn_exp.snapshot`/`ui`/`cli`; vmn-exp reaches `version_stamp` through `version_stamp.api` and `version_stamp.store`; git-mode creation (`vmn_exp.gitmode`) is imported lazily.
 - Status is derived, never stored (`created`/`running`/`stuck`/`succeeded`/`failed`); `stuck` = stale heartbeat *and* stale store write time past `max(3 * interval, 60s)`.
 - Read-only actions never take the repo lock; `vmn-exp run` and the SDK hold it only for create/auto-init.
 - Run verstrs are claimed atomically (`create_exclusive`); local writes are temp + rename; only a stream's owner appends/ships/compacts it.
