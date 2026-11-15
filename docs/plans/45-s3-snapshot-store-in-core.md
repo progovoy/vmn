@@ -11,6 +11,10 @@
 
 Status: **done** (2026-11-15) on branch plan37.
 
+Solo impact: none for a single-user setup: the repo-local store, `VMN_EXPERIMENT_*`
+and conf `experiment.storage` keep working (`vmn stamp` moves the latter to `store:`),
+and `vmn snapshot` gains `--store` without needing vmn-exp.
+
 What landed:
 
 - P1: `vs/store/` git-free leaf (`names`, `areas`, `uri`, `code`,
