@@ -9,7 +9,50 @@
 > `sdk/` = `packages/vmn-exp-sdk/src/vmn_exp/`,
 > `exp/` = `packages/vmn-exp/src/vmn_exp/`.
 
-Status: **proposed** (2026-11-14).
+Status: **done** (2026-11-15) on branch plan37.
+
+What landed:
+
+- P1: `vs/store/` git-free leaf (`names`, `areas`, `uri`, `code`,
+  `per_process`, `s3_errors`) with the import-boundary test
+  (`tests/test_store_imports.py`).
+- P2: `vs/store/s3_{client,base,records,reads,store}.py`, `tests/s3_fakes.py`,
+  the `vmn[s3]` extra.
+- P3: `vs/store/marker.py` (`store.yml`, `marker_roots.py`) and shared-directory
+  record stores (`LocalRecordStore.at_root`).
+- P4: `vs/store/{config,open}.py`, `vs/snapshot/stores.py`,
+  `vs/cli/snapshot_cmd.py`: `vmn snapshot --store s3://` / `file://` without
+  vmn-exp; docs/snapshots.md.
+- P4c: conf `store:` (`core/models.py`, `vmn config`), `experiment.storage` →
+  `store` migration on `vmn stamp`, `VMN_STORE*` env names.
+- P5a: vmn-exp-sdk depends on `vmn>0.11.2,<1`; uv.lock, packaging tests,
+  docs/packaging.md.
+- P5b–f: the SDK takes uri/areas/per_process (b), the S3 backend (c,
+  `sdk/storage/s3*.py` on `store.s3_*`), the marker (d), code objects (e,
+  `sdk/core/code_store.py`) and record names (f, `sdk/storage/files.py`) from
+  `version_stamp.store`.
+- P7: SDK store resolution through `store.config.resolve_store`
+  (`sdk/core/storage_resolve.py`, `sdk/core/writer.py`): one precedence table
+  for vmn and vmn-exp.
+
+Follow-ups:
+
+- P6: collapse `LocalSnapshotStorage` ↔ `LocalRecordStore` and the
+  `vmn_exp._base` copies.
+- Unify `atomic_write` (SDK: umask mode, no fsync; core: keeps the mode,
+  fsyncs). Deferred by the user (2026-11-15).
+- SDK functions that still read `os.environ` directly: `merge_env_into_params`,
+  `offline_mode`, `drop_remote_if_offline`, `experiment_dir`.
+- `resolve_experiment_storage` reads the environment only (never conf) in a
+  checkout: decide whether it should read conf `store:` too.
+- The `index_io_process` helper subprocess puts only the SDK `src` on
+  `sys.path`.
+- `VMN_EXP_OFFLINE`: a neutral name (open question 1).
+- Failures on master unrelated to plan 37:
+  `test_panel_spec::test_schema_file_matches_generated`,
+  `test_pool_names::test_every_sdk_pool_names_its_threads`, and timing benches
+  that miss their budgets on this machine (`test_index_warm_restart_bench`,
+  `test_schema_policies` 50k, `test_ui_attention_bench`).
 
 Motivation: snapshots are the sharing unit for working state between people
 and agents (for example, a teammate's agent forking another's Claude session
