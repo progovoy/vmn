@@ -5,7 +5,8 @@ fastest attempt kept."""
 import time
 
 import pytest
-from bench_timing import BOX_CLOCKS, contention, fastest, fastest_each, fastest_until
+from bench_timing import (BOX_CLOCKS, active_coverage, contention, fastest, fastest_each,
+                          fastest_until, untraced)
 
 QUIET = lambda: 1.0  # noqa: E731
 
@@ -151,3 +152,62 @@ def test_contention_is_a_busy_loops_wall_time_over_its_cpu_time():
 def test_contention_is_never_below_one():
     clocks = _Clocks(slowdown=0.5)
     assert contention(wall=clocks.wall, cpu=clocks.cpu, spin_sec=0.01) == 1.0
+
+
+class _Tracer:
+    """A tracer controller recording when it stops and starts around the step."""
+
+    def __init__(self, events):
+        self.events = events
+
+    def stop(self):
+        self.events.append("stop")
+
+    def start(self):
+        self.events.append("start")
+
+
+def test_a_step_runs_with_the_tracer_stopped_and_restarted_after():
+    events = []
+    took = untraced(lambda: events.append("step") or 0.4, _Tracer(events))
+    assert took == 0.4
+    assert events == ["stop", "step", "start"]
+
+
+def test_a_step_that_raises_restarts_the_tracer():
+    events = []
+
+    def step():
+        events.append("step")
+        raise ValueError("boom")
+
+    with pytest.raises(ValueError):
+        untraced(step, _Tracer(events))
+    assert events == ["stop", "step", "start"]
+
+
+def test_without_a_tracer_the_step_just_runs():
+    assert untraced(lambda: 0.4, None) == 0.4
+
+
+def test_every_attempt_is_measured_with_the_tracer_stopped():
+    events = []
+    taken = [2.1, 0.7]
+
+    def measure():
+        events.append("step")
+        return taken.pop(0)
+
+    assert fastest(measure, budget=1.0, contention=QUIET, tracer=lambda: _Tracer(events)) == 0.7
+    assert events == ["stop", "step", "start"] * 2
+
+
+def test_without_coverage_running_fastest_just_measures():
+    measure, calls = _measures(0.4)
+    assert fastest(measure, budget=1.0, contention=QUIET, tracer=lambda: None) == 0.4
+    assert len(calls) == 1
+
+
+def test_the_benches_pause_the_coverage_tracing_this_process():
+    import coverage
+    assert active_coverage() is coverage.Coverage.current()

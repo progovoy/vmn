@@ -17,6 +17,13 @@ a step that *waits* (on a listing, a lock, a timer) is held to its whole
 wall time. And the busy loop is timed against the whole process's CPU, not
 its thread's: waiting for the GIL behind another thread of this process is
 the code's own cost, not the box's.
+
+Coverage's tracer burns CPU inside the measured code, not beside it: the
+busy loop reads no contention and the code is timed several times slower
+than it runs. So each step runs with the active coverage measurement stopped
+(all its threads, and the threads the step starts), restarted after; the rest
+of the bench stays covered. Subprocesses are traced only when coverage is
+configured to (``COVERAGE_PROCESS_START``); the suites do not.
 """
 import os
 import time
@@ -46,37 +53,63 @@ def box_contention():
     return contention(**BOX_CLOCKS)
 
 
+def active_coverage():
+    """The coverage measurement tracing this process now, or None: the
+    benches' real tracer controller (the default of the functions below)."""
+    try:
+        from coverage import Coverage
+    except ImportError:
+        return None
+    return Coverage.current()
+
+
+def untraced(step, tracer):
+    """*step()* with *tracer* (``stop()``/``start()``, or None) stopped while
+    it runs."""
+    if tracer is None:
+        return step()
+    tracer.stop()
+    try:
+        return step()
+    finally:
+        tracer.start()
+
+
 def cpu_spent():
     """CPU seconds of this process and of the children it has waited for."""
     return sum(os.times()[:4])
 
 
-def fastest(measure, budget, attempts=ATTEMPTS, contention=box_contention, cpu=cpu_spent):
+def fastest(measure, budget, attempts=ATTEMPTS, contention=box_contention, cpu=cpu_spent,
+            tracer=active_coverage):
     """The fewest uncontended seconds *measure()* reported over up to
     *attempts* calls, stopping at the first within *budget*."""
-    steps = fastest_each(lambda: {"step": measure()}, {"step": budget}, attempts, contention, cpu)
+    steps = fastest_each(lambda: {"step": measure()}, {"step": budget}, attempts, contention, cpu,
+                         tracer)
     return steps["step"]
 
 
-def fastest_each(measure, budgets, attempts=ATTEMPTS, contention=box_contention, cpu=cpu_spent):
+def fastest_each(measure, budgets, attempts=ATTEMPTS, contention=box_contention, cpu=cpu_spent,
+                 tracer=active_coverage):
     """``{step: fewest uncontended seconds}`` over up to *attempts* calls of
     *measure()* (each ``{step: seconds}``), stopping once every step is
     within its ``budgets[step]``."""
     def within(best):
         return all(best[step] <= budget for step, budget in budgets.items())
 
-    return fastest_until(measure, within, attempts, contention, cpu)
+    return fastest_until(measure, within, attempts, contention, cpu, tracer)
 
 
-def fastest_until(measure, within, attempts=ATTEMPTS, contention=box_contention, cpu=cpu_spent):
+def fastest_until(measure, within, attempts=ATTEMPTS, contention=box_contention, cpu=cpu_spent,
+                  tracer=active_coverage):
     """``{step: fewest uncontended seconds}`` over up to *attempts* calls of
     *measure()* (each ``{step: seconds}``), stopping once ``within(best)``:
     for a budget bounding several steps together (one step's time minus
-    another's)."""
+    another's). Each call runs with ``tracer()`` stopped (:func:`untraced`)."""
     best, sample = None, contention()
     for _ in range(max(attempts, 1)):
         before, cpu_0 = sample, cpu()
-        took = measure()
+        took = untraced(measure, tracer())
         spent = cpu() - cpu_0
         if within(_fewest(best, took)):
             return _fewest(best, took)
