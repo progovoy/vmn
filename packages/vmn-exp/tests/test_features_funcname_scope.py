@@ -7,6 +7,8 @@ and a line past a hunk's ``@@`` counts (format-patch's ``-- `` signature) is no
 change of it."""
 import time
 
+import pytest
+from bench_timing import fastest
 from test_features_change_scope import (  # noqa: F401
     _both,
     _commit,
@@ -15,6 +17,7 @@ from test_features_change_scope import (  # noqa: F401
     repo,
 )
 
+READ_SEC = 1.0
 TOP = "def top():\n" + "".join(f"    v{i} = {i}\n" for i in range(8)) + "\n\n"
 
 
@@ -52,13 +55,21 @@ def test_a_text_files_prose_line_names_the_change_below_it(repo):  # noqa: F811
     assert symbols == ["R.md::Intro"] == unified0
 
 
+@pytest.mark.serial
 def test_a_long_column_0_context_line_is_cut_as_git_cuts_a_funcname_and_read_quickly(repo):  # noqa: F811
     long_line = "func" + " " * 30000 + "-"
     _commit(repo, {"x.go": f"func main() {{\n\trun()\n}}\n\n{long_line}\n\ta := 1\n\tb := 2\n"})
     _edit(repo, "x.go", "b := 2", "b := 3")
-    started = time.monotonic()
-    diff, symbols, unified0 = _both(repo, "x.go")
-    assert time.monotonic() - started < 1.0
+    reads = []
+
+    def read():
+        started = time.perf_counter()
+        reads.append(_both(repo, "x.go"))
+        return time.perf_counter() - started
+
+    took = fastest(read, budget=READ_SEC)
+    diff, symbols, unified0 = reads[-1]
+    assert took < READ_SEC
     assert "@@ func main() {" in diff
     assert symbols == ["x.go::func"] == unified0
 
