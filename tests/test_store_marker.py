@@ -386,6 +386,51 @@ def test_stray_files_beside_a_store_do_not_make_it_foreign(s3, tmp_path, clock):
     assert (tmp_path / "store.yml").exists()
 
 
+RECORD_NAMES = ["0.0.1.dev.abc", "1.2.0-dev.a1b2c3d.e4f5a6b", "1.2.0-dev.a1b2c3d.e4f5g6h",
+                "1.2.0.3", "2.0.0-rc.1", "1.0.0_plus_build.7"]
+
+
+@pytest.mark.parametrize("writer", [True, False])
+@pytest.mark.parametrize("verstr", RECORD_NAMES)
+def test_a_local_record_dir_with_no_files_is_v1(tmp_path, clock, writer, verstr):
+    (tmp_path / "my_app" / verstr).mkdir(parents=True)
+    with pytest.raises(StoreLayoutError) as exc:
+        _check(FakeLocalStorage(str(tmp_path)), writer, clock)
+    assert str(exc.value) == f"{tmp_path} {V1_HINT}"
+
+
+@pytest.mark.parametrize("writer", [True, False])
+@pytest.mark.parametrize("verstr", RECORD_NAMES)
+def test_an_s3_record_without_metadata_is_v1(s3, clock, writer, verstr):
+    _put(s3, f"my_app/{verstr}/.claim")
+    with pytest.raises(StoreLayoutError) as exc:
+        _check(FakeS3Storage(s3), writer, clock)
+    assert str(exc.value) == f"{BUCKET}/{PREFIX} {V1_HINT}"
+
+
+TMP_LIKE = ["foo/bar", "photos/2024", "my_app/notes", "builds/1.2", "builds/1.2.3abc"]
+
+
+@pytest.mark.parametrize("writer", [True, False])
+@pytest.mark.parametrize("sub", TMP_LIKE)
+def test_tmp_like_local_dirs_are_not_a_vmn_store(tmp_path, clock, writer, sub):
+    (tmp_path / sub).mkdir(parents=True)
+    with pytest.raises(StoreLayoutError) as exc:
+        _check(FakeLocalStorage(str(tmp_path)), writer, clock)
+    assert str(exc.value) == f"{tmp_path} {NOT_A_STORE}"
+    assert not (tmp_path / "store.yml").exists()
+
+
+@pytest.mark.parametrize("writer", [True, False])
+@pytest.mark.parametrize("sub", TMP_LIKE)
+def test_tmp_like_s3_prefixes_are_not_a_vmn_store(s3, clock, writer, sub):
+    _put(s3, f"{sub}/file.txt")
+    with pytest.raises(StoreLayoutError) as exc:
+        _check(FakeS3Storage(s3), writer, clock)
+    assert str(exc.value) == f"{BUCKET}/{PREFIX} {NOT_A_STORE}"
+    assert (BUCKET, f"{PREFIX}/store.yml") not in s3.objects
+
+
 def test_writer_marks_an_existing_empty_directory(tmp_path, clock):
     (tmp_path / ".gitignore").write_text("*\n")
     _check(FakeLocalStorage(str(tmp_path)), True, clock)

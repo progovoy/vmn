@@ -3,11 +3,20 @@
 The first writer creates it with a create-if-absent put (``O_EXCL``-style
 link locally, a plain ``O_EXCL`` create without hard links, ``If-None-Match``
 on object stores). Writers and readers refuse a root of an unknown ``layout``,
-a v1 root (no marker, and v1 records ``<name>/<verstr>/metadata.yml`` in it or
-in the v1 places outside it) and a root with no marker holding anything but
-areas (not a vmn store, e.g. ``vmn snapshot --store /tmp``). An empty root
-(directory or prefix) is a fresh store: a writer marks it. Writers also refuse
-while ``migrating`` is set.
+a v1 root (no marker, and v1 records in it or in the v1 places outside it) and
+a root with no marker holding anything but areas (not a vmn store, e.g.
+``vmn snapshot --store /tmp``). An empty root (directory or prefix), or one with
+only stray top-level files, is a fresh store: a writer marks it. Writers also
+refuse while ``migrating`` is set.
+
+A v1 record at the root is ``<name>/<rec>/`` under a non-area top-level
+directory where ``<rec>`` holds a ``metadata.yml`` or is named like a verstr,
+even with no files (what a crashed v1 write leaves). No single core parser
+accepts every verstr a v1 store holds (``VMN_VERSION_REGEX`` refuses
+``0.0.1.dev.abc`` and a non-hex dev hash), so a record name is one that, with
+``_plus_`` read as ``+``, starts with ``VMN_VERSTR_REGEX``
+(``X.Y.Z[.hotfix][-prerelease.rcn]``) and goes on, if at all, with ``.``,
+``-`` or ``+`` (:func:`.marker_roots.is_record_name`).
 
 The same checks and marker bytes as ``vmn_exp.storage.store_marker``, with the
 time a writer stamps and waits on injected: ``check_store(storage, writer,
