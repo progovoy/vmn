@@ -8,7 +8,8 @@ import yaml
 
 from helpers import _bootstrap, _snapshot, extract_dev_verstr
 
-from version_stamp.cli import entry, plugin_api, plugins
+from version_stamp.cli import entry, plugins
+from version_stamp.snapshot import opener as snapshot_opener
 
 MB = 1024 * 1024
 
@@ -128,7 +129,7 @@ def test_store_flag_without_vmn_exp_is_an_error(app_layout, capfd, monkeypatch):
     _bootstrap(app_layout)
     _dirty(app_layout)
     monkeypatch.setattr(plugins, "_plugin_entry_points", lambda: [])
-    monkeypatch.setattr(plugin_api, "_snapshot_store_opener", None)
+    monkeypatch.setattr(snapshot_opener, "_snapshot_store_opener", None)
     capfd.readouterr()
     assert _snapshot(app_layout.app_name, store="gs://bucket/prefix") == 1
     assert "pip install vmn-exp" in capfd.readouterr().err

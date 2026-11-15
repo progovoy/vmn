@@ -6,13 +6,14 @@ import pytest
 
 from helpers import _bootstrap, _snapshot, extract_dev_verstr
 
-from version_stamp.cli import plugin_api, plugins
+from version_stamp.cli import plugins
+from version_stamp.snapshot import opener as snapshot_opener
 
 
 @pytest.fixture(autouse=True)
 def without_vmn_exp(monkeypatch):
     monkeypatch.setattr(plugins, "_plugin_entry_points", lambda: [])
-    monkeypatch.setattr(plugin_api, "_snapshot_store_opener", None)
+    monkeypatch.setattr(snapshot_opener, "_snapshot_store_opener", None)
 
 
 def _dirty(app_layout, content):
@@ -66,6 +67,29 @@ def test_listing_an_empty_directory_store_is_an_error(app_layout, capfd, tmp_pat
     empty.mkdir()
     ret, out = _run(app_layout, capfd, action="list", store=str(empty))
     assert ret == 1 and f"no vmn store at {empty}" in out
+
+
+def _without_aws_credentials(monkeypatch, tmp_path):
+    for k in ("AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY", "AWS_SESSION_TOKEN", "AWS_PROFILE",
+              "AWS_CONTAINER_CREDENTIALS_RELATIVE_URI", "AWS_CONTAINER_CREDENTIALS_FULL_URI",
+              "AWS_WEB_IDENTITY_TOKEN_FILE", "VMN_STORE_ENDPOINT_URL"):
+        monkeypatch.delenv(k, raising=False)
+    for k in ("AWS_SHARED_CREDENTIALS_FILE", "AWS_CONFIG_FILE"):
+        monkeypatch.setenv(k, str(tmp_path / "none"))
+    monkeypatch.setenv("AWS_EC2_METADATA_DISABLED", "true")
+    monkeypatch.setenv("AWS_DEFAULT_REGION", "us-east-1")
+
+
+def test_s3_store_without_credentials_fails_with_a_message(app_layout, capfd, monkeypatch,
+                                                           tmp_path):
+    pytest.importorskip("boto3")
+    _without_aws_credentials(monkeypatch, tmp_path)
+    _bootstrap(app_layout)
+    ret, out = _run(app_layout, capfd, action="list", store="s3://no-creds-bucket/p")
+    assert ret == 1
+    assert ("s3://no-creds-bucket/p: cannot reach the store: "
+            "NoCredentialsError: Unable to locate credentials") in out
+    assert "Traceback" not in out
 
 
 def test_s3_store_create_and_list(app_layout, capfd, monkeypatch):

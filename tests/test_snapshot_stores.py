@@ -6,6 +6,7 @@ import pytest
 
 from version_stamp.cli import plugin_api
 from version_stamp.snapshot import identity
+from version_stamp.snapshot import opener as snapshot_opener
 from version_stamp.snapshot.stores import (
     SnapshotStoreError,
     SnapshotStores,
@@ -15,7 +16,7 @@ from version_stamp.snapshot.stores import (
 
 @pytest.fixture(autouse=True)
 def no_opener(monkeypatch):
-    monkeypatch.setattr(plugin_api, "_snapshot_store_opener", None)
+    monkeypatch.setattr(snapshot_opener, "_snapshot_store_opener", None)
 
 
 def _vcs(tmp_path):

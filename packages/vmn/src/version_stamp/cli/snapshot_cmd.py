@@ -8,7 +8,8 @@ the ``version_stamp.snapshot`` modules (imported lazily). ``show``/``export``/
 ``-v`` or ``--latest``.
 ``list``/``show``/``diff``/``export`` run without the repo lock
 (``constants.READ_ONLY_ACTIONS``). The composition root of the stores:
-:func:`real_store_io` hands ``open_stores`` ``os.environ``, boto3 and the clocks.
+it hands ``open_stores`` the real IO of
+:func:`version_stamp.core.real_io.real_store_io` (``os.environ``, boto3, clocks).
 """
 from version_stamp.cli.constants import SNAPSHOT_ACTIONS
 from version_stamp.core.logging import VMN_LOGGER
@@ -129,22 +130,8 @@ def _list(vcs, args, stores):
                          verbose=args.verbose, as_json=args.as_json)
 
 
-def _boto3_client(endpoint_url):
-    from version_stamp.store.s3_client import boto3_client
-
-    return boto3_client(endpoint_url)
-
-
-def real_store_io():
-    """The real IO ``open_stores`` takes: the environment, boto3 and clocks."""
-    import os
-    import time
-
-    return dict(env=os.environ, s3_client_factory=_boto3_client,
-                now=time.time, monotonic=time.monotonic, sleep=time.sleep)
-
-
 def _open_stores(vcs, params):
+    from version_stamp.core.real_io import real_store_io
     from version_stamp.snapshot.stores import SnapshotStoreError, open_stores
 
     try:

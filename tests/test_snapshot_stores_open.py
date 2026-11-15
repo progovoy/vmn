@@ -8,13 +8,14 @@ import pytest
 
 from s3_fakes import FakeS3Client
 from version_stamp.cli import plugin_api
+from version_stamp.snapshot import opener as snapshot_opener
 from version_stamp.snapshot.stores import SnapshotStoreError, SnapshotStores, open_stores
 from version_stamp.store import marker
 
 
 @pytest.fixture(autouse=True)
 def clean(monkeypatch):
-    monkeypatch.setattr(plugin_api, "_snapshot_store_opener", None)
+    monkeypatch.setattr(snapshot_opener, "_snapshot_store_opener", None)
     marker.forget_checked()
     yield
     marker.forget_checked()
@@ -134,3 +135,41 @@ def test_file_store_round_trip(tmp_path):
 def test_missing_boto3_names_the_vmn_s3_extra(tmp_path):
     with pytest.raises(SnapshotStoreError, match=r"pip install 'vmn\[s3\]'"):
         _open(_vcs(tmp_path), {"store": "s3://b/p"}, factory=_no_boto3)
+
+
+class NoCredentialsError(Exception):
+    """Shaped like botocore's: no ``response``."""
+
+    def __init__(self):
+        super().__init__("Unable to locate credentials")
+
+
+class EndpointConnectionError(Exception):
+    def __init__(self):
+        super().__init__('Could not connect to the endpoint URL: "http://s3:9000/b"')
+
+
+class UnreachableS3Client(FakeS3Client):
+    def __init__(self, error):
+        super().__init__()
+        self.error = error
+
+    def get_object(self, Bucket, Key, Range=None):
+        raise self.error
+
+    def list_objects_v2(self, *args, **kwargs):
+        raise self.error
+
+
+@pytest.mark.parametrize("read_only", [False, True])
+@pytest.mark.parametrize("error, message", [
+    (NoCredentialsError(), "NoCredentialsError: Unable to locate credentials"),
+    (EndpointConnectionError(),
+     'EndpointConnectionError: Could not connect to the endpoint URL: "http://s3:9000/b"'),
+])
+def test_an_unreachable_s3_store_is_a_store_error(tmp_path, error, message, read_only):
+    factory = FakeFactory()
+    factory.client = UnreachableS3Client(error)
+    with pytest.raises(SnapshotStoreError) as exc:
+        _open(_vcs(tmp_path), {"store": "s3://b/p", "read_only": read_only}, factory=factory)
+    assert str(exc.value) == f"s3://b/p: cannot reach the store: {message}"
