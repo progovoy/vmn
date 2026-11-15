@@ -1,8 +1,10 @@
 """The configured stores of ``vmn snapshot`` (registered as vmn's snapshot
 store opener, see ``version_stamp.snapshot.stores``).
 
-The store comes from ``--store`` > ``VMN_EXPERIMENT_STORE`` > the bucket
-env/shorthand > conf ``experiment.storage.uri``; ``VMN_EXP_OFFLINE`` or no
+The store comes from ``--store`` > ``VMN_STORE`` (then the legacy
+``VMN_EXPERIMENT_STORE``) > the bucket env/shorthand > conf ``store.uri`` (then
+the legacy ``experiment.storage.uri``, which ``vmn stamp`` moves to
+``store:``); ``VMN_EXP_OFFLINE`` or no
 store at all leaves vmn on its local stores. Snapshot records live in the
 store's ``snapshots`` area (where restore safety snapshots are), code objects
 in its ``code`` area, so snapshots and runs share them.

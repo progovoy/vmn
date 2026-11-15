@@ -449,7 +449,8 @@ def _exp_run_without_repo(args):
 
 
 # Maintenance commands that need only a store and an app name: outside a
-# checkout they run git-free on the store flags / ``VMN_EXPERIMENT_*``.
+# checkout they run git-free on the store flags / ``VMN_STORE*`` (or the
+# legacy ``VMN_EXPERIMENT_*``).
 _STORE_ONLY_ACTIONS = frozenset({"prune", "backfill-children", "compact", "similar-backfill"})
 
 

@@ -79,7 +79,8 @@ def _resolve(app_name, storage):
     """Fill in the app name and storage where :func:`start_run` records.
 
     Storage defaults to :func:`resolve_experiment_storage`
-    (``VMN_EXPERIMENT_DIR`` > the checkout, fronting ``VMN_EXPERIMENT_STORE``).
+    (``VMN_EXPERIMENT_DIR`` > the checkout, fronting the ``VMN_STORE`` store;
+    the legacy ``VMN_EXPERIMENT_STORE`` still works).
     Returns ``(app_name, storage, root_path)``; *root_path* is None when the
     caller supplied both or no checkout is found: there is no conf.yml to read.
     """

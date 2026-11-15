@@ -33,7 +33,7 @@ SNAPSHOT_METADATA_ENV = "VMN_SNAPSHOT_METADATA"
 GIT_MODE_MISSING = (
     "This run needs a git checkout, and git mode is not installed: "
     "`pip install vmn-exp` for it, or record git-free by setting "
-    f"{SNAPSHOT_METADATA_ENV} and VMN_EXPERIMENT_DIR/VMN_EXPERIMENT_BUCKET."
+    f"{SNAPSHOT_METADATA_ENV} and VMN_EXPERIMENT_DIR and/or VMN_STORE."
 )
 
 # What every run created from one checkout capture or export shares: *template*
@@ -172,7 +172,8 @@ def _reject_reentry_without_nesting(nested):
 
 def snapshot_mode_storage():
     """Where a git-less run records, as the CLI does: ``VMN_EXPERIMENT_DIR``
-    and/or the ``VMN_EXPERIMENT_BUCKET`` it syncs to."""
+    and/or the remote store it syncs to (``VMN_STORE*``, read first, else the
+    legacy ``VMN_EXPERIMENT_*`` twins)."""
     params = {}
     merge_env_into_params(params)
     try:

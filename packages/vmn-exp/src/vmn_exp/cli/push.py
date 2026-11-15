@@ -1,7 +1,8 @@
 """``vmn-exp push <app> [-v <ref>...] [--dry-run] [--json]``: upload the local
 root's runs (e.g. recorded under ``VMN_EXP_OFFLINE``) to the remote store.
 
-The target is the store the flags, ``VMN_EXPERIMENT_STORE`` or conf name;
+The target is the store the flags, ``VMN_STORE`` (or the legacy
+``VMN_EXPERIMENT_STORE``) or conf ``store:`` name;
 ``VMN_EXP_OFFLINE`` never hides it here. Each run goes through
 :func:`vmn_exp.core.push_rename.push_or_rename`, parents before children.
 ``--dry-run`` reads the ledger and one remote metadata object per run that

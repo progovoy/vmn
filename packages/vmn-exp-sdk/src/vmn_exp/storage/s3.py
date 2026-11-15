@@ -5,10 +5,13 @@ Keys: ``<prefix>/<app key>/<safe verstr>/<file>``. The app key is the tag form
 (``root/svc`` → ``root-svc``), which is injective because ``-`` is illegal in
 app names. Legacy ``root_svc`` keys are rewritten by ``vmn-exp migrate``.
 
-The backend is assembled from halves that each own one concern: client and key
-helpers (:mod:`snapshot_storage_s3_base`), listings
-(:mod:`snapshot_storage_s3_listing`), record writes
-(:mod:`snapshot_storage_s3_records`) and logs (:mod:`snapshot_storage_s3_logs`).
+The backend is assembled from halves that each own one concern: the client
+(:mod:`vmn_exp.storage.s3_base`), listings (:mod:`vmn_exp.storage.s3_listing`),
+record writes (:mod:`vmn_exp.storage.s3_records`), logs
+(:mod:`vmn_exp.storage.s3_logs`) and metrics (:mod:`vmn_exp.storage.s3_metrics`).
+The record layer underneath is core's :mod:`version_stamp.store` (key helpers
+and object primitives in ``s3_base``, record writes in ``s3_records``, record
+reads in ``s3_reads``); the SDK halves add experiment material on top.
 """
 import hashlib
 import os

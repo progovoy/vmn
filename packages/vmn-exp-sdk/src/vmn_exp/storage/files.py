@@ -1,11 +1,15 @@
 #!/usr/bin/env python3
 """File-level helpers shared by the snapshot storage backends: record file
-names, atomic writes and patch files (log naming/parsing: core.experiment_logfiles).
+names, atomic writes and patch files (log naming/parsing: :mod:`vmn_exp.core.logfiles`).
 
-The record format's names are core's (``version_stamp.store.names``). The
-patch-file reads and writes stay here: reading skips a non-file patch path,
-and a rewrite takes the umask mode without fsync (core's ``atomic_write``
-keeps the old mode and fsyncs)."""
+The record format's names are core's (:mod:`version_stamp.store.names`):
+``METADATA_FILE``, ``PATCH_FILES``, ``apply_metadata_updates``,
+``checked_app_path``, ``safe_dep_name`` and ``safe_verstr``/``unsafe_verstr``,
+re-exported here. The patch-file reads and writes (``read_patches_from_dir`` /
+``write_patches_to_dir``) and ``atomic_write`` stay SDK-side on purpose (decided
+2026-11-15): reading skips a non-file patch path, and a rewrite takes the
+umask mode without fsync, where core's ``atomic_write`` keeps the old mode and
+fsyncs."""
 import os
 import tempfile
 

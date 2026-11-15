@@ -9,7 +9,9 @@ Storage resolution order (same as ``vmn-exp``):
   1. ``--dir`` flag
   2. ``VMN_EXPERIMENT_DIR`` environment variable
   3. repo root auto-detected from cwd (fixes visibility of SDK-registered models)
-  4. ``--bucket`` / ``VMN_EXPERIMENT_BUCKET`` → S3 backend
+  4. ``--store``/``--bucket`` / ``VMN_STORE`` / ``VMN_STORE_BUCKET`` → remote
+     backend (the legacy ``VMN_EXPERIMENT_STORE``/``VMN_EXPERIMENT_BUCKET``
+     still work, read after the ``VMN_STORE*`` names)
 
 Boundary: this module is EXPERIMENTS side; may only reach stamping via
 ``version_stamp.api``.

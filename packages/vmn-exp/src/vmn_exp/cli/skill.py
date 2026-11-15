@@ -169,7 +169,7 @@ no index) and never trims the change journal; a policy prune
 bucket whose lifecycle rule expires it). Outside a git checkout the store-only
 maintenance commands (`prune`, `backfill-children`, `compact`, `similar-backfill`)
 take their store from `--store`/`--experiment-dir` or
-`VMN_EXPERIMENT_STORE`/`VMN_EXPERIMENT_DIR`.
+`VMN_STORE`/`VMN_EXPERIMENT_DIR` (the legacy `VMN_EXPERIMENT_STORE` still works).
 
 ## Similar experiments
 
