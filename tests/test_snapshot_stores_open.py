@@ -134,3 +134,41 @@ def test_file_store_round_trip(tmp_path):
 def test_missing_boto3_names_the_vmn_s3_extra(tmp_path):
     with pytest.raises(SnapshotStoreError, match=r"pip install 'vmn\[s3\]'"):
         _open(_vcs(tmp_path), {"store": "s3://b/p"}, factory=_no_boto3)
+
+
+class NoCredentialsError(Exception):
+    """Shaped like botocore's: no ``response``."""
+
+    def __init__(self):
+        super().__init__("Unable to locate credentials")
+
+
+class EndpointConnectionError(Exception):
+    def __init__(self):
+        super().__init__('Could not connect to the endpoint URL: "http://s3:9000/b"')
+
+
+class UnreachableS3Client(FakeS3Client):
+    def __init__(self, error):
+        super().__init__()
+        self.error = error
+
+    def get_object(self, Bucket, Key, Range=None):
+        raise self.error
+
+    def list_objects_v2(self, *args, **kwargs):
+        raise self.error
+
+
+@pytest.mark.parametrize("read_only", [False, True])
+@pytest.mark.parametrize("error, message", [
+    (NoCredentialsError(), "NoCredentialsError: Unable to locate credentials"),
+    (EndpointConnectionError(),
+     'EndpointConnectionError: Could not connect to the endpoint URL: "http://s3:9000/b"'),
+])
+def test_an_unreachable_s3_store_is_a_store_error(tmp_path, error, message, read_only):
+    factory = FakeFactory()
+    factory.client = UnreachableS3Client(error)
+    with pytest.raises(SnapshotStoreError) as exc:
+        _open(_vcs(tmp_path), {"store": "s3://b/p", "read_only": read_only}, factory=factory)
+    assert str(exc.value) == f"s3://b/p: cannot reach the store: {message}"

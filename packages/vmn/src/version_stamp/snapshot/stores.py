@@ -16,7 +16,9 @@ reference code too (None: no runs are scanned).
    (``store``, ``experiment.storage``): ``s3://`` (*s3_client_factory*) or a
    directory (``file://``). A writer creates the root's ``store.yml``
    (*now*/*monotonic*/*sleep*); a reader (``params["read_only"]``) refuses a
-   root holding no store. Other schemes need vmn-exp (:class:`SnapshotStoreError`);
+   root holding no store. An s3:// store that can't be reached while its root
+   is checked (credentials, network) is a :class:`SnapshotStoreError` naming
+   the URI and the error. Other schemes need vmn-exp (:class:`SnapshotStoreError`);
 4. nothing configured: the repo-local stores.
 
 ``open_snapshot_stores(vcs, params)``: :func:`open_stores` with the CLI's real
@@ -36,6 +38,7 @@ from version_stamp.store.open import UnsupportedScheme, open_record_stores
 
 NEEDS_EXP = "{scheme}:// snapshot stores need vmn-exp: pip install vmn-exp"
 S3_NEEDS_EXTRA = "s3:// snapshot stores need boto3: pip install 'vmn[s3]'"
+UNREACHABLE = "{uri}: cannot reach the store: {error}"
 
 
 class SnapshotStoreError(RuntimeError):
@@ -85,12 +88,26 @@ def _check_root(records, params, uri, now, monotonic, sleep):
         marker.check_store(records, writer=True, now=now, monotonic=monotonic, sleep=sleep)
 
 
+def _check_reachable_root(records, params, uri, now, monotonic, sleep):
+    """:func:`_check_root`, with an s3:// store's credentials or network error
+    (anything but the marker's own ValueErrors) as a SnapshotStoreError."""
+    try:
+        _check_root(records, params, uri, now, monotonic, sleep)
+    except ValueError:
+        raise
+    except Exception as exc:
+        if not uri.startswith("s3://"):
+            raise
+        raise SnapshotStoreError(UNREACHABLE.format(
+            uri=uri, error=f"{type(exc).__name__}: {exc}")) from None
+
+
 def _configured_stores(vcs, params, env, s3_client_factory, now, monotonic, sleep):
     uri, options = resolve_store(params, env, _app_conf(vcs))
     if uri is None:
         return None
     stores = _record_stores(uri, options, s3_client_factory)
-    _check_root(stores.records, params, uri, now, monotonic, sleep)
+    _check_reachable_root(stores.records, params, uri, now, monotonic, sleep)
     return stores
 
 

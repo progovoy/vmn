@@ -68,6 +68,29 @@ def test_listing_an_empty_directory_store_is_an_error(app_layout, capfd, tmp_pat
     assert ret == 1 and f"no vmn store at {empty}" in out
 
 
+def _without_aws_credentials(monkeypatch, tmp_path):
+    for k in ("AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY", "AWS_SESSION_TOKEN", "AWS_PROFILE",
+              "AWS_CONTAINER_CREDENTIALS_RELATIVE_URI", "AWS_CONTAINER_CREDENTIALS_FULL_URI",
+              "AWS_WEB_IDENTITY_TOKEN_FILE", "VMN_STORE_ENDPOINT_URL"):
+        monkeypatch.delenv(k, raising=False)
+    for k in ("AWS_SHARED_CREDENTIALS_FILE", "AWS_CONFIG_FILE"):
+        monkeypatch.setenv(k, str(tmp_path / "none"))
+    monkeypatch.setenv("AWS_EC2_METADATA_DISABLED", "true")
+    monkeypatch.setenv("AWS_DEFAULT_REGION", "us-east-1")
+
+
+def test_s3_store_without_credentials_fails_with_a_message(app_layout, capfd, monkeypatch,
+                                                           tmp_path):
+    pytest.importorskip("boto3")
+    _without_aws_credentials(monkeypatch, tmp_path)
+    _bootstrap(app_layout)
+    ret, out = _run(app_layout, capfd, action="list", store="s3://no-creds-bucket/p")
+    assert ret == 1
+    assert ("s3://no-creds-bucket/p: cannot reach the store: "
+            "NoCredentialsError: Unable to locate credentials") in out
+    assert "Traceback" not in out
+
+
 def test_s3_store_create_and_list(app_layout, capfd, monkeypatch):
     pytest.importorskip("boto3")
     moto = pytest.importorskip("moto")
