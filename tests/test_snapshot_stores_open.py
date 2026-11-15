@@ -8,13 +8,14 @@ import pytest
 
 from s3_fakes import FakeS3Client
 from version_stamp.cli import plugin_api
+from version_stamp.snapshot import opener as snapshot_opener
 from version_stamp.snapshot.stores import SnapshotStoreError, SnapshotStores, open_stores
 from version_stamp.store import marker
 
 
 @pytest.fixture(autouse=True)
 def clean(monkeypatch):
-    monkeypatch.setattr(plugin_api, "_snapshot_store_opener", None)
+    monkeypatch.setattr(snapshot_opener, "_snapshot_store_opener", None)
     marker.forget_checked()
     yield
     marker.forget_checked()

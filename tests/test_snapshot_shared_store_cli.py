@@ -6,13 +6,14 @@ import pytest
 
 from helpers import _bootstrap, _snapshot, extract_dev_verstr
 
-from version_stamp.cli import plugin_api, plugins
+from version_stamp.cli import plugins
+from version_stamp.snapshot import opener as snapshot_opener
 
 
 @pytest.fixture(autouse=True)
 def without_vmn_exp(monkeypatch):
     monkeypatch.setattr(plugins, "_plugin_entry_points", lambda: [])
-    monkeypatch.setattr(plugin_api, "_snapshot_store_opener", None)
+    monkeypatch.setattr(snapshot_opener, "_snapshot_store_opener", None)
 
 
 def _dirty(app_layout, content):

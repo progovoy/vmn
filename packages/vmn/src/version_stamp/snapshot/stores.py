@@ -8,7 +8,7 @@ reference code too (None: no runs are scanned).
 ``open_stores(vcs, params, env, s3_client_factory, now, monotonic, sleep)``:
 
 1. ``params["local"]``: the repo-local stores;
-2. the opener registered through ``plugin_api.register_snapshot_store_opener``
+2. the opener registered through :func:`.opener.register_snapshot_store_opener`
    (vmn-exp), ``opener(vcs, params) -> SnapshotStores | None``, wins when it
    returns stores;
 3. the store :func:`version_stamp.store.config.resolve_store` names from the
@@ -21,8 +21,9 @@ reference code too (None: no runs are scanned).
    the URI and the error. Other schemes need vmn-exp (:class:`SnapshotStoreError`);
 4. nothing configured: the repo-local stores.
 
-``open_snapshot_stores(vcs, params)``: :func:`open_stores` with the CLI's real
-environment, boto3 and clocks (the ``version_stamp.api`` entry vmn-exp uses).
+``open_snapshot_stores(vcs, params)``: :func:`open_stores` with the real
+environment, boto3 and clocks of :func:`version_stamp.core.real_io.real_store_io`
+(the ``version_stamp.api`` entry vmn-exp uses).
 
 ``local_snapshot_stores(vmn_root_path) -> SnapshotStores``: records in
 ``.vmn/store/snapshots/<app-key>/``, code in ``.vmn/store/code/<app-key>/``
@@ -30,7 +31,8 @@ environment, boto3 and clocks (the ``version_stamp.api`` entry vmn-exp uses).
 """
 from dataclasses import dataclass
 
-from version_stamp.cli import plugin_api
+from version_stamp.core.real_io import real_store_io
+from version_stamp.snapshot import opener as snapshot_opener
 from version_stamp.snapshot.local_store import LocalRecordStore
 from version_stamp.store import marker
 from version_stamp.store.config import resolve_store
@@ -61,7 +63,7 @@ def local_snapshot_stores(vmn_root_path):
 
 
 def _opened_by_plugin(vcs, params):
-    opener = plugin_api.snapshot_store_opener()
+    opener = snapshot_opener.snapshot_store_opener()
     return None if opener is None else opener(vcs, params)
 
 
@@ -120,6 +122,4 @@ def open_stores(vcs, params, env, s3_client_factory, now, monotonic, sleep):
 
 
 def open_snapshot_stores(vcs, params):
-    from version_stamp.cli.snapshot_cmd import real_store_io
-
     return open_stores(vcs, params, **real_store_io())
