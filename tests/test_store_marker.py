@@ -300,3 +300,93 @@ def test_check_store_stamps_created_at_from_now_not_monotonic(s3):
     marker.check_store(FakeS3Storage(s3), True, now=time.now,
                        monotonic=time.monotonic, sleep=time.sleep)
     assert _marker_of(s3)["created_at"] == "2026-01-01T00:00:00Z"
+
+
+V1_HINT = ("is a v1 store written by an older vmn-exp (records but no store.yml): "
+           "run `vmn-exp migrate` (pip install vmn-exp)")
+NOT_A_STORE = "is not a vmn store (no store.yml, and its contents are not vmn records)"
+
+
+@pytest.mark.parametrize("writer", [True, False])
+def test_unknown_layout_names_vmn_not_vmn_exp(s3, clock, writer):
+    _put(s3, "store.yml", b"layout: 7\n")
+    with pytest.raises(StoreLayoutError) as exc:
+        _check(FakeS3Storage(s3), writer, clock)
+    assert str(exc.value) == (f"{BUCKET}/{PREFIX} has store layout 7; "
+                              "this vmn knows layout 2 only: upgrade vmn")
+
+
+@pytest.mark.parametrize("writer", [True, False])
+def test_v1_hint_reads_for_a_vmn_only_user(s3, clock, writer):
+    _put(s3, "my_app/v1/metadata.yml")
+    with pytest.raises(StoreLayoutError) as exc:
+        _check(FakeS3Storage(s3), writer, clock)
+    assert str(exc.value) == f"{BUCKET}/{PREFIX} {V1_HINT}"
+
+
+@pytest.mark.parametrize("writer", [True, False])
+@pytest.mark.parametrize("names", [
+    ["photos/cat.jpg"],
+    ["README.md", "photos/cat.jpg"],
+    ["my_app/v1/notes.txt"],
+    ["my_app/metadata.yml"],
+])
+def test_unrelated_prefix_is_not_a_vmn_store(s3, clock, writer, names):
+    for name in names:
+        _put(s3, name)
+    with pytest.raises(StoreLayoutError) as exc:
+        _check(FakeS3Storage(s3), writer, clock)
+    assert str(exc.value) == f"{BUCKET}/{PREFIX} {NOT_A_STORE}"
+    assert (BUCKET, f"{PREFIX}/store.yml") not in s3.objects
+
+
+def test_reader_of_an_unrelated_prefix_is_told_it_is_not_a_store(s3):
+    _put(s3, "photos/cat.jpg")
+    with pytest.raises(StoreLayoutError, match="is not a vmn store"):
+        marker.require_store(FakeS3Storage(s3), f"s3://{BUCKET}/{PREFIX}")
+
+
+def test_v1_records_are_found_past_unrelated_dirs(s3, clock):
+    _put(s3, "aaa/notes.txt")
+    _put(s3, "my_app/v1/metadata.yml")
+    with pytest.raises(StoreLayoutError, match="v1 store"):
+        _check(FakeS3Storage(s3), True, clock)
+
+
+def test_default_prefix_content_that_is_not_records_is_not_v1(s3, clock):
+    s3.objects[(BUCKET, "vmn-experiments/notes.txt")] = b"x"
+    _check(FakeS3Storage(s3, prefix="vmn"), True, clock)
+    assert (BUCKET, "vmn/store.yml") in s3.objects
+
+
+@pytest.mark.parametrize("writer", [True, False])
+def test_unrelated_local_directory_is_not_a_vmn_store(tmp_path, clock, writer):
+    (tmp_path / "some_dir").mkdir()
+    (tmp_path / "notes.txt").write_text("x")
+    with pytest.raises(StoreLayoutError) as exc:
+        _check(FakeLocalStorage(str(tmp_path)), writer, clock)
+    assert str(exc.value) == f"{tmp_path} {NOT_A_STORE}"
+    assert not (tmp_path / "store.yml").exists()
+
+
+def test_local_root_level_v1_records_get_the_v1_hint(tmp_path, clock):
+    rec = tmp_path / "my_app" / "v1"
+    rec.mkdir(parents=True)
+    (rec / "metadata.yml").write_text("verstr: v1\n")
+    with pytest.raises(StoreLayoutError, match="v1 store"):
+        _check(FakeLocalStorage(str(tmp_path)), True, clock)
+
+
+def test_stray_files_beside_a_store_do_not_make_it_foreign(s3, tmp_path, clock):
+    _put(s3, "vmn_metadata.yml")
+    _check(FakeS3Storage(s3), True, clock)
+    assert (BUCKET, f"{PREFIX}/store.yml") in s3.objects
+    (tmp_path / "vmn_metadata.yml").write_text("verstr: x\n")
+    _check(FakeLocalStorage(str(tmp_path)), True, clock)
+    assert (tmp_path / "store.yml").exists()
+
+
+def test_writer_marks_an_existing_empty_directory(tmp_path, clock):
+    (tmp_path / ".gitignore").write_text("*\n")
+    _check(FakeLocalStorage(str(tmp_path)), True, clock)
+    assert (tmp_path / "store.yml").exists()

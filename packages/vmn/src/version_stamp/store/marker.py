@@ -2,9 +2,12 @@
 
 The first writer creates it with a create-if-absent put (``O_EXCL``-style
 link locally, a plain ``O_EXCL`` create without hard links, ``If-None-Match``
-on object stores). Writers and readers refuse a root of an unknown ``layout``
-and a v1 root (vmn records, no marker, also in the v1 places outside the root);
-writers also refuse while ``migrating`` is set.
+on object stores). Writers and readers refuse a root of an unknown ``layout``,
+a v1 root (no marker, and v1 records ``<name>/<verstr>/metadata.yml`` in it or
+in the v1 places outside it) and a root with no marker holding anything but
+areas (not a vmn store, e.g. ``vmn snapshot --store /tmp``). An empty root
+(directory or prefix) is a fresh store: a writer marks it. Writers also refuse
+while ``migrating`` is set.
 
 The same checks and marker bytes as ``vmn_exp.storage.store_marker``, with the
 time a writer stamps and waits on injected: ``check_store(storage, writer,
@@ -27,6 +30,10 @@ from version_stamp.store.per_process import PerProcessLock
 LAYOUT = 2
 _AREAS = {areas.RUNS, areas.SNAPSHOTS, areas.CODE, areas.SWEEPS, areas.REGISTRY,
           areas.REPORTS, areas.COMMENTS, areas.SETTINGS, areas.JOURNAL}
+
+V1_STORE = (f"is a v1 store written by an older vmn-exp (records but no {MARKER}): "
+            "run `vmn-exp migrate` (pip install vmn-exp)")
+NOT_A_STORE = f"is not a vmn store (no {MARKER}, and its contents are not vmn records)"
 
 _checked = set()
 _lock = PerProcessLock()  # a forked child's own
@@ -62,13 +69,25 @@ def root_of(storage):
                       getattr(storage, "endpoint_url", None))
 
 
-def _has_records(where):
-    """v1 records live in ``<root>/<app>/<verstr>/`` (a top-level directory
-    that is no area; stray files beside the store are not records) or in the
-    v1 places outside the root (``where.has_v1_records``)."""
-    if any(n not in _AREAS and not n.startswith(".") for n in where.dirs()):
-        return True
-    return where.has_v1_records()
+def _foreign(where):
+    """The root's top-level directories that are no area (dot ones are per-host
+    state; stray files beside a store, e.g. a job's metadata file, are ignored)."""
+    return {n for n in where.dirs() if n not in _AREAS and not n.startswith(".")}
+
+
+def _is_v1(where, foreign):
+    """v1 records: ``<root>/<name>/<verstr>/metadata.yml`` for a *foreign*
+    top-level name, or in the v1 places outside the root (``has_v1_records``)."""
+    return any(where.holds_records(n) for n in sorted(foreign)) or where.has_v1_records()
+
+
+def _refuse_unmarked(where):
+    """A root without a marker is a fresh store only if it holds nothing but areas."""
+    foreign = _foreign(where)
+    if _is_v1(where, foreign):
+        raise StoreLayoutError(f"{_label(where)} {V1_STORE}")
+    if foreign:
+        raise StoreLayoutError(f"{_label(where)} {NOT_A_STORE}")
 
 
 def _parse(text):
@@ -94,10 +113,7 @@ def check_store(storage, writer, now, monotonic, sleep):
 def _check(where, writer, now, monotonic, sleep):
     text = where.read()
     if text is None:
-        if _has_records(where):
-            raise StoreLayoutError(
-                f"{_label(where)} is a v1 store (records but no {MARKER}): "
-                "run `vmn-exp migrate`")
+        _refuse_unmarked(where)
         if not writer:
             return
         where.create(yaml.safe_dump(new_marker(now()), sort_keys=False), monotonic, sleep)
@@ -105,8 +121,8 @@ def _check(where, writer, now, monotonic, sleep):
     marker = _parse(text)
     if marker.get("layout") != LAYOUT:
         raise StoreLayoutError(
-            f"{_label(where)} has store layout {marker.get('layout')}; this vmn-exp "
-            f"knows layout {LAYOUT} only: upgrade vmn-exp")
+            f"{_label(where)} has store layout {marker.get('layout')}; this vmn "
+            f"knows layout {LAYOUT} only: upgrade vmn")
     if writer and marker.get("migrating"):
         raise StoreLayoutError(
             f"{_label(where)} is migrating (`vmn-exp migrate`): retry when it is done")

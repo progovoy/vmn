@@ -130,7 +130,7 @@ def test_v1_store_refused_with_migrate_hint(tmp_path):
     (root / "my_app" / "0.0.1.dev.abc").mkdir(parents=True)
     for writer in (True, False):
         store_marker.forget_checked()
-        with pytest.raises(StoreLayoutError, match="vmn-exp migrate"):
+        with pytest.raises(StoreLayoutError, match="is not a vmn store"):
             _open_checked(str(root), writer)
 
 

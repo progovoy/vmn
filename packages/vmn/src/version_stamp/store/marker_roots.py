@@ -10,6 +10,8 @@ from version_stamp.store.s3_errors import is_missing, is_taken
 MARKER = "store.yml"
 _V1_CONTAINERS = ("experiments", "snapshots")
 _V1_PREFIXES = ("vmn-experiments", "vmn-snapshots")
+RECORD_FILE = "metadata.yml"
+_RECORDS_PROBED = 5  # record dirs of a top-level name probed for RECORD_FILE
 _POLL_SEC = 0.01
 
 
@@ -73,6 +75,12 @@ class LocalRoot:
     def dirs(self):
         return {n for n in self.entries() if os.path.isdir(os.path.join(self.root, n))}
 
+    def holds_records(self, name):
+        """Whether ``<root>/<name>/<verstr>/metadata.yml`` exists (a v1 record)."""
+        top = os.path.join(self.root, name)
+        return any(
+            os.path.isfile(os.path.join(top, rec, RECORD_FILE)) for rec in os.listdir(top))
+
     def _v1_dirs(self):
         """The ``.vmn`` dirs v1 kept this root's records in: ``<root>/.vmn``
         (``--dir``/``file://``) and, for the repo-local ``.vmn/store``, its parent."""
@@ -95,7 +103,7 @@ def _v1_local_record(vmn_dir, skip):
                    and os.path.join(path, d) != skip]
         if path == vmn_dir or os.path.basename(path) not in _V1_CONTAINERS:
             continue
-        if any(os.path.isfile(os.path.join(path, d, "metadata.yml")) for d in dirs):
+        if any(os.path.isfile(os.path.join(path, d, RECORD_FILE)) for d in dirs):
             return True
         dirs[:] = []
     return False
@@ -147,10 +155,25 @@ class ObjectRoot:
         page = page or self._page()
         return self._names(p["Prefix"] for p in page.get("CommonPrefixes", []))
 
+    def holds_records(self, name):
+        """Whether ``<root>/<name>/<verstr>/metadata.yml`` exists (a v1 record)."""
+        return self._holds_records(f"{self._dir}{name}/")
+
+    def _subdirs(self, top):
+        """The first few ``<top><name>/`` prefixes."""
+        page = self.client.list_objects_v2(
+            Bucket=self.bucket, Prefix=top, Delimiter="/", MaxKeys=_RECORDS_PROBED)
+        return [p["Prefix"] for p in page.get("CommonPrefixes", [])]
+
+    def _holds_records(self, top):
+        return any(self.client.list_objects_v2(
+            Bucket=self.bucket, Prefix=rec + RECORD_FILE, MaxKeys=1).get("Contents")
+            for rec in self._subdirs(top))
+
     def has_v1_records(self):
-        """A path-less URI's v1 records were under the default v1 prefixes."""
+        """A path-less URI's v1 records were under the default v1 prefixes,
+        ``<prefix>/<app-key>/<verstr>/metadata.yml``."""
         if self.prefix != areas.DEFAULT_ROOT:
             return False
-        return any(self.client.list_objects_v2(
-            Bucket=self.bucket, Prefix=f"{p}/", MaxKeys=1).get("Contents")
-            for p in _V1_PREFIXES)
+        return any(self._holds_records(app)
+                   for p in _V1_PREFIXES for app in self._subdirs(f"{p}/"))
