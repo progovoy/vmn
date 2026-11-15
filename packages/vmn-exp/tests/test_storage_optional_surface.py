@@ -2,7 +2,7 @@
 
 Callers find optional storage methods by ``hasattr(x, "name")`` or
 ``getattr(x, "name", default)``. Every such probe in the two vmn_exp src roots
-is counted and compared with storage_optional_probes.py: a new name or a
+and core's ``version_stamp/store`` is counted and compared with storage_optional_probes.py: a new name or a
 higher count fails, and so does a stale entry, so the table only shrinks.
 docs/vmn-exp/experiments.md's "Optional methods" table names exactly the
 storage probes.
@@ -16,8 +16,11 @@ from pathlib import Path
 from exp_helpers import _PROJECT_ROOT
 from storage_optional_probes import OTHER_PROBES, STORAGE_PROBES
 
+# Plus core's store layer: the SDK's record, marker and code-store probes
+# live there since plan 45.
 SRC_ROOTS = [Path(_PROJECT_ROOT) / "packages" / dist / "src" / "vmn_exp"
-             for dist in ("vmn-exp-sdk", "vmn-exp")]
+             for dist in ("vmn-exp-sdk", "vmn-exp")] + [
+    Path(_PROJECT_ROOT) / "packages" / "vmn" / "src" / "version_stamp" / "store"]
 DOC_START = "#### Optional methods"
 DOC_END = "\n### "
 

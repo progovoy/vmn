@@ -13,7 +13,8 @@ reading each call site once:
   these names with what a store without them gets. Private reach-ins
   (``_local``, ``_remote``, ``_s3``, ``_journal_sink``, ``_format_warned``)
   count too. ``endpoint_url`` and ``root`` are listed for their one storage
-  site (storage/store_marker.py); their other sites probe argparse namespaces.
+  site (core's version_stamp/store/marker.py since plan 45, scanned with the
+  vmn_exp roots); their other sites probe argparse namespaces.
 - ``OTHER_PROBES``: everything else -- argparse namespaces, request/app state,
   the index and its SQLite store, ML framework objects, exceptions, modules
   (``os``, ``sys``, ``signal``), a store's own client (``_own_client``,
@@ -113,7 +114,7 @@ OTHER_PROBES = {
     'run_cmd': 5, 'run_name': 3, 'run_state': 2, 'save': 1, 'savefig': 1,
     'sched_getaffinity': 1, 'schema_less': 1, 'scope': 2, 'score': 1,
     'server_side_start_after': 2, 'shape': 2, 'similar_hint': 1, 'skip_artifacts': 1,
-    'snapshot_now': 1, 'statfs$INODE64': 1, 'status_code': 6, 'step': 1, 'store': 6,
+    'snapshot_now': 1, 'statfs$INODE64': 1, 'status_code': 6, 'step': 1, 'store': 7,
     'sync_interval': 1, 'system_metrics': 1, 'tenancy': 1, 'to_dict': 3, 'token': 2,
     'tolist': 1, 'tool': 1, 'top': 1, 'tracking_uri': 2, 'ui_args': 2, 'untracked_paths': 1,
     'up_moved': 1, 'uri': 2, 'use_io_process': 1, 'version': 10, 'version_ref': 2,
