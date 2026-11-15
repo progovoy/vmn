@@ -28,7 +28,12 @@ def _meta(verstr, parent=None, ts="2026-01-01T00:00:00Z"):
 
 class _FakeStore:
     """Records + markers in memory; every read sleeps like a round trip and
-    is counted, so tests see how many requests and how many overlapped."""
+    is counted, so tests see how many requests and how many overlapped.
+
+    ``rounds`` is how many round trips deep the reads went, one after another:
+    a read's depth is one more than the deepest read already finished when it
+    started. Unlike wall time, it does not stretch when a busy box wakes the
+    sleeping threads late."""
 
     LATENCY = 0.02
 
@@ -37,6 +42,7 @@ class _FakeStore:
         self.calls = []
         self._lock = threading.Lock()
         self.in_flight = self.peak = 0
+        self.rounds = self._finished_depth = 0
 
     def add(self, verstr, parent=None, state=None, ts="2026-01-01T00:00:00Z"):
         self.metas[verstr] = _meta(verstr, parent, ts)
@@ -50,9 +56,12 @@ class _FakeStore:
             self.calls.append(op)
             self.in_flight += 1
             self.peak = max(self.peak, self.in_flight)
+            depth = self._finished_depth + 1
+            self.rounds = max(self.rounds, depth)
         time.sleep(self.LATENCY)
         with self._lock:
             self.in_flight -= 1
+            self._finished_depth = max(self._finished_depth, depth)
         return value
 
     def list_children(self, app_name, parent):
@@ -96,14 +105,12 @@ def test_a_24_child_outer_costs_one_list_and_two_reads_per_run(outer24):
 
 
 def test_by_default_each_child_is_probed_for_children_in_the_same_wave(outer24):
-    started = time.monotonic()
     subtree_rows_direct(outer24, APP, OUTER)
-    elapsed = time.monotonic() - started
 
     assert outer24.calls.count("LIST") == 1 + 24
     assert outer24.calls.count("GET") == 2 * 25
     # Two waves of round trips (the outer, then its children), not 75.
-    assert elapsed < 10 * _FakeStore.LATENCY
+    assert outer24.rounds < 10
 
 
 def test_rows_are_the_index_rows_of_the_metadata_and_states_feed_status(outer24):
