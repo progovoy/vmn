@@ -7,21 +7,31 @@ proof of life (:func:`~vmn_exp.core.status.last_alive_at`, what its stuck
 status is derived from), so a run that recovers and gets stuck again alerts again. An alert
 no sink accepted is not recorded, and the next watch retries it.
 """
-import datetime
 
 import yaml
 
 from vmn_exp._base import VMN_LOGGER, iso_z, now_iso, yaml_safe_load
-from vmn_exp.core import index as experiment_index
 from vmn_exp.core.alerts.dispatch import make_alert
 from vmn_exp.core.run_error import state_error_summary
-from vmn_exp.core.status import FAILED, STUCK, derive_status, last_alive_at, parse_iso
+from vmn_exp.core.status import (
+    FAILED, MIN_STALE_SEC, STUCK, derive_status, last_alive_at, parse_iso,
+)
 
 ALERTS_FILE = "alerts_sent.yml"
 
 
-def _now(now=None):
-    return now or datetime.datetime.now(datetime.timezone.utc)
+def _experiment_index():
+    """:mod:`vmn_exp.core.index`, imported on first use so ``import
+    vmn_exp.sdk`` does not load the index modules (plan 41 D1)."""
+    from vmn_exp.core import index
+
+    return index
+
+
+def __getattr__(name):
+    if name == "experiment_index":
+        return _experiment_index()
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
 def load_sent(storage, app_name, verstr):
@@ -63,7 +73,7 @@ def _transition_time(status, run_state, observed_at=None, now=None):
 
 
 def _stuck_text(run_state, since, now):
-    age = int((_now(now) - since).total_seconds()) if since else None
+    age = int((now - since).total_seconds()) if since else None
     lead = (f"no heartbeat since start ({age}s ago)" if run_state.get("heartbeat") is None
             else f"no heartbeat for {age}s")
     return f"{lead} (host {run_state.get('host')}, pid {run_state.get('pid')})"
@@ -108,28 +118,31 @@ def alert_transition(storage, app_name, verstr, run_state, status, alerter,
     return True
 
 
-def alert_if_failed(storage, app_name, verstr, run_state, alerter, run_name=None):
+def alert_if_failed(storage, app_name, verstr, run_state, alerter, run_name=None, *, now):
     """The run just finished: alert when it failed and ``failed`` is opted in."""
     if not run_state or not alerter.wants(FAILED):
         return False
-    if derive_status(run_state) != FAILED:
+    if derive_status(run_state, now=now) != FAILED:
         return False
-    return alert_transition(storage, app_name, verstr, run_state, FAILED, alerter, run_name)
+    return alert_transition(storage, app_name, verstr, run_state, FAILED, alerter, run_name,
+                            now)
 
 
-def watch_app(storage, app_name, alerter, within_sec, now=None):
+def watch_app(storage, app_name, alerter, within_sec, now=None, *, clock,
+              min_stale_sec=MIN_STALE_SEC):
     """Alert every run of *app_name* that went failed/stuck in the last
     *within_sec* seconds and has not alerted it yet. ``[(verstr, status)]``.
 
     Statuses come from the app's index snapshot; only the candidates' alert
-    markers are read."""
+    markers are read. *clock* (a :class:`~vmn_exp.core.ports.Clock`): the
+    index's, and *now* when none is given; *min_stale_sec*: the stuck floor."""
     wanted = {s for s in (FAILED, STUCK) if alerter.wants(s)}
     if not wanted:
         return []
-    now = _now(now)
-    snap = experiment_index.indexed_snapshot(storage, app_name, wait=True)
+    now = now or clock.now()
+    snap = _experiment_index().indexed_snapshot(storage, app_name, wait=True, clock=clock)
     fired = []
-    for verstr, run_state, status in _candidates(snap, wanted, within_sec, now):
+    for verstr, run_state, status in _candidates(snap, wanted, within_sec, now, min_stale_sec):
         name = (snap.row(verstr) or {}).get("name")
         try:
             sent = alert_transition(
@@ -144,14 +157,15 @@ def watch_app(storage, app_name, alerter, within_sec, now=None):
     return fired
 
 
-def _candidates(snap, wanted, within_sec, now):
+def _candidates(snap, wanted, within_sec, now, min_stale_sec):
     """``(verstr, run_state, status)`` of the runs that went *wanted* within
     the window."""
     for verstr, run_state in snap.run_states.items():
         if not run_state:
             continue
         observed_at = snap.run_state_observed_at.get(verstr)
-        status = derive_status(run_state, now=now, observed_at=observed_at)
+        status = derive_status(run_state, now=now, observed_at=observed_at,
+                               min_stale_sec=min_stale_sec)
         if status not in wanted:
             continue
         since = _transition_time(status, run_state, observed_at, now)

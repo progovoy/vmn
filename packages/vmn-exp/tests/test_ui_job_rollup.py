@@ -6,11 +6,11 @@ import datetime
 import math
 
 import pytest
+from fakes.clock import FakeClock
 from job_rollup_reference import annotated, exact_quantile, jobs, rollup, timeline
 from leaderboard_fleet import T0, Fleet
 from vmn_exp.ui.leaderboard_cache import LeaderboardCache
 
-from vmn_exp.core import status as status_mod
 from vmn_exp.ui import job_rollup
 
 SCHEMAS = [{}, {"loss": {"goal": "min", "primary": True}},
@@ -19,8 +19,8 @@ SCHEMAS = [{}, {"loss": {"goal": "min", "primary": True}},
            {"loss": {"primary": True, "hidden": False}, "acc": {"goal": "max"}}]
 
 
-def _at(monkeypatch, when):
-    monkeypatch.setattr(status_mod, "_now", lambda now=None: now or when)
+def _at(clock, when):
+    clock.advance((when - clock.now()).total_seconds())
 
 
 def _close(got, want, rel=0.011):
@@ -64,11 +64,12 @@ def _check_timeline(got, events):
 
 
 def _check_all(cache, snap, schema):
-    rows = annotated(snap)
+    now = cache.now()
+    rows = annotated(snap, now)
     summaries = cache.job_rollups(snap, schema)
     assert set(summaries) == set(jobs(rows))
     for verstr in jobs(rows):
-        want = rollup(rows, verstr, schema)
+        want = rollup(rows, verstr, schema, now)
         _check(cache.job_rollup(snap, schema, verstr), want)
         assert summaries[verstr]["total"] == want["total"]
         assert summaries[verstr]["counts"] == want["counts"]
@@ -81,14 +82,15 @@ def _richer(fleet, now, count):
 
 
 @pytest.mark.parametrize("seed", range(6))
-def test_rollups_match_a_brute_force_walk_across_generations(monkeypatch, seed):
+def test_rollups_match_a_brute_force_walk_across_generations(seed):
     fleet = Fleet(seed)
     fleet.seed(300, T0, sweeps=5, live=12)
     _richer(fleet, T0, 120)
-    cache = LeaderboardCache()
+    clock = FakeClock(T0)
+    cache = LeaderboardCache(now=clock.now)
     now = T0
     for generation in range(14):
-        _at(monkeypatch, now)
+        _at(clock, now)
         snap = fleet.snapshot()
         for schema in SCHEMAS:
             _check_all(cache, snap, schema)
@@ -97,24 +99,25 @@ def test_rollups_match_a_brute_force_walk_across_generations(monkeypatch, seed):
         _richer(fleet, now, fleet.rng.choice([0, 3, 8]))
 
 
-def test_live_runs_move_the_rollup_between_time_buckets(monkeypatch):
+def test_live_runs_move_the_rollup_between_time_buckets():
     fleet = Fleet(11)
     fleet.seed_jobs(3, 40, T0, live=20)
-    cache, snap = LeaderboardCache(), fleet.snapshot()
+    clock = FakeClock(T0)
+    cache, snap = LeaderboardCache(now=clock.now), fleet.snapshot()
     for later in (0, 20, 61, 200):
-        _at(monkeypatch, T0 + datetime.timedelta(seconds=later))
+        _at(clock, T0 + datetime.timedelta(seconds=later))
         _check_all(cache, snap, SCHEMAS[1])
 
 
-def test_nested_jobs_each_roll_up_their_own_subtree(monkeypatch):
-    _at(monkeypatch, T0)
+def test_nested_jobs_each_roll_up_their_own_subtree():
+    clock = FakeClock(T0)
     fleet = Fleet(12)
     top = fleet.append(state=fleet.ended(T0))
     mid = fleet.append(parent=top, state=fleet.ended(T0))
     for _ in range(5):
         fleet.append(parent=mid, state=fleet.ended(T0, code=1))
         fleet.append(parent=top, state=fleet.ended(T0, code=0))
-    cache, snap = LeaderboardCache(), fleet.snapshot()
+    cache, snap = LeaderboardCache(now=clock.now), fleet.snapshot()
     assert cache.job_rollup(snap, {}, top)["total"] == 11
     assert cache.job_rollup(snap, {}, mid)["total"] == 5
     assert cache.job_rollup(snap, {}, mid)["counts"]["failed"] == 5
@@ -126,12 +129,12 @@ def test_nested_jobs_each_roll_up_their_own_subtree(monkeypatch):
     _check_all(cache, snap, SCHEMAS[1])
 
 
-def test_removing_a_jobs_best_run_recomputes_its_extremes(monkeypatch):
-    _at(monkeypatch, T0)
+def test_removing_a_jobs_best_run_recomputes_its_extremes():
+    clock = FakeClock(T0)
     fleet = Fleet(13)
     fleet.seed_jobs(1, 30, T0)
     schema = SCHEMAS[1]
-    cache, snap = LeaderboardCache(), fleet.snapshot()
+    cache, snap = LeaderboardCache(now=clock.now), fleet.snapshot()
     job = fleet.specs[0]["verstr"]
     best = cache.job_rollup(snap, schema, job)["metrics"]["loss"]["best_verstr"]
     fleet.edit(fleet.index(best), values={"loss": 99.0})
@@ -142,30 +145,30 @@ def test_removing_a_jobs_best_run_recomputes_its_extremes(monkeypatch):
     _check_all(cache, fleet.snapshot(), schema)
 
 
-def test_archived_runs_are_left_out(monkeypatch):
-    _at(monkeypatch, T0)
+def test_archived_runs_are_left_out():
+    clock = FakeClock(T0)
     fleet = Fleet(14)
     fleet.seed_jobs(1, 10, T0)
-    cache = LeaderboardCache()
+    cache = LeaderboardCache(now=clock.now)
     job = fleet.specs[0]["verstr"]
     fleet.edit(3, archived=True)
     assert cache.job_rollup(fleet.snapshot(), {}, job)["total"] == 9
 
 
-def test_only_runs_with_children_are_jobs(monkeypatch):
-    _at(monkeypatch, T0)
+def test_only_runs_with_children_are_jobs():
+    clock = FakeClock(T0)
     fleet = Fleet(15)
     fleet.seed_jobs(1, 3, T0)
-    cache, snap = LeaderboardCache(), fleet.snapshot()
+    cache, snap = LeaderboardCache(now=clock.now), fleet.snapshot()
     assert cache.job_rollup(snap, {}, fleet.specs[1]["verstr"]) is None
     assert cache.job_rollup(snap, {}, "1.0.0-dev.nope") is None
 
 
 def test_a_generation_moves_the_rollups_on_instead_of_rebuilding(monkeypatch):
-    _at(monkeypatch, T0)
+    clock = FakeClock(T0)
     fleet = Fleet(16)
     fleet.seed_jobs(4, 100, T0, live=10)
-    cache = LeaderboardCache()
+    cache = LeaderboardCache(now=clock.now)
     cache.job_rollups(fleet.snapshot(), SCHEMAS[1])
     builds = []
     real = job_rollup.StaticRollups.build
@@ -179,11 +182,11 @@ def test_a_generation_moves_the_rollups_on_instead_of_rebuilding(monkeypatch):
     assert builds == []
 
 
-def test_answers_are_memoized_per_generation_and_bucket(monkeypatch):
-    _at(monkeypatch, T0)
+def test_answers_are_memoized_per_generation_and_bucket():
+    clock = FakeClock(T0)
     fleet = Fleet(17)
     fleet.seed_jobs(2, 20, T0, live=3)
-    cache, snap = LeaderboardCache(), fleet.snapshot()
+    cache, snap = LeaderboardCache(now=clock.now), fleet.snapshot()
     job = fleet.specs[0]["verstr"]
     assert cache.job_rollup(snap, {}, job) is cache.job_rollup(snap, {}, job)
     assert cache.job_rollups(snap, {}) is cache.job_rollups(snap, {})

@@ -15,6 +15,7 @@ from vmn_exp.ui import leaderboard_cache as lb
 from vmn_exp.ui import schema_cache
 from vmn_exp.ui.readers import experiments as exp_reader
 from vmn_exp.storage.areas import local_store_root
+from vmn_exp.core.real_io import RealClock, real_io
 
 APP = "app"
 BASE = f"/api/v1/workspaces/ws/apps/{APP}"
@@ -27,14 +28,14 @@ def _ts(i):
 def _app(tmp_path):
     root = tmp_path / "repo"
     (root / ".git").mkdir(parents=True, exist_ok=True)
-    storage = open_storage(root=local_store_root(str(root)), area="runs")
+    storage = open_storage(root=local_store_root(str(root)), area="runs", clock=RealClock(), env=os.environ)
 
     from vmn_exp.ui.server import create_app
     from vmn_exp.ui.workspaces import WorkspaceManager
 
     manager = WorkspaceManager(str(tmp_path / "data"))
     manager.attach_path("ws", str(root))
-    return TestClient(create_app(manager)), storage, root
+    return TestClient(create_app(manager, io=real_io())), storage, root
 
 
 @pytest.fixture

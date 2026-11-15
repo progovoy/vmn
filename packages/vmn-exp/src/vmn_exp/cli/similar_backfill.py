@@ -54,14 +54,15 @@ _PATCH_DERIVED = ("features_version", "source", "changed", "commits", "truncated
 _RESTATED = ("features_version", "source")
 
 
-def experiment_similar_backfill(storage, app_name, args):
+def experiment_similar_backfill(storage, app_name, args, clock, writer):
     dry_run = bool(getattr(args, "dry_run", False))
     all_apps = bool(getattr(args, "all_apps", False))
     counts = Counter()
     for app in storage.list_apps() if all_apps else [app_name]:
         if all_apps:
             print(f"{app}:")
-        for verstr, status, detail in backfill_app(storage, app, dry_run):
+        for verstr, status, detail in backfill_app(storage, app, dry_run, clock=clock,
+                                                   writer=writer):
             print(f"{verstr}  {status}" + (f" ({detail})" if detail else ""))
             counts[status] += 1
     summary = ", ".join(f"{s} {counts[s]}" for s in (BACKFILLED, PARTIAL, SKIPPED, FAILED))
@@ -69,23 +70,25 @@ def experiment_similar_backfill(storage, app_name, args):
     return 1 if counts[FAILED] else 0
 
 
-def backfill_app(storage, app_name, dry_run=False):
+def backfill_app(storage, app_name, dry_run=False, *, clock, writer):
     """``(verstr, status, detail)`` per run of *app_name*, in storage order;
-    *dry_run* derives every entry and appends none."""
-    snap = experiment_index.indexed_snapshot(storage, app_name, wait=True)
+    *dry_run* derives every entry and appends none. *clock* (a
+    :class:`~vmn_exp.core.ports.Clock`): the index's and the statuses'."""
+    snap = experiment_index.indexed_snapshot(storage, app_name, wait=True, clock=clock)
     code = _CodeFeatures(storage, app_name)
     appended = []
     try:
-        yield from _backfill_rows(storage, app_name, snap, code, dry_run, appended)
+        yield from _backfill_rows(storage, app_name, snap, code, dry_run, appended, clock.now(),
+                                  writer)
     finally:
-        _refile(storage, app_name, appended)
+        _refile(storage, app_name, appended, clock)
 
 
-def _refile(storage, app_name, verstrs):
+def _refile(storage, app_name, verstrs, clock):
     """Refresh *verstrs* into the app's index: their documents are refiled."""
     if not verstrs:
         return
-    index = experiment_index.shared_index(storage, app_name)
+    index = experiment_index.shared_index(storage, app_name, clock=clock)
     for verstr in verstrs:
         index.hint(verstr)
     try:
@@ -94,11 +97,11 @@ def _refile(storage, app_name, verstrs):
         VMN_LOGGER.debug("Refreshing the backfilled runs failed", exc_info=True)
 
 
-def _backfill_rows(storage, app_name, snap, code, dry_run, appended):
+def _backfill_rows(storage, app_name, snap, code, dry_run, appended, now, writer):
     for row in snap.rows:
         verstr = row["verstr"]
         try:
-            reason = _skip_reason(snap, row)
+            reason = _skip_reason(snap, row, now)
             if reason:
                 yield verstr, SKIPPED, reason
                 continue
@@ -106,7 +109,7 @@ def _backfill_rows(storage, app_name, snap, code, dry_run, appended):
                                             snap.features_of(verstr), code,
                                             snap.run_states.get(verstr))
             if not dry_run:
-                _append(storage, app_name, verstr, entry)
+                _append(storage, app_name, verstr, entry, writer)
                 appended.append(verstr)
         except Exception as exc:
             VMN_LOGGER.debug(f"Backfilling {verstr} failed", exc_info=True)
@@ -115,13 +118,13 @@ def _backfill_rows(storage, app_name, snap, code, dry_run, appended):
         yield verstr, status, detail
 
 
-def _skip_reason(snap, row):
+def _skip_reason(snap, row, now):
     verstr = row["verstr"]
     if is_current(snap.features_of(verstr)):
         return "up to date"
     if row.get("imported_from"):
         return "imported"
-    status = snap.status_of(verstr)
+    status = snap.status_of(verstr, now)
     return status if status in (RUNNING, STUCK) else None
 
 
@@ -183,12 +186,13 @@ def _counts(entry):
     return ", ".join(plural(n, noun) for n, noun in parts)
 
 
-def _append(storage, app_name, verstr, entry):
+def _append(storage, app_name, verstr, entry, writer):
     log_entry = stamped_entry(entry)
-    if storage.append_log_entry(app_name, verstr, own_stream(storage, app_name, verstr), log_entry) is False:
+    stream = own_stream(storage, app_name, verstr, writer)
+    if storage.append_log_entry(app_name, verstr, stream, log_entry) is False:
         raise RuntimeError("the record is gone")
     # One-shot command: no heartbeat will ship the entry to a remote later.
-    flush_log(storage, app_name, verstr)
+    flush_log(storage, app_name, verstr, writer)
 
 
 class _CodeFeatures:

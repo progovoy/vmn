@@ -28,8 +28,9 @@ from vmn_exp.ui.readers.versions import version_counts
 from vmn_exp.ui.sibling_durations import SiblingDurations
 
 
-def experiment_storage(root_path):
-    return open_storage(None, local_store_root(root_path), area=RUNS, writer=False)
+def experiment_storage(root_path, clock, env):
+    return open_storage(None, local_store_root(root_path), area=RUNS, writer=False, clock=clock,
+                        env=env)
 
 
 def experiment_conf(root_path, app_name):
@@ -71,7 +72,7 @@ def split_by_of(ui):
         return None
 
 
-def list_apps(root_path):
+def list_apps(root_path, clock, env):
     """All vmn apps in a checkout: configured (.vmn/<app>/conf.yml) plus any
     with experiment/snapshot data. Returns rows with experiment counts."""
     vmn_dir = os.path.join(root_path, ".vmn")
@@ -97,7 +98,7 @@ def list_apps(root_path):
                 apps.add(name)
 
     rows = []
-    storage = experiment_storage(root_path)
+    storage = experiment_storage(root_path, clock, env)
     apps.update(storage.list_apps())
     apps.update(storage.in_area(SNAPSHOTS).list_apps())
     ver_counts = version_counts(root_path)
@@ -117,7 +118,7 @@ def list_apps(root_path):
     return rows
 
 
-def apply_filters(rows, status=None, query=None, snapshot=None):
+def apply_filters(rows, status=None, query=None, snapshot=None, now=None):
     """Both row filters, ANDed: the status whitelist then the query language.
 
     Runs after status derivation and before :func:`sort_rows`, which owns
@@ -126,8 +127,10 @@ def apply_filters(rows, status=None, query=None, snapshot=None):
     the API turns that into a 400. *snapshot*: the index snapshot the lean
     *rows* came from, whose ``outputs``, run tree, intents and similar-runs
     documents a query may read (:func:`~vmn_exp.core.query_extra.lean_extra`).
+    An ``ago()`` in *query* compares with the time that long before *now*.
     """
-    return filter_rows(filter_by_status(rows, status), query, extra=lean_extra(snapshot))
+    return filter_rows(filter_by_status(rows, status), query, extra=lean_extra(snapshot, now=now),
+                       now=now)
 
 
 ORDERS = ("asc", "desc")
@@ -169,18 +172,20 @@ def leaderboard(
     order=None,
     observed_at=None,
     split=None,
+    *, now,
 ):
     """The one list pipeline: derive status (and ``duration_ratio`` against
     siblings sharing a value of *split*), filter, then order and page.
 
-    Status is derived from the current time and ``query`` is per request, so
-    neither is ever cached — callers pass freshly fetched rows. *observed_at*
-    is ``{verstr: run_state.yml store write time}``.
+    Status is derived at *now* and ``query`` is per request, so neither is
+    ever cached — callers pass freshly fetched rows. *observed_at* is
+    ``{verstr: run_state.yml store write time}``.
     """
-    annotated = [signed(row) for row in annotate_rows(rows, run_states, observed_at=observed_at)]
+    annotated = [signed(row) for row in annotate_rows(rows, run_states, observed_at=observed_at,
+                                                      now=now)]
     SiblingDurations.stamping(annotated, split)
     return sort_rows(
-        apply_filters(annotated, status, query),
+        apply_filters(annotated, status, query, now=now),
         schema,
         sort=sort,
         last=last,

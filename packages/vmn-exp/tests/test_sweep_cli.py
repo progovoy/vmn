@@ -13,6 +13,7 @@ from vmn_exp.cli.main import vmn_exp_run
 from vmn_exp.core.status import load_run_state
 from vmn_exp.core.sweep.claims import list_claims
 from vmn_exp.sdk.reader import list_runs
+from vmn_exp.core.real_io import real_io
 
 TRAIN = textwrap.dedent(
     """
@@ -42,7 +43,7 @@ def _clean_env(monkeypatch, tmp_path):
 
 def _vmn_exp(*argv):
     reset_logger()
-    return vmn_exp_run(list(argv))[0]
+    return vmn_exp_run(list(argv), real_io())[0]
 
 
 def _write_spec(tmp_path, **overrides):

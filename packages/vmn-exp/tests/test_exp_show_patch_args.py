@@ -9,6 +9,7 @@ from exp_helpers import _exp
 from version_stamp.core import logging as vmn_logging
 from vmn_exp.cli import views
 from vmn_exp.cli.views import UNTRACKED_ONLY, no_patch_note, patch_payload, print_patch
+from vmn_exp.core.real_io import RealConsole
 
 META = {"base_commit": "f" * 40, "code": "k", "has_untracked_files": True}
 
@@ -81,7 +82,8 @@ def test_the_note_of_an_unreadable_tarball_says_so_not_clean_tree():
 
 @pytest.mark.parametrize("tarball", UNREADABLE, ids=UNREADABLE_IDS)
 def test_show_patch_of_an_unreadable_tarball_prints_a_note(capsys, tarball):
-    print_patch("v", META, {"untracked_files": tarball})
+    print_patch("v", META, {"untracked_files": tarball}, out=RealConsole().out,
+                err=RealConsole().err)
     out = capsys.readouterr()
     assert out.out == ""
     assert "only untracked files were captured" in out.err and "cannot be read" in out.err

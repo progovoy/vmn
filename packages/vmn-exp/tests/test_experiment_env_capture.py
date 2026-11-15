@@ -14,6 +14,7 @@ import time
 import types
 
 import pytest
+from bench_timing import fastest
 
 
 # ---------------------------------------------------------------------------
@@ -76,12 +77,13 @@ def test_capture_under_50ms():
     """capture_env() must complete in under 50 ms (take best of 5 runs)."""
     from vmn_exp.core.env import capture_env
 
-    times = []
-    for _ in range(5):
+    def capture():
         t0 = time.perf_counter()
         capture_env()
-        times.append(time.perf_counter() - t0)
-    best = min(times)
+        return time.perf_counter() - t0
+
+    best = fastest(capture, budget=0.05, attempts=5)
+    print(f"\ncapture_env best {best * 1000:.1f}ms")
     assert best < 0.05, f"capture_env best time {best*1000:.1f}ms exceeds 50ms"
 
 
@@ -195,7 +197,7 @@ def test_image_digest_from_env():
         old = os.environ.pop(var, None)
         try:
             os.environ[var] = "sha256:abc123"
-            info = _container_info()
+            info = _container_info(os.environ)
         finally:
             if old is None:
                 os.environ.pop(var, None)

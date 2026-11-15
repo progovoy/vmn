@@ -1,5 +1,5 @@
 """``vmn_exp.storage.files`` takes the record format's names from core's
-``version_stamp.store.names`` (plan 37 P5f); where the two read or write
+``version_stamp.store.names`` (plan 45 P5f); where the two read or write
 differently the SDK keeps its own behavior, pinned here."""
 import os
 

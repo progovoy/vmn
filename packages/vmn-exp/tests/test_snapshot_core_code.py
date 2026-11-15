@@ -2,10 +2,11 @@
 import os
 
 from vmn_exp.storage.open import open_storage
+from vmn_exp.core.real_io import RealClock
 
 
 def _runs(tmp_path):
-    return open_storage(None, str(tmp_path), area="runs")
+    return open_storage(None, str(tmp_path), area="runs", clock=RealClock(), env=os.environ)
 
 
 def test_capture_ensure_code_stores_through_the_code_area(tmp_path, monkeypatch):

@@ -16,7 +16,7 @@ def test_exp_push_all_runs():
 def test_exp_push_named_runs():
     cmd, err = build_command("exp_push", "my_app", {"verstrs": [V1, V2]})
     assert err is None
-    assert cmd == ["vmn-exp", "experiment", "push", "my_app", "-v", V1, "-v", V2]
+    assert cmd == ["vmn-exp", "experiment", "push", "my_app", f"--version={V1}", f"--version={V2}"]
 
 
 @pytest.mark.parametrize("verstrs", ["x", [None], ["-rf"], ["a/b"], [".."]])

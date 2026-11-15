@@ -85,9 +85,9 @@ def install():
         gc.callbacks.append(PAUSES.callback)
 
 
-def allocator_info(environ=os.environ, free_threaded=None):
+def allocator_info(environ, free_threaded=None):
     """The allocator (a free-threaded build always uses mimalloc), its
-    ``PYTHONMALLOC``/``MIMALLOC_*`` settings and the allocated block count."""
+    ``PYTHONMALLOC``/``MIMALLOC_*`` settings in *environ* and the allocated block count."""
     free_threaded = not gil_enabled() if free_threaded is None else free_threaded
     env = {k: v for k, v in environ.items() if k == "PYTHONMALLOC" or k.startswith("MIMALLOC_")}
     name = "mimalloc" if free_threaded else (environ.get("PYTHONMALLOC") or "pymalloc")
@@ -102,5 +102,5 @@ def gc_section():
         "freeze_count": gc.get_freeze_count(),
         "policy": POLICY.stats(),
         **PAUSES.stats(),
-        "allocator": allocator_info(),
+        "allocator": allocator_info(os.environ),  # this real process's allocator
     }

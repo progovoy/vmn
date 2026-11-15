@@ -1,5 +1,5 @@
 """``version_stamp.store`` is a git-free leaf: importing it loads no git, no
-boto3 and none of vmn's git-bound packages (plan 37, R2), and its modules
+boto3 and none of vmn's git-bound packages (plan 45, R2), and its modules
 import only stdlib, yaml, ``version_stamp.core.{utils,constants}`` and itself."""
 import ast
 import importlib.util

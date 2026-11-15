@@ -2,7 +2,6 @@
 workspace, for the server's read paths."""
 import contextlib
 import contextvars
-import time
 
 from vmn_exp.core.app_settings_store import read_settings
 from vmn_exp.storage.areas import app_key
@@ -26,7 +25,7 @@ class SettingsCache:
     :func:`request_scope`, else every time) unless :meth:`forget` drops them
     first — what a journal entry does."""
 
-    def __init__(self, recheck_sec, clock=time.monotonic, size=256):
+    def __init__(self, recheck_sec, clock, size=256):
         self._recheck_sec, self._clock = recheck_sec, clock
         self._entries = LRU(size)  # (scope, app name) -> (read at, request, settings)
 

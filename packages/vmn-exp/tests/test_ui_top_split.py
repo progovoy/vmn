@@ -2,22 +2,21 @@
 with children, ``top=singles`` those without, ``top=1`` both; the facets
 count them (``jobs``/``singles``, the cache's ``top_counts``), moved on across generations."""
 import pytest
+from fakes.clock import FakeClock
 from leaderboard_fleet import T0, Fleet
 from vmn_exp.ui.leaderboard_cache import LeaderboardCache
 from vmn_exp.ui.leaderboard_scope import top_filter
 
-from vmn_exp.core import status as status_mod
-
+CLOCK = FakeClock(start=T0)
 SCHEMA = {"loss": {"goal": "min", "primary": True}}
 
 
 @pytest.fixture
-def board(monkeypatch):
-    monkeypatch.setattr(status_mod, "_now", lambda now=None: now or T0)
+def board():
     fleet = Fleet(5)
     jobs = fleet.seed_jobs(3, 10, T0, live=4)
     singles = [fleet.append(state=fleet.ended(T0)) for _ in range(6)]
-    return fleet, jobs, singles, LeaderboardCache()
+    return fleet, jobs, singles, LeaderboardCache(now=CLOCK.now)
 
 
 def _verstrs(cache, snap, top, **params):
@@ -68,14 +67,13 @@ def test_filtered_facets_count_the_filtered_top_level_rows(board):
 
 
 @pytest.fixture
-def big(monkeypatch):
+def big():
     """Large enough for a generation's few changes to move counts on."""
-    monkeypatch.setattr(status_mod, "_now", lambda now=None: now or T0)
     fleet = Fleet(9)
     fleet.seed_jobs(4, 100, T0, live=8)
     for _ in range(60):
         fleet.append(state=fleet.ended(T0))
-    return fleet, LeaderboardCache()
+    return fleet, LeaderboardCache(now=CLOCK.now)
 
 
 @pytest.mark.parametrize("archived", [False, True])
@@ -85,7 +83,7 @@ def test_facet_counts_moved_across_generations_equal_fresh_ones(big, archived):
         fleet.mutate(T0, 6)
         snap = fleet.snapshot()
         got = cache.top_counts(snap, archived=archived)
-        fresh = LeaderboardCache().top_counts(snap, archived=archived)
+        fresh = LeaderboardCache(now=CLOCK.now).top_counts(snap, archived=archived)
         assert (got["jobs"], got["singles"]) == (fresh["jobs"], fresh["singles"])
         shown = dict(archived=archived)
         assert got["jobs"] == len(_verstrs(cache, snap, "jobs", **shown))
@@ -99,5 +97,6 @@ def test_moved_top_orders_equal_fresh_ones(big):
         snap = fleet.snapshot()
         for top in ("jobs", "singles"):
             got = cache.page(snap, SCHEMA, limit=1000, top=top, sort="loss")["rows"]
-            fresh = LeaderboardCache().page(snap, SCHEMA, limit=1000, top=top, sort="loss")
+            fresh = LeaderboardCache(now=CLOCK.now).page(snap, SCHEMA, limit=1000, top=top,
+                                                         sort="loss")
             assert [r["verstr"] for r in got] == [r["verstr"] for r in fresh["rows"]]

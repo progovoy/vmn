@@ -34,7 +34,7 @@ def _should_split_double_dash(cl: list) -> bool:
     return False
 
 
-def parse_user_commands(command_line):
+def parse_user_commands(command_line, frontend=None):
     # Load experiment plugin specs so their subparsers and flags are available.
     # Idempotent: safe to call multiple times (handles registry resets in tests).
     from version_stamp.cli.plugins import load_builtin_plugins
@@ -52,9 +52,13 @@ def parse_user_commands(command_line):
         run_cmd = cl[sep + 1:]
         cl = cl[:sep]
 
-    parser = argparse.ArgumentParser("vmn")
+    frontend = frontend or plugin_api.Frontend()
+    parser = argparse.ArgumentParser(frontend.prog, epilog=frontend.epilog)
     parser.add_argument(
-        "--version", "-v", action="version", version=dev_build.display_version()
+        "--version",
+        "-v",
+        action="version",
+        version=frontend.version or dev_build.display_version(),
     )
     parser.add_argument("--debug", required=False, action="store_true")
     parser.set_defaults(debug=False)
@@ -91,7 +95,7 @@ def parse_user_commands(command_line):
     subprasers = parser.add_subparsers(dest="command")
 
     # Built-in commands first, then whatever installed plugins registered.
-    for arg in VMN_ARGS.keys():
+    for arg in VMN_ARGS.keys() if frontend.builtins else ():
         clean_arg = arg.replace("-", "_")
         getattr(sys.modules[__name__], f"add_arg_{clean_arg}")(subprasers)
     for spec in plugin_api.specs():

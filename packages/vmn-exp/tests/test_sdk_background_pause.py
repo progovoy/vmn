@@ -6,6 +6,7 @@ pool/logging locks and can deadlock. Pausing waits for the call in flight and
 keeps the heartbeat, the log flusher, the remote sync and the media uploader
 from starting another until resumed.
 """
+import os
 import threading
 import time
 
@@ -15,7 +16,8 @@ from vmn_exp.snapshot import LocalSnapshotStorage
 from vmn_exp.storage.cached import CachedSnapshotStorage
 from vmn_exp.sdk import NoOpRun, background_paused, pause_background, resume_background
 from vmn_exp.sdk.background_gate import BackgroundGate
-from vmn_exp.sdk.run import Run
+from vmn_exp.sdk.run import Run, _real_process_hooks
+from vmn_exp.core.real_io import RealClock, RealHost, RealRandom
 
 APP = "app"
 VERSTR = "0.0.1-dev.aaaaaaa.ccccccc"
@@ -35,7 +37,7 @@ class _CountingStorage(CachedSnapshotStorage):
 def run(tmp_path):
     storage = _CountingStorage(str(tmp_path))
     storage.save(APP, VERSTR, {"verstr": VERSTR, "timestamp": "2026-01-01T00:00:00Z"}, {})
-    run = Run(storage, APP, VERSTR, 0.1)
+    run = Run(storage, APP, VERSTR, 0.1, clock=RealClock(), host=RealHost(), random=RealRandom(), env=os.environ, install_hooks=_real_process_hooks())
     run._open()
     yield run
     run.finish()

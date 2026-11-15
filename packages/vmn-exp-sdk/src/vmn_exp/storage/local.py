@@ -77,14 +77,13 @@ def _dir_sig(entry):
 
 
 class LocalSnapshotStorage(LocalChildren, LocalStreams, LocalMetrics, SnapshotStorage):
-    def __init__(self, root, area=SNAPSHOTS):
-        self.root = root
-        self.area = area
+    def __init__(self, root, area=SNAPSHOTS, *, env=None):
+        self.root, self.area, self._env = root, area, env
         self._listings = RecordListings()
         self._identity = None
 
     def _open_area(self, name):
-        return LocalSnapshotStorage(self.root, name)
+        return LocalSnapshotStorage(self.root, name, env=self._env)
 
     def _area_dir(self):
         return os.path.join(self.root, self.area)
@@ -302,10 +301,11 @@ class LocalSnapshotStorage(LocalChildren, LocalStreams, LocalMetrics, SnapshotSt
         return self._identity
 
     def index_cache_path(self, app_name):
-        """In the per-host cache dir; None before any record."""
-        if not os.path.isdir(self._snapshot_base_dir(app_name)):
+        """In the per-host cache dir its *env* names; None before any record
+        or without an env."""
+        if self._env is None or not os.path.isdir(self._snapshot_base_dir(app_name)):
             return None
-        return host_dirs.index_cache_path(self.cache_identity(), app_name)
+        return host_dirs.index_cache_path(self.cache_identity(), app_name, self._env)
 
     def update_note(self, app_name, verstr, note):
         return self.update_metadata(app_name, verstr, {"note": note})

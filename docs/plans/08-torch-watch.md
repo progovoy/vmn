@@ -1,5 +1,7 @@
 # Plan 8 (remaining): `watch(model)` — gradient/parameter histograms for plain torch
 
+Status: **done** (2026-09-29; confirmed in code 2026-11-11).
+
 > Master already has `log_image` / `log_table` / `log_histogram`
 > (`packages/vmn-exp-sdk/src/vmn_exp/sdk/run_media.py`, `.../core/histogram.py`,
 > `.../core/media.py`; UI `packages/vmn-exp/src/vmn_exp/ui/readers/parsed_logs.py` +

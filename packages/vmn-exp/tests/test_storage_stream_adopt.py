@@ -23,10 +23,11 @@ from multi_clone_helpers import (
 from s3_helpers import cached_host, meta, s3_storage
 from vmn_exp.core.adopt import adopt_streams, missing_inherited
 from vmn_exp.core.metric_compact import compact_record
-from vmn_exp.core.push_logs import push_logs
-from vmn_exp.core.push_metrics import push_metrics
+from vmn_exp.cli.pushing.push_logs import push_logs
+from vmn_exp.cli.pushing.push_metrics import push_metrics
 from vmn_exp.core.writer import own_stream
 from vmn_exp.storage.local import LocalSnapshotStorage
+from writer_args import process_writer
 
 
 @pytest.fixture(autouse=True)
@@ -139,7 +140,7 @@ def test_an_offline_copy_pushes_inherited_streams_only_once_adopted(tmp_path):
     s3_storage().create_exclusive(APP, V, meta(V), {})
     a = LocalSnapshotStorage(str(tmp_path / "a"), "runs")
     assert a.create_exclusive(APP, V, meta(V), {})
-    own = own_stream(a, APP, V)
+    own = own_stream(a, APP, V, writer=process_writer())
     a.append_log_entry(APP, V, own, tag(1, "k1"))
     a.append_metric_block(APP, V, own, block(1.0, start=1))
     _move(tmp_path, "a", "b")

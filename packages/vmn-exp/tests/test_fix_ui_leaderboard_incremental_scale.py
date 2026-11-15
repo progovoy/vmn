@@ -8,8 +8,8 @@ import sys
 
 import pytest
 
+from fakes.clock import FakeClock
 from leaderboard_fleet import T0, Fleet, finished, running
-from vmn_exp.core import status as status_mod
 from vmn_exp.ui import leaderboard_cache as lb
 from vmn_exp.ui.readers.experiments import facets
 
@@ -111,8 +111,7 @@ def fleet():
 
 def test_a_new_generation_costs_the_changed_rows_not_every_row(monkeypatch, fleet):
     fleet, roots, live = fleet
-    monkeypatch.setattr(status_mod, "_now", lambda now=None: now or T0)
-    cache = lb.LeaderboardCache(bucket_sec=2)
+    cache = lb.LeaderboardCache(bucket_sec=2, now=FakeClock(start=T0).now)
     _serve(cache, fleet.snapshot())
 
     counts = {}
@@ -137,8 +136,7 @@ def test_a_new_generation_costs_the_changed_rows_not_every_row(monkeypatch, flee
 
 def test_facets_of_a_new_generation_read_only_the_changed_rows(monkeypatch, fleet):
     fleet, roots, live = fleet
-    monkeypatch.setattr(status_mod, "_now", lambda now=None: now or T0)
-    cache = lb.LeaderboardCache(bucket_sec=2)
+    cache = lb.LeaderboardCache(bucket_sec=2, now=FakeClock(start=T0).now)
     cache.facets(fleet.snapshot())
     cache.facets(fleet.snapshot(), archived=True)
     for step in range(GENERATIONS):
@@ -154,8 +152,8 @@ def test_facets_of_a_new_generation_read_only_the_changed_rows(monkeypatch, flee
 
 def test_live_rows_advancing_in_time_still_cost_only_the_live_rows(monkeypatch, fleet):
     fleet, roots, live = fleet
-    cache = lb.LeaderboardCache(bucket_sec=2)
-    monkeypatch.setattr(status_mod, "_now", lambda now=None: now or T0)
+    clock = FakeClock(start=T0)
+    cache = lb.LeaderboardCache(bucket_sec=2, now=clock.now)
     _serve(cache, fleet.snapshot())
     counts = {}
     _count_everywhere(monkeypatch, "status_fields", counts)
@@ -163,7 +161,7 @@ def test_live_rows_advancing_in_time_still_cost_only_the_live_rows(monkeypatch, 
     rebuilds, ended = [], False
     for step in range(1, GENERATIONS + 1):
         now = T0 + datetime.timedelta(seconds=30 * step)
-        monkeypatch.setattr(status_mod, "_now", lambda now=None, _at=now: now or _at)
+        clock.advance(30)
         snap = _next_generation(fleet, roots, live[: LIVE // 2], now, step)
         counts.clear()
         _serve(cache, snap)
@@ -171,7 +169,8 @@ def test_live_rows_advancing_in_time_still_cost_only_the_live_rows(monkeypatch, 
         # The sweep roots never heartbeat again: once they go stuck they settle
         # their never-started children (core/settle.py), a subtree past the
         # delta limit, so each order is rebuilt once — at that generation only.
-        newly_ended = not ended and any(snap.status_of(r) != "running" for r in roots)
+        newly_ended = not ended and any(snap.status_of(r, now=clock.now()) != "running"
+                                        for r in roots)
         ended = ended or newly_ended
         if counts.get("apply_filters", 0) > 2 * BOUND:
             rebuilds.append(step)
@@ -186,8 +185,7 @@ def test_an_order_not_asked_for_a_few_generations_is_moved_on_not_rebuilt(monkey
     means an order is rarely asked for in two consecutive ones. It is moved on
     from the last generation it was served in, across the deltas since."""
     fleet, roots, live = fleet
-    monkeypatch.setattr(status_mod, "_now", lambda now=None: now or T0)
-    cache = lb.LeaderboardCache(bucket_sec=2)
+    cache = lb.LeaderboardCache(bucket_sec=2, now=FakeClock(start=T0).now)
     schema = {"loss": {"goal": "min"}}
     orders = [dict(sort=m, order=o) for m in ("loss", "acc") for o in ("asc", "desc")]
     orders += [dict(query=f"metrics.loss < {x}") for x in (0.2, 0.4, 0.6, 0.8)]
@@ -203,7 +201,7 @@ def test_an_order_not_asked_for_a_few_generations_is_moved_on_not_rebuilt(monkey
         cache.page(snap, schema, limit=50)  # only the default order each generation
     counts.clear()
     for kw in orders:  # every other order comes back, several generations on
-        want = lb.LeaderboardCache(bucket_sec=2).page(snap, schema, limit=50, **kw)
+        want = lb.LeaderboardCache(bucket_sec=2, now=cache.now).page(snap, schema, limit=50, **kw)
         counts_before = counts.get("sort_rows", 0)
         assert cache.page(snap, schema, limit=50, **kw) == want
         counts["served"] = counts.get("served", 0) + counts.get("sort_rows", 0) - counts_before

@@ -1,10 +1,12 @@
 """Run trees stay iterative however deep, and a run page's tree lookup costs a
 dict lookup when its edges provider is cheap."""
+from datetime import datetime, timezone
 from collections.abc import Mapping
 
 from vmn_exp.core import status as st
 from vmn_exp.core.tree import annotate_tree, subtree_status
 from vmn_exp.ui.readers import experiment_detail
+from vmn_exp.core.real_io import RealClock
 
 DEPTH = 5000
 
@@ -23,12 +25,12 @@ def test_subtree_status_of_a_5000_deep_chain():
     parent_of = _chain(DEPTH)
     failed = f"r{DEPTH - 1}"
     state, tree = subtree_status(
-        "r0", parent_of, lambda v: _state(st.FAILED if v == failed else st.SUCCEEDED)
+        "r0", parent_of, lambda v: _state(st.FAILED if v == failed else st.SUCCEEDED), now=datetime.now(timezone.utc)
     )
     assert tree["tree_status"] == st.FAILED
     assert tree["children"] == ["r1"] and tree["kind"] == "outer"
 
-    _, leaf = subtree_status(failed, parent_of, lambda v: _state(st.SUCCEEDED))
+    _, leaf = subtree_status(failed, parent_of, lambda v: _state(st.SUCCEEDED), now=datetime.now(timezone.utc))
     assert leaf["depth"] == DEPTH - 1
     assert leaf["kind"] == "inner" and leaf["children"] == []
 
@@ -85,7 +87,7 @@ def test_status_detail_does_not_rescan_an_unchanged_edges_mapping():
     for _ in range(3):
         status = experiment_detail.status_detail(
             None, "app", "r5", {"parent": "root"}, [], provider,
-            read_run_state=lambda s, a, v: None,
+            read_run_state=lambda s, a, v: None, now=RealClock().now(),
         )
     assert status["parent"] == "root" and status["kind"] == "inner"
     assert _CountingEdges.scans <= 1

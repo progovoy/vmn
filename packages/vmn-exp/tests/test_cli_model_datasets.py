@@ -9,6 +9,7 @@ from vmn_exp.registry.log import record_use
 from vmn_exp.registry.store import (
     ensure_model, get_version, list_versions, load_header, register_version,
 )
+from vmn_exp.core.real_io import real_io
 
 
 def _register(tmp_path, **kwargs):
@@ -89,8 +90,8 @@ def test_delete_consumed_version_warns_consumer_count(tmp_path, caplog):
     storage = _storage(tmp_path)
     ensure_model(storage, "resnet")
     n = register_version(storage, "resnet", {"app": "a", "verstr": "0.1"})
-    record_use(storage, "resnet", n, "serving", "1.0")
-    record_use(storage, "resnet", n, "eval", "2.0")
+    record_use(storage, "resnet", n, "serving", "1.0", env=real_io().env, host=real_io().host)
+    record_use(storage, "resnet", n, "eval", "2.0", env=real_io().env, host=real_io().host)
     with caplog.at_level(logging.WARNING):
         rc = _invoke(tmp_path, dict(action="delete", model_name="resnet", version_ref=str(n)))
     assert rc == 0

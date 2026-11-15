@@ -10,6 +10,7 @@ from vmn_exp.core.record_format import RECORD_FORMAT_VERSION, record_format_vers
 from vmn_exp.core.writer import append_to_log, create_log_entry, create_run
 from vmn_exp.sdk.reader import get_run, list_runs
 from vmn_exp.storage.local import LocalSnapshotStorage
+from writer_args import process_suffix, process_writer
 
 FUTURE = RECORD_FORMAT_VERSION + 1
 
@@ -34,8 +35,8 @@ def _storage(tmp_path):
 
 
 def _run(storage, code="0.0.1", **meta_updates):
-    verstr = create_run(storage, "app", code, {"timestamp": "2026-01-01T00:00:00Z"}, {})
-    append_to_log(storage, "app", verstr, create_log_entry("metrics", values={"m": 1}))
+    verstr = create_run(storage, "app", code, {"timestamp": "2026-01-01T00:00:00Z"}, {}, writer=process_writer(), suffix=process_suffix())
+    append_to_log(storage, "app", verstr, create_log_entry("metrics", values={"m": 1}), writer=process_writer())
     if meta_updates:
         assert storage.update_metadata("app", verstr, meta_updates)
     return verstr

@@ -19,20 +19,21 @@ AUTHOR_ENV = "VMN_EXP_AUTHOR"
 GIT_CONFIG_TIMEOUT_SEC = 2
 
 
-def actor_identity(cwd: str | None = None) -> dict:
-    """Return a plain dict identifying the writer.
+def actor_identity(env, host, cwd: str | None = None) -> dict:
+    """Return a plain dict identifying the writer, as *env* and *host* say.
 
     Fields:
-      writer         — experiment-log writer id (VMN_WRITER_ID / HOSTNAME)
+      writer         — experiment-log writer id (:func:`get_writer_id`)
       git_user_email — git config user.email in *cwd* (default: the process
                        cwd), best-effort (empty on failure or after
                        GIT_CONFIG_TIMEOUT_SEC)
-      os_user        — $USER / $LOGNAME / os.getlogin(), best-effort
+      os_user        — *env*'s USER / LOGNAME / USERNAME, else
+                       os.getlogin(), best-effort
     """
     return {
-        "writer": get_writer_id(),
+        "writer": get_writer_id(env, host),
         "git_user_email": _git_user_email(cwd),
-        "os_user": _os_user(),
+        "os_user": _os_user(env),
     }
 
 
@@ -50,9 +51,9 @@ def _git_user_email(cwd: str | None = None, timeout: float = GIT_CONFIG_TIMEOUT_
         return ""
 
 
-def _os_user() -> str:
+def _os_user(env) -> str:
     for key in ("USER", "LOGNAME", "USERNAME"):
-        val = os.environ.get(key)
+        val = env.get(key)
         if val:
             return val
     try:
@@ -61,19 +62,20 @@ def _os_user() -> str:
         return ""
 
 
-def known_identity(cwd: str | None = None) -> dict:
+def known_identity(env, host, cwd: str | None = None) -> dict:
     """:func:`actor_identity` with its values stripped and empty ones dropped."""
-    identity = {key: (value or "").strip() for key, value in actor_identity(cwd).items()}
+    identity = {key: (value or "").strip()
+                for key, value in actor_identity(env, host, cwd).items()}
     return {key: value for key, value in identity.items() if value}
 
 
-def run_author(cwd: str | None = None, fallbacks=()) -> dict:
+def run_author(env, host, cwd: str | None = None, fallbacks=()) -> dict:
     """A run's ``author``: :func:`known_identity` in *cwd* plus ``source``.
 
     Without a git config email, the first ``(source, email)`` of *fallbacks*
     with an email supplies it; with none at all the source is ``host``.
     """
-    author = known_identity(cwd)
+    author = known_identity(env, host, cwd)
     if author.get("git_user_email"):
         return dict(author, source="git")
     for source, email in fallbacks:
@@ -83,6 +85,6 @@ def run_author(cwd: str | None = None, fallbacks=()) -> dict:
     return dict(author, source="host") if author else {}
 
 
-def env_author() -> tuple:
-    """``("env", $VMN_EXP_AUTHOR)``, a :func:`run_author` fallback."""
-    return "env", os.environ.get(AUTHOR_ENV, "")
+def env_author(env) -> tuple:
+    """``("env", VMN_EXP_AUTHOR of *env*)``, a :func:`run_author` fallback."""
+    return "env", env.get(AUTHOR_ENV, "")

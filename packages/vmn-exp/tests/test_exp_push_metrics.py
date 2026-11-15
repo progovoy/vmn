@@ -13,6 +13,7 @@ from vmn_exp.sdk import reader
 from vmn_exp.storage.areas import local_store_root
 from vmn_exp.storage.local import LocalSnapshotStorage
 from vmn_exp.storage.uri import s3_uri
+from writer_args import process_writer
 
 URI = s3_uri(BUCKET, PREFIX)
 
@@ -132,7 +133,7 @@ def test_stream_pushed_then_compacted_leaves_no_stale_stream(offline, monkeypatc
     verstr = _run(offline)
     assert _push(offline) == 0
     local = _local(offline)
-    compact_by(local, offline.app_name, verstr, own_stream(local, offline.app_name, verstr),
+    compact_by(local, offline.app_name, verstr, own_stream(local, offline.app_name, verstr, writer=process_writer()),
                time.monotonic() + 30)
     assert _push(offline) == 0
     metric_keys = [k.rsplit("/", 2)[-2:] for k in raw_keys() if "/metrics/" in k]

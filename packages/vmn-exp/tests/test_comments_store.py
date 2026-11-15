@@ -1,10 +1,13 @@
 """Plan 13 §3.2 / phase 1b: comment threads on runs and reports."""
+import os
 import threading
 
 from exp_helpers import _bootstrap, _exp, _storage
 from vmn_exp.reports import comments
 from vmn_exp.storage import areas
 from vmn_exp.storage.registry import open_store
+from vmn_exp.core.real_io import RealRandom
+from vmn_exp.core.real_io import real_io
 
 VERSTR = "1.0.0-dev.abc1234"
 RUN = ("run", "root/svc", VERSTR)
@@ -12,12 +15,12 @@ REPORT = ("report", "r_abc")
 
 
 def _store(tmp_path):
-    return open_store(f"file://{tmp_path}", area=areas.RUNS)
+    return open_store(f"file://{tmp_path}", area=areas.RUNS, env=os.environ)
 
 
 def test_run_thread_lives_under_comments_app_key_verstr(tmp_path):
     store = _store(tmp_path)
-    comments.add(store, RUN, "hello")
+    comments.add(store, RUN, "hello", random=RealRandom(), env=real_io().env, host=real_io().host)
     assert (tmp_path / "comments" / "root-svc" / VERSTR / "metadata.yml").is_file()
     meta = store.in_area(areas.COMMENTS).load_metadata("root/svc", VERSTR)
     assert meta["type"] == "comment_thread"
@@ -26,7 +29,7 @@ def test_run_thread_lives_under_comments_app_key_verstr(tmp_path):
 
 def test_report_thread_lives_under_reports_rid_comments(tmp_path):
     store = _store(tmp_path)
-    comments.add(store, REPORT, "hi")
+    comments.add(store, REPORT, "hi", random=RealRandom(), env=real_io().env, host=real_io().host)
     assert (tmp_path / "reports" / "r_abc" / "comments" / "metadata.yml").is_file()
     assert [c["text"] for c in comments.thread(store, REPORT)] == ["hi"]
 
@@ -37,7 +40,7 @@ def test_claim_race_keeps_every_comment(tmp_path):
 
     def post(i):
         barrier.wait()
-        comments.add(_store(tmp_path), RUN, f"c{i}", author={"id": f"w{i}"})
+        comments.add(_store(tmp_path), RUN, f"c{i}", author={"id": f"w{i}"}, random=RealRandom(), env=real_io().env, host=real_io().host)
 
     threads = [threading.Thread(target=post, args=(i,)) for i in range(4)]
     for t in threads:
@@ -48,19 +51,32 @@ def test_claim_race_keeps_every_comment(tmp_path):
     assert texts == ["c0", "c1", "c2", "c3"]
 
 
+def test_a_comment_posted_mid_claim_is_kept(tmp_path):
+    """Another poster claimed the thread (its folder made) but has not made it
+    visible yet (no metadata.yml): this comment still lands, not refused as
+    a write into a record that does not exist."""
+    store = _store(tmp_path)
+    (tmp_path / "comments" / "root-svc" / VERSTR).mkdir(parents=True)
+
+    comments.add(store, RUN, "mid-claim", random=RealRandom(), env=real_io().env,
+                 host=real_io().host)
+
+    assert [c["text"] for c in comments.thread(store, RUN)] == ["mid-claim"]
+
+
 def test_edit_resolve_delete_fold(tmp_path):
     store = _store(tmp_path)
-    first = comments.add(store, RUN, "first", anchor={"metric": "loss", "step": 3})
-    second = comments.add(store, RUN, "second")
-    comments.edit(store, RUN, first, "first, edited")
-    comments.resolve(store, RUN, second)
+    first = comments.add(store, RUN, "first", anchor={"metric": "loss", "step": 3}, random=RealRandom(), env=real_io().env, host=real_io().host)
+    second = comments.add(store, RUN, "second", random=RealRandom(), env=real_io().env, host=real_io().host)
+    comments.edit(store, RUN, first, "first, edited", env=real_io().env, host=real_io().host)
+    comments.resolve(store, RUN, second, env=real_io().env, host=real_io().host)
     folded = {c["id"]: c for c in comments.thread(store, RUN)}
     assert folded[first]["text"] == "first, edited"
     assert folded[first]["anchor"] == {"metric": "loss", "step": 3}
     assert folded[first]["resolved"] is False
     assert folded[second]["resolved"] is True
-    comments.resolve(store, RUN, second, resolved=False)
-    comments.delete(store, RUN, first)
+    comments.resolve(store, RUN, second, resolved=False, env=real_io().env, host=real_io().host)
+    comments.delete(store, RUN, first, env=real_io().env, host=real_io().host)
     folded = {c["id"]: c for c in comments.thread(store, RUN)}
     assert folded[second]["resolved"] is False
     assert folded[first]["deleted"] is True
@@ -69,9 +85,9 @@ def test_edit_resolve_delete_fold(tmp_path):
 
 def test_tombstone_keeps_replies(tmp_path):
     store = _store(tmp_path)
-    parent = comments.add(store, RUN, "parent")
-    reply = comments.add(store, RUN, "reply", reply_to=parent)
-    comments.delete(store, RUN, parent)
+    parent = comments.add(store, RUN, "parent", random=RealRandom(), env=real_io().env, host=real_io().host)
+    reply = comments.add(store, RUN, "reply", reply_to=parent, random=RealRandom(), env=real_io().env, host=real_io().host)
+    comments.delete(store, RUN, parent, env=real_io().env, host=real_io().host)
     folded = comments.thread(store, RUN)
     assert [c["id"] for c in folded] == [parent, reply]
     assert folded[0]["deleted"] is True
@@ -97,8 +113,8 @@ def test_last_writer_wins_on_ts_writer_pos():
 def test_author_defaults_to_actor_identity(tmp_path, monkeypatch):
     monkeypatch.setenv("VMN_WRITER_ID", "host-x")
     store = _store(tmp_path)
-    comments.add(store, RUN, "a")
-    comments.add(store, RUN, "b", author={"id": "p_1", "name": "Dana"})
+    comments.add(store, RUN, "a", random=RealRandom(), env=real_io().env, host=real_io().host)
+    comments.add(store, RUN, "b", author={"id": "p_1", "name": "Dana"}, random=RealRandom(), env=real_io().env, host=real_io().host)
     first, second = comments.thread(store, RUN)
     assert first["author"]["writer"] == "host-x"
     assert second["author"] == {"id": "p_1", "name": "Dana"}
@@ -114,7 +130,7 @@ def test_prune_deletes_the_runs_thread(app_layout):
     storage = _storage(app_layout)
     verstr = storage.list_snapshots(app_layout.app_name)[-1]["verstr"]
     target = ("run", app_layout.app_name, verstr)
-    comments.add(storage, target, "note")
+    comments.add(storage, target, "note", random=RealRandom(), env=real_io().env, host=real_io().host)
     assert comments.thread(storage, target)
     assert _exp(app_layout.app_name, action="prune", version=verstr) == 0
     assert comments.thread(_storage(app_layout), target) == []

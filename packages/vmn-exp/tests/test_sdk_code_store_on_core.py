@@ -1,4 +1,4 @@
-"""``vmn_exp.core.code_store`` on core's ``version_stamp.store.code`` (plan 37
+"""``vmn_exp.core.code_store`` on core's ``version_stamp.store.code`` (plan 45
 P5e): the SDK functions take any area and hop to the ``code`` area; their
 behavior is pinned here with an in-memory fake."""
 from version_stamp.store import code as core_code

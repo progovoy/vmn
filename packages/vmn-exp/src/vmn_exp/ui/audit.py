@@ -10,9 +10,8 @@ An entry's id starts with its zero-padded microsecond timestamp
 export streams.
 """
 import json
-import secrets
-import time
 
+from fastapi import Request
 from fastapi.routing import APIRoute
 from starlette.concurrency import run_in_threadpool
 
@@ -28,13 +27,14 @@ def audit_key(ts):
 
 
 class AuditLog:
-    def __init__(self, store, clock=time.time):
+    def __init__(self, store, clock, random):
         self.store = store
         self.clock = clock
+        self.random = random
 
     def record(self, actor, action, actor_name="", **fields):
         ts = self.clock()
-        entry_id = f"{audit_key(ts)}-{secrets.token_hex(4)}"
+        entry_id = f"{audit_key(ts)}-{self.random.token_hex(4)}"
         entry = {"id": entry_id, "ts": ts, "actor": actor, "actor_name": actor_name,
                  "action": action, **fields}
         self.store.put("audit", entry_id, entry)
@@ -68,24 +68,57 @@ def audited_route(method, route):
     return route_role(route) not in (None, VIEWER)
 
 
+class AuditRecorder:
+    """Plain ASGI (a BaseHTTPMiddleware leaves cyclic garbage per request):
+    records a mutating request into ``state.audit`` (when it is set) once its
+    response starts, before the start goes out. A failed record sends
+    nothing more and raises once the app returns."""
+
+    def __init__(self, app, state):
+        self.app = app
+        self.state = state
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+        failure = None
+
+        async def recording_send(message):
+            nonlocal failure
+            if failure is not None:
+                return
+            if message["type"] == "http.response.start":
+                try:
+                    await self._record(scope, message["status"])
+                except Exception as exc:  # noqa: BLE001 -- re-raised below, outside the app
+                    failure = exc
+                    return
+            await send(message)
+
+        await self.app(scope, receive, recording_send)
+        if failure is not None:
+            raise failure
+
+    async def _record(self, scope, status):
+        audit = getattr(self.state, "audit", None)
+        route = scope.get("route")
+        if audit is None or not audited_route(scope["method"], route):
+            return
+        request = Request(scope)
+        await run_in_threadpool(
+            audit.record_principal,
+            getattr(request.state, "principal", None),
+            f"{request.method} {route.path}",
+            path=request.url.path,
+            workspace=scope.get("path_params", {}).get("ws_name"),
+            status=status,
+        )
+
+
 def install_audit_middleware(app):
-    """Record mutating requests into ``app.state.audit`` (when it is set).
+    """Install :class:`AuditRecorder` on *app*, recording into ``app.state.audit``.
 
     Install it before the authenticating middleware, so it runs inside it
     and sees ``request.state.principal``."""
-
-    @app.middleware("http")
-    async def _audit(request, call_next):
-        response = await call_next(request)
-        audit = getattr(app.state, "audit", None)
-        route = request.scope.get("route")
-        if audit is not None and audited_route(request.method, route):
-            await run_in_threadpool(
-                audit.record_principal,
-                getattr(request.state, "principal", None),
-                f"{request.method} {route.path}",
-                path=request.url.path,
-                workspace=request.scope.get("path_params", {}).get("ws_name"),
-                status=response.status_code,
-            )
-        return response
+    app.add_middleware(AuditRecorder, state=app.state)

@@ -12,7 +12,6 @@ answers from the last request's. An app that fails to read (its store
 settings, say) is logged and left out of that scrape."""
 import logging
 
-import vmn_exp.core.status as experiment_status
 from vmn_exp.core.app_settings import attention_entries
 from vmn_exp.core.metric_schema import effective_schema
 from vmn_exp.ui.config import DEFAULT_METRICS_ENDED_HOURS
@@ -36,7 +35,7 @@ class MetricsFeed:
         self._samples = LRU(APPS_KEPT)
 
     def text(self):
-        families, now = new_families(), experiment_status._now()
+        families, now = new_families(), self._cache.now()
         for ws_name, app_name in self._source.served_apps():
             ws = self._workspace_of(ws_name)
             if ws is None:
@@ -55,7 +54,7 @@ class MetricsFeed:
                 return samples
             return samples + self._samples.per_snapshot(
                 snapshot, lambda: self._computed(labels, ws, app_name, snapshot, now),
-                key=(ws.name, minute()))
+                key=(ws.name, minute(now)))
         except Exception as exc:
             _LOGGER.warning("Skipped %s/%s's gauges on /metrics: %s", ws.name, app_name, exc)
             return samples

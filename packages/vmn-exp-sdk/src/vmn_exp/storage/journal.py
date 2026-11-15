@@ -83,9 +83,12 @@ class _JournalState:
 
 
 def _writer_id():
-    from vmn_exp.core.writer import get_writer_id
+    """The writer id this process resolved (``get_writer_id``), else its
+    stream owner id: a journal key only needs a name unique to its writer."""
+    from vmn_exp.core.streams import process_owner
+    from vmn_exp.core.writer import resolved_writer_id
 
-    return get_writer_id()
+    return resolved_writer_id() or process_owner()
 
 
 def _is_heartbeat(filename, data):
@@ -173,7 +176,7 @@ def _adopt(inner, states):
 
 
 def journaled(inner, sink=None, writer_id=None, retries=3,
-              backoff=_default_backoff, clock=time.time):
+              backoff=_default_backoff, *, clock):
     """*inner* as a :class:`JournaledStorage` (a backend without a journal
     sink is returned as is)."""
     if isinstance(inner, JournaledStorage):

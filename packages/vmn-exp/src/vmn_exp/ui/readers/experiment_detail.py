@@ -19,11 +19,7 @@ from vmn_exp.core.refs import placement_snapshot
 from vmn_exp.core.resolve_ref import RefError
 from vmn_exp.core.run_error import ERROR_SUMMARY
 from vmn_exp.core.settle import row_closes
-from vmn_exp.core.status import (
-    load_run_state,
-    run_state_observed_at,
-    status_fields,
-)
+from vmn_exp.core.status import MIN_STALE_SEC, load_run_state, run_state_observed_at, status_fields
 from vmn_exp.core.tree import children_by_parent, fleet_summary, run_status, subtree_verstrs
 from vmn_exp.ui.memo import LRU
 from vmn_exp.ui.readers.detail_env import detail_env, env_file
@@ -41,7 +37,7 @@ from vmn_exp.snapshot import _resolve_verstr
 LOG_TAIL = 200
 
 
-_DETAIL_STATUS_KEYS = tuple(status_fields(None)) + (
+_DETAIL_STATUS_KEYS = tuple(status_fields(None, now=None)) + (  # no run state reads now
     "parent",
     "children",
     "kind",
@@ -93,9 +89,9 @@ def status_detail(
     read_run_state=load_run_state,
     read_observed_at=run_state_observed_at,
     read_child_row=None,
-    job_status=None,
+    job_status=None, *, now, min_stale_sec=MIN_STALE_SEC,
 ):
-    """Status payload with the run's place in the tree.
+    """Status payload with the run's place in the tree, statuses as of *now* on *min_stale_sec*.
 
     Reads the run state of the subtree only; *metadata* and *log* (a list or
     a :class:`LogSnapshot`) come from the caller, which already loaded both.
@@ -110,7 +106,7 @@ def status_detail(
     job = job_status(verstr) if job_status else None
     if job is not None:
         return _job_detail(storage, app_name, verstr, metadata, log, job,
-                           read_run_state, read_observed_at)
+                           read_run_state, read_observed_at, now, min_stale_sec)
     edges_of = edges(storage, app_name)
     parent_of = edges_of
     if verstr not in edges_of:  # not indexed yet: overlay, never copy the rest
@@ -128,6 +124,7 @@ def status_detail(
         observed_at=observed_at_fn,
         children_of=children_of,
         row_of=read_child_row,
+        now=now, min_stale_sec=min_stale_sec,
     )
     detail["parent"] = metadata.get("parent")
     detail["error"] = _full_error(storage, app_name, verstr, own_state)
@@ -144,7 +141,7 @@ def status_detail(
         fleet = fleet_summary(
             verstr, children_of, read_state_fn,
             observed_at=observed_at_fn, expected=expected,
-            closed=row_closes(detail),
+            closed=row_closes(detail), now=now, min_stale_sec=min_stale_sec,
         )
         detail["fleet"] = fleet and {k: v for k, v in fleet.items() if k != "children"}
     else:
@@ -154,9 +151,10 @@ def status_detail(
 
 
 def _job_detail(storage, app_name, verstr, metadata, log, job, read_run_state,
-                read_observed_at):
+                read_observed_at, now, min_stale_sec):
     own_state = read_run_state(storage, app_name, verstr)
-    detail = status_fields(own_state, observed_at=read_observed_at(storage, app_name, verstr))
+    detail = status_fields(own_state, now=now, min_stale_sec=min_stale_sec,
+                           observed_at=read_observed_at(storage, app_name, verstr))
     detail.update(job, parent=metadata.get("parent"),
                   error=_full_error(storage, app_name, verstr, own_state),
                   last_metric_at=_last_metric_at(log))
@@ -236,9 +234,10 @@ def experiment_detail(
     schema=None,
     step_range=None,
     last_good=None,
-    job_status=None,
+    job_status=None, *, now, min_stale_sec=MIN_STALE_SEC,
 ):
-    """``(detail, error)``; the ref supports @N / prefix / 'latest'.
+    """``(detail, error)``; the ref supports @N / prefix / 'latest'; statuses at *now*
+    on *min_stale_sec*.
 
     ``log`` is the tail unless *include_log*; ``log_tail`` / ``log_total`` and
     ``series_total`` let a client page the log and label thinned charts.
@@ -323,6 +322,7 @@ def experiment_detail(
             read_observed_at=states.read_observed_at,
             read_child_row=read_child_row,
             job_status=job_status,
+            now=now, min_stale_sec=min_stale_sec,
         ),
         "patches": patch_presence(storage, app_name, verstr, metadata),
         "env": detail_env(storage, app_name, verstr, env_read.result(), metadata),

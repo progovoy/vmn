@@ -27,7 +27,6 @@ or not the check runs in the background, ``checking`` counting the picks so
 far.
 """
 import json
-import time
 
 from vmn_exp.core import index_store_schema
 from vmn_exp.core.index_reread import by_app
@@ -107,7 +106,7 @@ def _chunk_puts(conn, app, mark, rows, picked, finished):
 class VmxCheck:
     """One app's check: *kv()* the store (or I/O helper) holding its lists."""
 
-    def __init__(self, kv, app_name, clock=time.monotonic):
+    def __init__(self, kv, app_name, *, clock):
         self._kv, self._app, self._clock = kv, app_name, clock
         self._keys, self.done, self.refold = [], 0, set()
         self._listing = None  # while list_later's are listed: the picks so far

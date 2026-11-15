@@ -1,4 +1,5 @@
 """Shared helpers for the moto-backed S3 storage tests."""
+import os
 from vmn_exp.storage.uri import s3_uri
 import collections
 import contextlib
@@ -9,6 +10,7 @@ from moto import mock_aws
 
 from version_stamp.core.logging import init_stamp_logger
 from vmn_exp.storage.store_marker import forget_checked
+from vmn_exp.core.real_io import RealClock
 
 BUCKET = "vmn-bucket"
 PREFIX = "exps"
@@ -35,7 +37,7 @@ def mocked_bucket(monkeypatch):
 def s3_storage():
     from vmn_exp.storage.s3 import S3SnapshotStorage
 
-    return S3SnapshotStorage(BUCKET, prefix=f"{PREFIX}/runs")
+    return S3SnapshotStorage(BUCKET, prefix=f"{PREFIX}/runs", env=os.environ)
 
 
 def cached_host(tmp_path, name):
@@ -44,7 +46,7 @@ def cached_host(tmp_path, name):
     return open_storage(
         s3_uri(BUCKET, PREFIX),
         root=str(tmp_path / name),
-        area="runs",
+        area="runs", clock=RealClock(), env=os.environ,
     )
 
 

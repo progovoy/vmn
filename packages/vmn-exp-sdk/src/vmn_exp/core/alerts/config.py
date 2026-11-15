@@ -14,8 +14,6 @@ conf.yml, so each ``VMN_EXP_ALERT_*`` URL/command adds a sink and
           - {type: slack, url: https://hooks.slack.com/services/...}
           - {type: command, command: ./notify.sh}
 """
-import os
-
 from vmn_exp.core.alerts.sinks import DEFAULT_TIMEOUT_SEC, build_sink
 from vmn_exp.core.app_conf import read_experiment_conf
 
@@ -40,8 +38,9 @@ class AlertConfig:
         self.timeout_sec = timeout_sec
 
 
-def load_alert_config(app_name=None, exp_conf=None, root=None):
-    """The alert config for *app_name*. Never raises.
+def load_alert_config(app_name=None, exp_conf=None, root=None, *, env):
+    """The alert config for *app_name*, its ``VMN_EXP_ALERT_*`` from *env*.
+    Never raises.
 
     *exp_conf* is the app's ``experiment`` conf section when the caller has it
     (the CLI's ``vcs.experiment``); None reads it from ``<root>/.vmn/<app>/conf.yml``.
@@ -49,26 +48,26 @@ def load_alert_config(app_name=None, exp_conf=None, root=None):
     if exp_conf is None:
         exp_conf = read_experiment_conf(app_name, root)
     alerts = (exp_conf or {}).get("alerts") or {}
-    specs = list(alerts.get("sinks") or []) + _env_sink_specs()
+    specs = list(alerts.get("sinks") or []) + _env_sink_specs(env)
     return AlertConfig(
-        sinks=[s for s in map(build_sink, specs) if s is not None],
+        sinks=[s for s in (build_sink(spec, env) for spec in specs) if s is not None],
         # YAML 1.1 reads a bare `on:` key as the boolean True.
-        on=_triggers(alerts.get("on", alerts.get(True))),
+        on=_triggers(env, alerts.get("on", alerts.get(True))),
         wait_sec=_number(alerts.get("wait_sec"), DEFAULT_WAIT_SEC),
         timeout_sec=_number(alerts.get("timeout_sec"), DEFAULT_TIMEOUT_SEC),
     )
 
 
-def _env_sink_specs():
+def _env_sink_specs(env):
     return [
-        {"type": kind, key: os.environ[var]}
+        {"type": kind, key: env[var]}
         for var, kind, key in ENV_SINKS
-        if os.environ.get(var)
+        if env.get(var)
     ]
 
 
-def _triggers(conf_on):
-    raw = os.environ.get(ON_ENV)
+def _triggers(env, conf_on):
+    raw = env.get(ON_ENV)
     names = raw.split(",") if raw is not None else conf_on
     if names is None:
         return set(DEFAULT_ON)

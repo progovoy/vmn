@@ -16,34 +16,25 @@ import functools
 import logging
 import os
 import signal
-import socket
 import sys
-import time
+import threading
 
 from vmn_exp._base import ensure_logger, now_iso
-from vmn_exp.core.background import Coalescing
 from vmn_exp.core.best_effort import BestEffort, quiet
-from vmn_exp.core.inputs import create_input_entry
 from vmn_exp.core.intent import build_intent_entry
 from vmn_exp.core.metric_compact import compact_by
+from vmn_exp.core.real_io import real_io
 from vmn_exp.core.rerun import RUNNER_SDK, repo_relative_cwd
-from vmn_exp.core.run_error import error_from_exception, error_from_message
-from vmn_exp.core.run_intervals import (
-    DEFAULT_SYNC_INTERVAL_SEC,
-    resolve_heartbeat_sec,
-    resolve_sync_sec,
-)
+from vmn_exp.core.run_error import error_from_exception
+from vmn_exp.core.run_intervals import DEFAULT_SYNC_INTERVAL_SEC, resolve_heartbeat_sec, resolve_sync_sec
 from vmn_exp.core.state_cas import new_attempt_id
 from vmn_exp.core.status import positive_env_sec
 from vmn_exp.core.storage_resolve import try_repo_root
 from vmn_exp.core.values import sanitize_entry
 from vmn_exp.core.writer import (
     append_entries_to_log,
-    compute_artifact_info,
-    create_log_entry,
-    create_tags_entry,
-    own_stream,
-    save_artifact,
+    get_writer_id,
+    split_for_append,
     stamped_entry,
     sync_to_remote,
 )
@@ -65,19 +56,24 @@ from vmn_exp.sdk.context import (  # noqa: F401  (re-exported API)
 from vmn_exp.sdk.create import SNAPSHOT_METADATA_ENV, create_record  # noqa: F401
 from vmn_exp.sdk import fork_safety  # noqa: F401  (registers the fork handlers)
 from vmn_exp.sdk.background_gate import BackgroundGate, RunBackground
+from vmn_exp.sdk.exit_code import ExitCodeNote
 from vmn_exp.sdk.heartbeat import Heartbeat
 from vmn_exp.sdk.log_buffer import LogBuffer
+from vmn_exp.sdk.log_sync import LogSync
 from vmn_exp.sdk.metric_defs import MetricDefinitions
 from vmn_exp.sdk.mode import is_disabled
 from vmn_exp.sdk.output_capture import RunOutput
-from vmn_exp.sdk.ranks import NoOpRun, is_secondary_rank
+from vmn_exp.sdk.process_hooks import ProcessHooks
+from vmn_exp.sdk import run_repr
+from vmn_exp.sdk.ranks import NoOpRun, is_secondary_rank, process_rank
 from vmn_exp.sdk.run_alerts import RunAlerts
-from vmn_exp.sdk.run_artifacts import RunArtifacts, checked_artifact_name
+from vmn_exp.sdk.run_artifacts import RunArtifacts
+from vmn_exp.sdk.run_close import RunClose
 from vmn_exp.storage.ship_state import finalizing
-from vmn_exp.storage.files import user_artifact_path
 from vmn_exp.sdk.media_uploads import MediaUploads
 from vmn_exp.sdk.run_media import RunMedia
 from vmn_exp.sdk.run_metrics import RunMetrics
+from vmn_exp.sdk.run_records import RunRecords
 from vmn_exp.sdk.state_publisher import RunStatePublisher
 from vmn_exp.sdk.steps import StepCounter, first_step
 
@@ -91,38 +87,38 @@ _SYNC_UNSET = object()
 # unless FINAL_UPLOAD_TIMEOUT_ENV overrides it.
 FINAL_REMOTE_TIMEOUT_SEC = 60
 FINAL_UPLOAD_TIMEOUT_ENV = "VMN_EXP_FINAL_UPLOAD_TIMEOUT_SEC"
-# How long finish() waits for run.alert() deliveries still in flight.
-ALERT_DRAIN_SEC = 5
+# The same wait under SIGTERM, unless FINAL_UPLOAD_TIMEOUT_ENV overrides it:
+# it fits a Kubernetes pod's default 30 s grace period.
+SIGTERM_FINAL_TIMEOUT_SEC = 25
+# Under SIGTERM media files get at most this share of what is left, so the
+# final state is written with budget to spare.
+SIGTERM_MEDIA_SHARE = 0.5
 
 # A run that reached interpreter exit still open was abandoned. Most of the
 # time that is just an mlflow-style "forgot to call finish()" — the process
 # fell off the end cleanly — and must read as succeeded, like the workload's
-# own exit code says. Only a genuinely uncaught exception (see
-# ``_note_uncaught_exception`` below) makes it read as failed instead.
+# own exit code says. An uncaught exception (see ``_note_uncaught_exception``
+# below) makes it read as failed with this code instead, and ``sys.exit(N)``
+# (noted by ``_EXIT_NOTE``) with N.
 ABANDONED_EXIT_CODE = 1
 
 # The uncaught exception that reached the top of this process, if any,
-# recorded as the abandoned runs' ``error``. Only it flips the atexit-abandoned
-# default from succeeded to failed: ``SystemExit`` never reaches
+# recorded as the abandoned runs' ``error``. ``SystemExit`` never reaches
 # ``sys.excepthook`` (CPython special-cases it before running atexit
-# handlers), so a bare ``sys.exit(N)`` outside a context-managed run stays
-# indistinguishable from a clean exit here — the same as it would be for any
-# other process without our instrumentation.
+# handlers); ``_EXIT_NOTE`` wraps ``sys.exit`` for that. Both hooks are
+# installed at the first run open (``_install_process_hooks``), not on import.
 _uncaught_exception = None
-_prev_excepthook = sys.excepthook
+_EXIT_NOTE = ExitCodeNote()
 
 
-def _note_uncaught_exception(exc_type, exc_value, tb):
+def _note_uncaught_exception(exc_value):
     global _uncaught_exception
     _uncaught_exception = exc_value
-    _prev_excepthook(exc_type, exc_value, tb)
-
-
-sys.excepthook = _note_uncaught_exception
 
 
 def start_run(
     app_name=None,
+    *,
     note=None,
     params=None,
     parent=None,
@@ -147,15 +143,23 @@ def start_run(
     sigterm_exit=None,
     reopen=False,
     export_env=True,
+    code=None,
 ):
     """Create an experiment (or reopen one), mark it running and return the ``Run``.
 
-    ``app_name=None`` resolves the app from the current checkout. Use the result
-    as a context manager, or call ``finish()`` yourself.
+    ``app_name=None`` resolves the app from the current checkout. Every other
+    argument is keyword-only. Use the result as a context manager, or call
+    ``finish()`` yourself.
 
     With ``VMN_SNAPSHOT_METADATA`` set (a container built from ``vmn-exp
     export``) no git checkout is needed: the run records against that snapshot
     into ``VMN_EXPERIMENT_DIR`` (or *storage*), exactly like the CLI.
+
+    ``code=False`` (or ``VMN_EXP_CODE=none`` when *code* is not given) records
+    no code at all — a notebook or a scratch directory: the app must be named
+    (*app_name* or ``VMN_APP_NAME``) and the store given as above. The run is
+    ``0.0.0-nocode[.rN]`` and is never rerun, restored or diffed. Never a
+    fallback: without it, a directory outside a checkout is an error.
 
     System metrics — this process's CPU and memory (and GPU, with ``pynvml``) —
     are recorded as ``sys_*`` metrics on every heartbeat unless opted out:
@@ -181,6 +185,12 @@ def start_run(
     With ``rewind_to_step=N`` too, the reopened run's history past step N is
     hidden (refused while the run is live elsewhere).
 
+    =========================  ===========================================
+    ``start_run(run_id=X)``    takes the existing run X (ValueError if none)
+    ``create_run(run_id=X)``   registers a new run named exactly X
+    ``name=``                  a display label; never looked up
+    =========================  ===========================================
+
     ``fork_from`` (a run ref, optionally ``"<ref>?_step=N"``) with
     ``fork_step=N`` creates a NEW run that starts with that run's metrics and
     params up to step N (all of them without a step) and continues from N + 1;
@@ -195,6 +205,11 @@ def start_run(
     capped by ``VMN_EXP_OUTPUT_CAP_MB`` (default 10), uploaded every
     ``sync_interval_sec`` and at finish. Off by default: the process then
     writes to pipes, not its TTY.
+
+    In the command ``vmn-exp run`` started itself (its direct child), a call
+    naming no *parent*, *nested* or *fork_from* records into the supervisor's
+    run, in a stream of its own (:mod:`vmn_exp.sdk.guest_run`), unless
+    ``--no-adopt`` / ``VMN_EXP_ADOPT=0`` turned the offer off.
 
     ``mode="disabled"`` (or ``VMN_MODE=disabled``; an explicit *mode* wins)
     returns a :class:`NoOpRun` without touching git or the store.
@@ -219,49 +234,50 @@ def start_run(
     where the process-shared env would leak one run's ID into a sibling.
     Subprocesses then do not nest under it unless given the ID themselves.
     """
-    on_sigterm = release.resolve_on_sigterm(on_sigterm)
-    sigterm_exit = release.resolve_sigterm_exit(sigterm_exit)
-    if is_disabled(mode):
+    io = real_io()
+    on_sigterm = release.resolve_on_sigterm(on_sigterm, io.env)
+    sigterm_exit = release.resolve_sigterm_exit(sigterm_exit, io.env)
+    if is_disabled(mode, io.env):
         return NoOpRun(app_name, disabled=True)
-    if not all_ranks and is_secondary_rank():
-        return NoOpRun(app_name)
+    if not all_ranks and is_secondary_rank(io.env):
+        return NoOpRun(app_name, rank=process_rank(io.env))
     # The reused CLI helpers log through VMN_LOGGER, which raises until something
     # initializes it — and a library must not call init_stamp_logger.
     ensure_logger()
     _check_intent(intent, intent_keywords)
-
     prior_state, start_step = None, None
-    ref, reopen = resume.requested_run_id(run_id, reopen)
+    ref, reopen = resume.requested_run_id(run_id, reopen, io.env, context.consume_env)
     fork.check_modes(ref, fork_from, rewind_to_step)
+    adopted = None if ref else _adopted_record(app_name, storage, parent, nested, fork_from, io.env)
     if ref:
         # Resume: locate the existing run; env stays as originally captured.
         app_name, storage, verstr, prior_state, exp_conf = resume.locate(
-            app_name, ref, storage
-        )
-        resume.check_reopenable(app_name, verstr, prior_state, reopen, not run_id)
+            app_name, ref, storage, from_env=not run_id, env=io.env)
+        now = io.clock.now()
+        resume.check_reopenable(app_name, verstr, prior_state, reopen, not run_id, now)
         if rewind_to_step is not None:
-            start_step = fork.rewind(storage, app_name, verstr, prior_state, rewind_to_step)
+            start_step = fork.rewind(storage, app_name, verstr, prior_state, rewind_to_step, now, io)
+    elif adopted:
+        app_name, storage, verstr, exp_conf = adopted
     else:
         if fork_from:
             app_name, storage, source, fork_step = fork.locate_source(
-                app_name, fork_from, fork_step, storage
-            )
+                app_name, fork_from, fork_step, storage, io.env)
         app_name, storage, verstr, exp_conf = create_record(
             app_name, note, params, parent, nested, storage, name,
-            capture_env=capture_env,
-        )
+            capture_env=capture_env, code=code, env=io.env, host=io.host)
         if fork_from:
-            start_step = fork.seed(storage, app_name, verstr, source, fork_step)
+            start_step = fork.seed(storage, app_name, verstr, source, fork_step, io)
 
-    run = Run(
+    run = _run_class(adopted)(
         storage,
         app_name,
         verstr,
-        resolve_heartbeat_sec(heartbeat_interval_sec, exp_conf),
-        system_metrics=sysmetrics.sdk_enabled(system_metrics, exp_conf),
+        resolve_heartbeat_sec(heartbeat_interval_sec, io.env, exp_conf),
+        system_metrics=sysmetrics.sdk_enabled(system_metrics, io.env, exp_conf),
         sync_interval_sec=resolve_sync_sec(
             None if sync_interval_sec is _SYNC_UNSET else sync_interval_sec or 0,
-            exp_conf,
+            io.env, exp_conf,
         ),
         prior_state=prior_state,
         name=name,
@@ -270,19 +286,41 @@ def start_run(
         on_sigterm=on_sigterm,
         sigterm_exit=sigterm_exit,
         export_env=export_env,
+        install_hooks=_real_process_hooks(),
+        clock=io.clock,
+        host=io.host,
+        random=io.random,
+        env=io.env,
     )
     run.start_step = start_step
     run._steps = StepCounter(
         first_step(storage, app_name, verstr, start_step, prior_state is not None)
     )
     run._open()
-    if prior_state is not None:
+    if prior_state is not None or adopted:
         _record_resume_inputs(run, note, params)
     if tags:
         run.set_tags(tags)
     if intent is not None:
         run.set_intent(intent, keywords=intent_keywords)
     return run
+
+
+def _adopted_record(app_name, storage, parent, nested, fork_from, env):
+    """The record of the run ``vmn-exp run`` offers this process in *env*, when
+    it takes it (:mod:`vmn_exp.sdk.guest_run`); None otherwise."""
+    from vmn_exp.sdk.guest_run import adopted_record
+
+    return adopted_record(app_name, storage, parent, nested, fork_from, context.context_run(),
+                          env, os.getppid, resume.locate, context.consume_env)
+
+
+def _run_class(adopted):
+    if not adopted:
+        return Run
+    from vmn_exp.sdk.guest_run import GuestRun
+
+    return GuestRun
 
 
 def _check_intent(intent, keywords):
@@ -293,21 +331,23 @@ def _check_intent(intent, keywords):
 
 
 def _record_resume_inputs(run, note, params):
-    """A resumed run's new note/params are appended, like any later entry."""
+    """A resumed or adopted run's new note/params are appended, like any
+    later entry."""
     if params:
         run.log_params(params)
     if note:
         run.log_note(note)
 
 
-def _checkout_relative_cwd():
-    """This process's cwd relative to its checkout; None when git-free."""
-    if os.environ.get(SNAPSHOT_METADATA_ENV):
+def _checkout_relative_cwd(env):
+    """This process's cwd relative to its checkout; None when git-free (*env* says)."""
+    if env.get(SNAPSHOT_METADATA_ENV):
         return None
     return repo_relative_cwd(os.getcwd(), try_repo_root())
 
 
-class Run(RunMetrics, MetricDefinitions, RunArtifacts, RunMedia, RunAlerts, RunBackground):
+class Run(RunMetrics, MetricDefinitions, RunArtifacts, RunMedia, RunAlerts, RunBackground,
+          RunRecords, RunClose):
     """One open experiment run: a metrics sink plus a liveness publisher."""
 
     disabled = False
@@ -327,8 +367,20 @@ class Run(RunMetrics, MetricDefinitions, RunArtifacts, RunMedia, RunAlerts, RunB
         on_sigterm=release.FAIL,
         sigterm_exit=release.KILL,
         export_env=True,
+        writer=None,
+        *,
+        install_hooks,
+        clock, host, random, env,
     ):
         self._storage = storage
+        self._clock = clock
+        self._host = host
+        self._env = env  # what its alert config, output cap and timeouts read
+        self._writer = writer  # a writer id of its own for its streams, or None
+        self._stream_writer = writer or get_writer_id(env, host)  # None: the process's, resolved now
+        # Installs the process's excepthook and atexit finalizer at open;
+        # None installs none.
+        self._install_hooks = install_hooks
         self._export_env = export_env
         self._on_sigterm = on_sigterm
         self._sigterm_exit = sigterm_exit
@@ -345,49 +397,44 @@ class Run(RunMetrics, MetricDefinitions, RunArtifacts, RunMedia, RunAlerts, RunB
         # The process that owns the run. A forked child inherits this object but
         # not the run: `current_run()` there is None, atexit leaves it alone and
         # every recording or closing call on it is dropped (_in_owner).
-        self.pid = os.getpid()
+        self.pid = host.pid()
         self._inert_warned_pid = None
 
         self._finished = False
         self._detached = False
-        self._monotonic_start = time.monotonic()
+        self._monotonic_start = clock.monotonic()
         self._sync_interval_sec = sync_interval_sec
         self._last_sync = self._monotonic_start
         self._ctx_prev = None
 
-        self._state = self._initial_state(heartbeat_interval_sec, prior_state)
+        self._state = self._initial_state(heartbeat_interval_sec, prior_state, host, random, env)
         # A resumed run's duration spans every attempt, from the first start.
         self._elapsed_before = (
-            resume.elapsed_before(self._state) if prior_state is not None else 0.0
+            resume.elapsed_before(self._state, clock.now()) if prior_state is not None else 0.0
         )
         # Every background storage call goes through it: pause_background()
         # and the fork handlers (fork_safety) hold them all.
         self._gate = BackgroundGate()
         self._state_publisher = RunStatePublisher(
-            storage, app_name, verstr, self._gate, resumes=prior_state)
+            storage, app_name, verstr, self._gate, resumes=prior_state,
+            abandon=threading.Event())
+        self._refused_warned = False
         self._log_buffer = LogBuffer(
-            functools.partial(append_entries_to_log, storage, app_name, verstr),
+            functools.partial(append_entries_to_log, storage, app_name, verstr, writer=self._stream_writer),
             self._gate,
+            split=split_for_append,
+            on_refused=self._warn_refused_once,
         )
         self._chore_guard = quiet(_LOGGER)
-        self._log_sync = Coalescing(
-            self._gate.wrap(functools.partial(
-                self._chore_guard,
-                "experiment log sync",
-                sync_to_remote,
-                storage,
-                app_name,
-                verstr,
-            )),
-            "vmn-exp-sync",
-        )
+        self._log_sync = LogSync(self._sync_log, self._gate, threading.Event())
         self._heartbeat = Heartbeat(self._gate.wrap(self._beat), heartbeat_interval_sec)
         self._media_uploads = MediaUploads(self._gate.wrap(self._save_artifact_file))
         self._output = (
-            RunOutput(storage, app_name, verstr, self._gate) if capture_output else None
+            RunOutput(storage, app_name, verstr, self._gate, clock=clock.monotonic, env=env)
+            if capture_output else None
         )
         # No pid: this process *is* the workload.
-        self._sampler = sysmetrics.Sampler(self._log_unstepped, system_metrics)
+        self._sampler = sysmetrics.Sampler(self._log_unstepped, system_metrics, clock=clock)
         # Recording the run's outcome warns once per step; heartbeat chores and
         # syncs are routine enough to stay at debug.
         self._record_guard = BestEffort(
@@ -396,7 +443,7 @@ class Run(RunMetrics, MetricDefinitions, RunArtifacts, RunMedia, RunAlerts, RunB
         )
 
     @staticmethod
-    def _initial_state(heartbeat_interval_sec, prior_state):
+    def _initial_state(heartbeat_interval_sec, prior_state, host, random, env):
         started_at = now_iso()
         state = {
             "state": "running",
@@ -404,12 +451,12 @@ class Run(RunMetrics, MetricDefinitions, RunArtifacts, RunMedia, RunAlerts, RunB
             # argv is the honest answer, and consumers read the key.
             "command": list(sys.argv),
             "runner": RUNNER_SDK,
-            "cwd": _checkout_relative_cwd(),
-            "pid": os.getpid(),
-            "host": socket.gethostname(),
+            "cwd": _checkout_relative_cwd(env),
+            "pid": host.pid(),
+            "host": host.hostname(),
             # This process's attempt at the run: a duplicate attempt's
             # heartbeats never reopen a run another attempt finished.
-            "attempt": new_attempt_id(),
+            "attempt": new_attempt_id(random),
             "started_at": started_at,
             "heartbeat": started_at,
             # Bumped every beat: a liveness signal that needs no clock.
@@ -426,178 +473,46 @@ class Run(RunMetrics, MetricDefinitions, RunArtifacts, RunMedia, RunAlerts, RunB
     # -- lifecycle ---------------------------------------------------------
 
     def _open(self):
+        if self._install_hooks is not None:
+            self._install_hooks()
         self._publish()
         context.register(self)
+        self._defer_ships()
         install_signal_handlers()
         if self._output is not None:
             self._chore_guard("output capture", self._output.start)
         self._heartbeat.start()
 
-    def finish(self, exit_code=0, error=None):
-        """Finalize the run. Idempotent: a second call changes nothing.
+    def __repr__(self):
+        return run_repr.text(*self._repr_fields())
 
-        False when another attempt of the run (a duplicate pod, a resumed
-        one) finished it first: its final state stays, this one is dropped
-        with a warning. True otherwise — also when the final upload is still
-        in flight at the deadline.
+    def _repr_html_(self):
+        return run_repr.html(*self._repr_fields())
 
-        *error* — an exception or a message — is recorded as the final run
-        state's ``error`` (and an ``error`` log entry), whatever *exit_code* is.
+    def _repr_fields(self):
+        state = self._state
+        return self.app_name, self.id, self.name, state.get("state"), state.get("exit_code")
 
-        Never raises for a storage failure (a flaky remote at the end of a long
-        run is logged, not thrown at the workload), and always closes the run —
-        it leaves the open-run registry and hands the env back either way.
-        """
-        return self._finish(exit_code, error=error)
+    def _defer_ships(self):
+        """Due ships of a direct-to-bucket storage go to the run's sync
+        worker, never the appending thread (a heartbeat, a log_metric call)."""
+        defer = getattr(self._storage, "defer_ships", None)
+        if defer is not None:
+            defer(self.app_name, self.id, self._log_sync.submit)
 
-    def release(self, reason=None):
-        """Hand the run back unfinished, for another attempt to reopen with
-        ``start_run(run_id=...)``: everything logged so far is flushed and
-        synced, recording stops, and the run reads as waiting (``created``)
-        with ``end_reason: released`` (*reason* as ``release_reason``).
-        Idempotent; a no-op on a finished run. Never raises for a storage
-        failure, like :meth:`finish`. False, like :meth:`finish`, when another
-        attempt finished the run: the release is dropped, its ending stays."""
-        deadline = _final_upload_deadline()
-        if self._record_release(deadline, reason=reason):
-            self._close_remote_writers(deadline)
-        return not self._state_publisher.superseded
+    def _undefer_ships(self):
+        undefer = getattr(self._storage, "undefer_ships", None)
+        if undefer is not None:
+            undefer(self.app_name, self.id)
 
-    def detach(self):
-        """Walk away from the run without writing anything more to the store —
-        no final state, no release, not even a last heartbeat — for an attempt
-        that lost the run to another one. Its threads stop (waiting, within the
-        final-upload timeout, for a write already in flight), what is still
-        queued is dropped and the run leaves this process's context, so
-        atexit and SIGTERM leave it alone. Logging afterwards records nothing;
-        ``finish()``, ``release()`` and the context manager's exit write
-        nothing. Idempotent; a no-op on a finished run."""
-        if self._finished or not self._in_owner():
-            return
-        self._finished = self._detached = True
-        try:
-            self._stop_background(_final_upload_deadline())
-        finally:
-            context.unregister(self)
+    def _sync_log(self):
+        # sync_to_remote is looked up here, at call time: tests patch it on
+        # this module.
+        sync_to_remote(self._storage, self.app_name, self.id, **self._writer_arg())
 
-    def _stop_background(self, deadline):
-        """Stop a detached run's threads; its closed gate skips their last calls."""
-        self._gate.close(_left(deadline))
-        self._heartbeat.stop()
-        self._log_buffer.discard()
-        if self._output is not None:
-            self._output.stop()
-        self._media_uploads.close(_left(deadline))
-        self._close_writers(deadline)
-
-    def _finish(self, exit_code, error=None, **final_state):
-        deadline = _final_upload_deadline()
-        if self._record_final(exit_code, deadline, error=error, **final_state):
-            self._close_remote_writers(deadline)
-        return not self._state_publisher.superseded
-
-    def _record_error(self, error):
-        """Append the ``error`` log entry of *error*; return its run-state mapping."""
-        if isinstance(error, BaseException):
-            recorded = error_from_exception(error)
-            entry = create_log_entry(
-                "error",
-                exception=type(error).__name__,
-                message=recorded["message"],
-                traceback=recorded["traceback"],
-            )
-        else:
-            recorded = error_from_message(error)
-            entry = create_log_entry("error", message=recorded["message"])
-        self._record_guard("error entry", self._append, entry)
-        return recorded
-
-    def _record_final(self, exit_code, deadline, error=None, **final_state):
-        """Write the run's last log entries and final state locally, queue their
-        upload and close the run. False if it was finished already."""
-
-        def outcome():
-            duration = self._duration()
-            if error is not None:
-                recorded = self._record_guard("error", self._record_error, error)
-                if recorded is not None:
-                    final_state["error"] = recorded
-            self._record_guard(
-                "run entry",
-                self._append,
-                create_log_entry(
-                    "run",
-                    command=self._state["command"],
-                    exit_code=exit_code,
-                    duration_sec=duration,
-                ),
-            )
-            return dict(state="finished", exit_code=exit_code, finished_at=now_iso(),
-                        duration_sec=duration, **final_state)
-
-        return self._close_attempt(deadline, outcome, alerts=True)
-
-    def _record_release(self, deadline, reason=None, signal=None):
-        """:meth:`_record_final` of a released attempt (no exit code, no alerts)."""
-        return self._close_attempt(
-            deadline, lambda: release.released_state(self._duration(), reason, signal))
-
-    def _close_attempt(self, deadline, outcome, alerts=False):
-        """Stop recording, write *outcome()*'s state last, queue the uploads
-        and close the run. False if it was closed already.
-
-        Media files are waited for (until *deadline*) first: their entries are
-        appended as they are stored, so they must land before the final flush.
-        """
-        if self._finished or not self._in_owner():
-            return False
-        self._finished = True
-        # A paused run still drains: its last uploads must not wait for a resume.
-        self._gate.release()
-
-        try:
-            # Before the heartbeat stops: a long final upload is not a stuck run.
-            self._record_guard(
-                "media files",
-                self._close_media_uploads,
-                _left(deadline),
-            )
-            self._heartbeat.stop()
-            final_state = outcome()
-            if self._output is not None:
-                self._record_guard("output log", self._record_output)
-            # The log lands before the final state: a reader that sees the run
-            # finished must also see everything it logged.
-            self._record_guard("buffered log", self._log_buffer.close)
-            self._record_guard("final state", self._publish, final_state, final=True)
-            self._log_sync.submit(None)
-            if alerts:
-                self._record_guard("alerts", self._finish_alerts, ALERT_DRAIN_SEC)
-        except BaseException:
-            context.unregister(self)
-            raise
-        # Still uploading: a fork waits for it until _close_remote_writers ends.
-        context.mark_closing(self)
-        return True
-
-    def _record_output(self):
-        self._append(self._output.stop())
-
-    def _close_remote_writers(self, deadline):
-        try:
-            # One deadline for all: they upload in parallel, so waiting for each
-            # in turn would double the worst case.
-            for what in self._close_writers(deadline):
-                _LOGGER.warning(f"vmn: the final {what} of run {self.id} is still uploading")
-            compact_by(self._storage, self.app_name, self.id,
-                       own_stream(self._storage, self.app_name, self.id), deadline)
-        finally:
-            context.closed(self)
-
-    def _close_writers(self, deadline):
-        """Close the remote writers; the names of those still uploading."""
-        return [what for what, writer in self._remote_writers()
-                if not writer.close(_left(deadline))]
+    def _writer_arg(self):
+        """``writer=`` for a run with a writer of its own; nothing otherwise."""
+        return {} if self._writer is None else {"writer": self._writer}
 
     def _remote_writers(self):
         writers = [("log", self._log_sync), ("state", self._state_publisher)]
@@ -606,112 +521,28 @@ class Run(RunMetrics, MetricDefinitions, RunArtifacts, RunMedia, RunAlerts, RunB
         return writers
 
     def _duration(self):
-        return round(self._elapsed_before + time.monotonic() - self._monotonic_start, 3)
+        return round(self._elapsed_before + self._clock.monotonic() - self._monotonic_start, 3)
 
-    def __enter__(self):
-        return self
+    # The close path (run_close) reaches these through the instance: tests
+    # patch compact_by, error_from_exception and FINAL_REMOTE_TIMEOUT_SEC on
+    # this module, so the names are looked up here, at call time.
 
-    def __exit__(self, exc_type, exc, tb):
-        if self._finished:
-            return False
-        if exc is None:
-            self.finish()
-            return False
-        if isinstance(exc, SystemExit):
-            # sys.exit(0) inside the block is a clean, intentional exit — not
-            # an error — and the real code (when non-zero) beats a generic 1.
-            self.finish(exit_code=_system_exit_code(exc))
-            return False
-        self.finish(exit_code=1, error=exc)
-        return False  # never swallow — nor replace — the workload's exception
+    def _compact_by(self, *args):
+        compact_by(*args)
+
+    def _error_from_exception(self, error):
+        return error_from_exception(error)
+
+    def _final_deadline(self, timeout_sec=None):
+        """The deadline *timeout_sec* (default: the final-upload timeout) from now."""
+        if timeout_sec is None:
+            timeout_sec = final_upload_timeout_sec(self._env)
+        return self._clock.monotonic() + timeout_sec
+
+    def _time_left(self, deadline):
+        return max(0.0, deadline - self._clock.monotonic())
 
     # -- recording ---------------------------------------------------------
-
-    def log_params(self, mapping):
-        # A `params` entry, not a rewrite of the `create` entry: the log is
-        # append-only, so readers fold later params in rather than see them move.
-        self._append(create_log_entry("params", params=dict(mapping)))
-
-    def log_note(self, text):
-        self._append(create_log_entry("note", text=text))
-
-    def log_input(self, uri, name=None, digest=None, kind=None):
-        """Record that this run consumed the artifact at *uri*.
-
-        *name* defaults to the URI basename (without extension). *digest* and
-        *kind* are optional provenance hints (e.g. ``"sha256:..."`` and
-        ``"dataset"``). Multiple calls are independent log entries; fold logic
-        merges them latest-write-wins by name.
-        """
-        self._append(create_input_entry(uri, name=name, digest=digest, kind=kind, ts=now_iso()))
-
-    @owner_only()
-    def log_artifact(self, path, name=None):
-        """Store the file at *path* as artifact *name* (a relative ``a/b/c``
-        path; default: its basename), at ``artifacts/<name>`` in the run."""
-        info = compute_artifact_info(path)
-        if name is not None:
-            info["path"] = user_artifact_path(checked_artifact_name(name))
-        self._save_artifact_file(path, info["path"])
-        self._append(create_log_entry("artifact", **info))
-
-    def _save_artifact_file(self, path, name):
-        if self._detached:
-            return
-        save_artifact(self._storage, self.app_name, self.id, path, name=name)
-
-    def register_model(self, name, artifact_path=None, alias=None, description=None, *, storage=None):
-        """Register this run as a model version in the registry.
-
-        Convenience wrapper around :func:`~vmn_exp.sdk.models.register_model`
-        that pre-fills *run*, *app_name* and *storage* from this run.
-
-        Parameters
-        ----------
-        name:
-            Model name.
-        artifact_path:
-            Record-relative path of the stored file (``artifacts/<name>``).
-        alias:
-            If given, immediately point this alias at the new version.
-        description:
-            Human-readable description of this version.
-        storage:
-            Override the storage; defaults to this run's storage.
-        """
-        from vmn_exp.sdk.models import register_model as _register_model
-
-        return _register_model(
-            name,
-            run=self,
-            artifact_path=artifact_path,
-            alias=alias,
-            description=description,
-            storage=storage,
-        )
-
-    def use_model(self, ref, *, storage=None):
-        """Record that this run used model *ref*; see :mod:`vmn_exp.sdk.usage`."""
-        from vmn_exp.sdk.usage import use_model
-
-        return use_model(ref, run=self, storage=storage)
-
-    def use_dataset(self, ref, *, storage=None):
-        """Record that this run used dataset *ref*; see :mod:`vmn_exp.sdk.usage`."""
-        from vmn_exp.sdk.usage import use_dataset
-
-        return use_dataset(ref, run=self, storage=storage)
-
-    # Tags are mutable, and can be set on a finished run: each call appends a
-    # `tags` entry, and readers fold them per key, last write wins.
-    def set_tag(self, key, value):
-        self.set_tags({key: value})
-
-    def set_tags(self, tags):
-        self._append(create_tags_entry(tags))
-
-    def remove_tag(self, key):
-        self._append(create_tags_entry(remove=[key]))
 
     @owner_only()
     def set_intent(self, text, keywords=None, generator=None):
@@ -723,16 +554,7 @@ class Run(RunMetrics, MetricDefinitions, RunArtifacts, RunMedia, RunAlerts, RunB
         self._append(stamped_entry(build_intent_entry(text, keywords, generator)))
         if self._finished and not self._detached:
             self._record_guard("intent", sync_to_remote, self._storage, self.app_name,
-                               self.id)
-
-    def similar(self, top=10):
-        """The past runs most like this one — its code, changes, params,
-        inputs and intent so far: :func:`vmn_exp.sdk.reader.similar_runs`
-        items, under the checkout's conf."""
-        from vmn_exp.core.similar_search import find
-
-        self._log_buffer.flush()
-        return find(self._storage, self.app_name, self.id, self._exp_conf, top=top)
+                               self.id, **self._writer_arg())
 
     # -- internals ---------------------------------------------------------
 
@@ -744,7 +566,7 @@ class Run(RunMetrics, MetricDefinitions, RunArtifacts, RunMedia, RunAlerts, RunB
     def _in_owner(self):
         """Whether this process opened the run; in a forked child it did not,
         and the call is dropped (warned once per run per process)."""
-        here = os.getpid()
+        here = self._host.pid()
         if here == self.pid:
             return True
         if self._inert_warned_pid != here:
@@ -758,6 +580,13 @@ class Run(RunMetrics, MetricDefinitions, RunArtifacts, RunMedia, RunAlerts, RunB
         entry = sanitize_entry(entry)
         if entry is not None:
             self._log_buffer.append(entry)
+
+    def _warn_refused_once(self, count):
+        if self._refused_warned:
+            return
+        self._refused_warned = True
+        _LOGGER.warning(f"vmn: run {self.id} no longer exists in the store; "
+                        f"{count} entries were not recorded")
 
     def _publish(self, updates=(), final=False):
         self._state.update(updates)
@@ -784,49 +613,64 @@ class Run(RunMetrics, MetricDefinitions, RunArtifacts, RunMedia, RunAlerts, RunB
     def _maybe_sync(self):
         if not self._sync_interval_sec:
             return
-        if time.monotonic() - self._last_sync < self._sync_interval_sec:
+        if self._clock.monotonic() - self._last_sync < self._sync_interval_sec:
             return
-        self._last_sync = time.monotonic()
-        self._log_sync.submit(None)
+        self._last_sync = self._clock.monotonic()
+        self._log_sync.submit()
         if self._output is not None:
             self._output.request_upload()
 
 
-def _finalize_open_runs(exit_code=None, **final_state):
+def _finalize_open_runs(exit_code=None, deadline=None, media_share=1.0, exit_note=None,
+                        **final_state):
     """Never leave a run claiming ``running`` just because nobody finished it.
 
     With no explicit *exit_code* (the atexit case) a clean process exit reads
-    as succeeded, and only a genuinely uncaught exception reads as failed —
-    see ``_uncaught_exception``. ``_finalize_signaled`` always passes an
-    explicit code, so a killed process is unaffected.
+    as succeeded; a genuinely uncaught exception reads as failed (see
+    ``_uncaught_exception``), else the code *exit_note* noted from
+    ``sys.exit(N)``. ``_finalize_signaled`` always passes an explicit code, so
+    a killed process is unaffected.
 
     Only this process's runs: a forked child exiting normally must not finalize
     — and so mark failed — the parent's still-running run. A run opened with
     ``on_sigterm="release"`` is released instead when a signal ended it
     (``final_state["signal"]``).
+
+    *deadline* defaults to the final-upload timeout from now; *media_share* is
+    the share of it each run's media files may wait for (see ``_close_attempt``).
     """
     error = None
     if exit_code is None:
-        exit_code = ABANDONED_EXIT_CODE if _uncaught_exception is not None else 0
-        error = _uncaught_exception
+        exit_code, error = _abandoned_exit(exit_note)
     # One shared deadline for every run's uploads: a hung remote must not
     # spend the whole budget on each run in turn. Media files are waited for
     # while recording (their entries must precede the final flush); the rest
     # of the uploads after every run's final state is written.
-    deadline = _final_upload_deadline()
+    runs = list(reversed(context.open_runs()))
+    if deadline is None and runs:
+        deadline = runs[0]._final_deadline()
     recorded = [
         run
-        for run in reversed(context.open_runs())
-        if _quietly(_end_attempt, run, deadline, exit_code, error, final_state)
+        for run in runs
+        if _quietly(_end_attempt, run, deadline, media_share, exit_code, error, final_state)
     ]
     for run in recorded:
         _quietly(run._close_remote_writers, deadline)
 
 
-def _end_attempt(run, deadline, exit_code, error, final_state):
+def _abandoned_exit(exit_note):
+    """The exit code and error of runs still open at a process exit."""
+    if _uncaught_exception is not None:
+        return ABANDONED_EXIT_CODE, _uncaught_exception
+    return (0 if exit_note is None else exit_note.noted()), None
+
+
+def _end_attempt(run, deadline, media_share, exit_code, error, final_state):
     if final_state.get("signal") and run._on_sigterm == release.RELEASE:
-        return run._record_release(deadline, signal=final_state["signal"])
-    return run._record_final(exit_code, deadline, error=error, **final_state)
+        return run._record_release(
+            deadline, signal=final_state["signal"], media_share=media_share)
+    return run._record_final(
+        exit_code, deadline, error=error, media_share=media_share, **final_state)
 
 
 def _quietly(step, *args, **kwargs):
@@ -837,36 +681,30 @@ def _quietly(step, *args, **kwargs):
         return False
 
 
-def final_upload_timeout_sec():
-    """How long finalizing waits for the last uploads: ``VMN_EXP_FINAL_UPLOAD_TIMEOUT_SEC``
+def final_upload_timeout_sec(env):
+    """How long finalizing waits for the last uploads: *env*'s ``VMN_EXP_FINAL_UPLOAD_TIMEOUT_SEC``
     when a positive number, else a minute. Read when a run is finalized."""
-    return positive_env_sec(FINAL_UPLOAD_TIMEOUT_ENV, FINAL_REMOTE_TIMEOUT_SEC)
+    return positive_env_sec(env, FINAL_UPLOAD_TIMEOUT_ENV, FINAL_REMOTE_TIMEOUT_SEC)
 
 
-def _final_upload_deadline():
-    return time.monotonic() + final_upload_timeout_sec()
-
-
-def _left(deadline):
-    return max(0.0, deadline - time.monotonic())
-
-
-def _system_exit_code(exc):
-    """``sys.exit()``'s effective process exit code, as the interpreter itself
-    computes it: no argument (or ``None``) is 0, a non-int argument (a message)
-    is printed and counts as 1, anything else is used as-is."""
-    code = exc.code
-    if code is None:
-        return 0
-    return code if isinstance(code, int) else 1
+def sigterm_timeout_sec(env):
+    """How long finalizing under SIGTERM waits: *env*'s ``VMN_EXP_FINAL_UPLOAD_TIMEOUT_SEC``
+    when a positive number, else 25 s (or the final-upload default, if lower)."""
+    timeout = positive_env_sec(env, FINAL_UPLOAD_TIMEOUT_ENV, None)
+    if timeout is None:
+        return min(FINAL_REMOTE_TIMEOUT_SEC, SIGTERM_FINAL_TIMEOUT_SEC)
+    return timeout
 
 
 def _finalize_signaled(signum):
     """A run a signal ended exits ``128 + N``, as a shell reports it — or is
     released, when it was opened with ``on_sigterm="release"``."""
     name = signal.Signals(signum).name
+    runs = context.open_runs()
+    deadline = runs[-1]._final_deadline(sigterm_timeout_sec(runs[-1]._env)) if runs else None
     with finalizing():
-        _finalize_open_runs(128 + signum, received_signal=name, signal=name)
+        _finalize_open_runs(128 + signum, deadline=deadline, media_share=SIGTERM_MEDIA_SHARE,
+                            received_signal=name, signal=name)
 
 
 def install_signal_handlers():
@@ -876,8 +714,8 @@ def install_signal_handlers():
     again after installing a SIGTERM handler of your own (it is chained), or
     when the SDK is first imported from a worker thread.
     """
-    signals.install(_finalize_signaled, timeout=final_upload_timeout_sec,
-                    raises=_sigterm_raises)
+    signals.install(_finalize_signaled, timeout=lambda: sigterm_timeout_sec(real_io().env),
+                    raises=_sigterm_raises, has_work=_has_open_runs)
 
 
 def _sigterm_raises():
@@ -885,5 +723,26 @@ def _sigterm_raises():
     return any(run._sigterm_exit == release.RAISE for run in context.open_runs())
 
 
-atexit.register(_finalize_open_runs)
+def _has_open_runs():
+    return bool(context.open_runs())
+
+
+def _install_process_hooks(process_hooks, sys_module, atexit_module, exit_note):
+    """At each run open: the excepthook and atexit finalizer (once per
+    process), the ``sys.exit`` note, and forget a ``sys.exit`` the
+    application swallowed before this run opened."""
+    process_hooks.install_once(
+        sys_module, atexit_module,
+        functools.partial(_finalize_open_runs, exit_note=exit_note),
+        _note_uncaught_exception)
+    exit_note.install(sys_module)
+    exit_note.clear()
+
+
+def _real_process_hooks():
+    return functools.partial(
+        _install_process_hooks, _PROCESS_HOOKS, sys, atexit, _EXIT_NOTE)
+
+
+_PROCESS_HOOKS = ProcessHooks(os.getpid)
 install_signal_handlers()

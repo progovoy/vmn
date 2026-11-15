@@ -13,6 +13,7 @@ from vmn_exp.storage.areas import REGISTRY
 
 pytest.importorskip("fastapi")
 from fastapi.testclient import TestClient  # noqa: E402
+from vmn_exp.core.real_io import real_io  # noqa: E402
 
 MODELS = "/api/v1/workspaces/main/models"
 READS = ("list_apps", "list_files", "list_record_names", "load_file", "load_merged_log",
@@ -31,8 +32,8 @@ def background(app_layout):
     ensure_model(storage, "clf")
     register_version(storage, "clf", {"app": app_layout.app_name, "verstr": "0.0.1-exp.train"},
                      artifact_path="model.pkl")
-    record_use(storage, "clf", 1, app_layout.app_name, "0.0.1-exp.eval")
-    app = create_app(manager, background_refresh=True)
+    record_use(storage, "clf", 1, app_layout.app_name, "0.0.1-exp.eval", env=real_io().env, host=real_io().host)
+    app = create_app(manager, io=real_io(), background_refresh=True)
     yield TestClient(app)
     app.state.refresher.stop()
 
@@ -80,7 +81,7 @@ def test_a_refresh_rereads_only_the_changed_models(app_layout):
         ensure_model(storage, name)
         register_version(storage, name, {"app": app_layout.app_name, "verstr": f"0.0.1-exp.{name}"})
     first = RegistrySnapshot.read(storage)
-    record_use(storage, "a", 1, app_layout.app_name, "0.0.1-exp.use")
+    record_use(storage, "a", 1, app_layout.app_name, "0.0.1-exp.use", env=real_io().env, host=real_io().host)
 
     second = RegistrySnapshot.read(storage, first)
     assert [u["verstr"] for u in second.uses("a", 1)] == ["0.0.1-exp.use"]

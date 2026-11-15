@@ -12,6 +12,8 @@ from vmn_exp.core.metric_index_reader import MetricIndexReader
 from vmn_exp.core.metric_stream import MetricWriter
 from vmn_exp.core.series_reader import SeriesReader
 from vmn_exp.core.writer import own_stream
+import time
+from writer_args import process_writer
 
 
 def _series(storage, rewinds=()):
@@ -46,7 +48,7 @@ def test_a_compacted_writer_is_not_compacted_again(tmp_path):
 
 def test_compaction_applies_the_rewinds(tmp_path):
     storage = _storage(tmp_path)
-    w = MetricWriter(storage, APP, V, "w")
+    w = MetricWriter(storage, APP, V, "w", clock=time.time)
     for step in range(5):
         w.add("loss", float(step), step=step, ts_us=1_000 + step)
     w.flush()
@@ -57,7 +59,7 @@ def test_compaction_applies_the_rewinds(tmp_path):
 
 def test_rebuild_drops_what_a_newer_rewind_hides(tmp_path):
     storage = _storage(tmp_path)
-    w = MetricWriter(storage, APP, V, "w")
+    w = MetricWriter(storage, APP, V, "w", clock=time.time)
     for step in range(5):
         w.add("loss", float(step), step=step, ts_us=1_000 + step)
     w.flush()
@@ -81,17 +83,17 @@ def _all_names(storage):
 def test_sealed_streams_and_later_blocks_read_as_one_series_and_compact_at_finish(tmp_path):
     storage = _storage(tmp_path)
     entries = _entries(random.Random(8), 400, 1_700_000_000_000_000)
-    _write(storage, own_stream(storage, APP, V), entries[:200])
-    assert seal_writer(storage, APP, V, own_stream(storage, APP, V))
-    _write(storage, own_stream(storage, APP, V), entries[200:300])
-    assert seal_writer(storage, APP, V, own_stream(storage, APP, V))
-    _write(storage, own_stream(storage, APP, V), entries[300:])
+    _write(storage, own_stream(storage, APP, V, writer=process_writer()), entries[:200])
+    assert seal_writer(storage, APP, V, own_stream(storage, APP, V, writer=process_writer()))
+    _write(storage, own_stream(storage, APP, V, writer=process_writer()), entries[200:300])
+    assert seal_writer(storage, APP, V, own_stream(storage, APP, V, writer=process_writer()))
+    _write(storage, own_stream(storage, APP, V, writer=process_writer()), entries[300:])
     names = _all_names(storage)
     assert sum(map(is_indexed_file, names)) == 2 and sum(map(is_stream_file, names)) == 1
     reference = _storage(tmp_path / "ref")
     _write(reference, "w", entries)
     _same(_series(storage), _series(reference))
-    assert compact_writer(storage, APP, V, own_stream(storage, APP, V))
+    assert compact_writer(storage, APP, V, own_stream(storage, APP, V, writer=process_writer()))
     assert all(map(is_indexed_file, _all_names(storage)))
     _same(_series(storage), _series(reference))
 
@@ -106,7 +108,7 @@ def test_writers_seal_their_stream_once_they_pass_the_seal_threshold(tmp_path, m
     for i in range(5):
         entry = {"type": "metrics", "step": i, "timestamp": "2026-01-01T00:00:0%dZ" % i,
                  "values": {"a": 1.0, "b": 2.0, "c": 3.0}}
-        assert append_metric_entries(storage, APP, V, [entry])
+        assert append_metric_entries(storage, APP, V, [entry], writer=process_writer())
     names = _all_names(storage)
     assert any(map(is_indexed_file, names)) and any(map(is_stream_file, names))
     assert len(_series(storage)["a"]) == 5
@@ -115,12 +117,12 @@ def test_writers_seal_their_stream_once_they_pass_the_seal_threshold(tmp_path, m
 def test_a_resumed_writer_keeps_its_compacted_points_and_streams_on(tmp_path):
     storage = _storage(tmp_path)
     entries = _entries(random.Random(10), 200, 1_700_000_000_000_000)
-    _write(storage, own_stream(storage, APP, V), entries[:100])
-    assert compact_writer(storage, APP, V, own_stream(storage, APP, V))
-    _write(storage, own_stream(storage, APP, V), entries[100:])
+    _write(storage, own_stream(storage, APP, V, writer=process_writer()), entries[:100])
+    assert compact_writer(storage, APP, V, own_stream(storage, APP, V, writer=process_writer()))
+    _write(storage, own_stream(storage, APP, V, writer=process_writer()), entries[100:])
     reference = _storage(tmp_path / "ref")
     _write(reference, "w", entries)
     _same(_series(storage), _series(reference))
-    assert compact_writer(storage, APP, V, own_stream(storage, APP, V))
+    assert compact_writer(storage, APP, V, own_stream(storage, APP, V, writer=process_writer()))
     assert all(map(is_indexed_file, _all_names(storage)))
     _same(_series(storage), _series(reference))

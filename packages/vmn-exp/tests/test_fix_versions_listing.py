@@ -5,6 +5,7 @@ import time
 import git
 import pytest
 import yaml
+from bench_timing import fastest
 
 from vmn_exp.ui.readers import versions as ver_reader
 from exp_helpers import _init_app, _run_vmn_init, _stamp_app
@@ -43,11 +44,17 @@ def _repo_with_tags(tmp_path, count):
 def test_list_versions_is_linear_in_tag_count(tmp_path):
     repo, _ = _repo_with_tags(tmp_path, 1000)
 
-    start = time.monotonic()
-    rows = ver_reader.list_versions(repo, "app")
-    elapsed = time.monotonic() - start
+    listings = []
 
-    assert len(rows) == 1000
+    def list_versions():
+        start = time.monotonic()
+        listings.append(ver_reader.list_versions(repo, "app"))
+        return time.monotonic() - start
+
+    elapsed = fastest(list_versions, budget=1.5)
+    print(f"\nlist_versions of 1000 tags: {elapsed:.3f}s")
+
+    assert len(listings[-1]) == 1000
     assert elapsed < 1.5, f"list_versions took {elapsed:.2f}s for 1000 tags"
 
 

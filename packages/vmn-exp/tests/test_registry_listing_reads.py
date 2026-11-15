@@ -18,6 +18,7 @@ from vmn_exp.registry.view import model_state, models_for_run, run_models  # noq
 from vmn_exp.storage import s3_stats  # noqa: E402
 from vmn_exp.storage.s3 import S3SnapshotStorage  # noqa: E402
 from vmn_exp.ui.readers.models import list_models_response, model_detail_response  # noqa: E402
+from vmn_exp.core.real_io import real_io
 
 BUCKET = "vmn-bucket"
 APP = "app"
@@ -56,7 +57,7 @@ def registry(s3):
         for v in range(2):
             register_version(storage, name, run_ref={"app": APP, "verstr": f"0.0.1-dev.r{m}{v}"},
                              artifact_path="model.pt")
-        set_alias(storage, name, "prod", 1)
+        set_alias(storage, name, "prod", 1, env=real_io().env, host=real_io().host)
     return storage
 
 

@@ -156,10 +156,10 @@ def main(command_line=None):
 
 
 @measure_runtime_decorator
-def vmn_run(command_line=None):
+def vmn_run(command_line=None, frontend=None):
     try:
         init_stamp_logger()
-        args = parse_user_commands(command_line)
+        args = parse_user_commands(command_line, frontend)
     except Exception:
         VMN_LOGGER.error("Logged exception: ", exc_info=True)
         return 1, None

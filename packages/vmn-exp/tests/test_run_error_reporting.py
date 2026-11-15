@@ -1,4 +1,5 @@
 """A failed run's ``error`` reaches the run-detail API, ``show`` and alerts."""
+from datetime import datetime, timezone
 import pytest
 import yaml
 
@@ -34,9 +35,9 @@ def test_error_lines_without_an_error():
 
 
 def test_show_payload_carries_the_error():
-    payload = show_payload(0, {"verstr": "0.0.1"}, {}, [], _FAILED, {})
+    payload = show_payload(0, {"verstr": "0.0.1"}, {}, [], _FAILED, {}, now=datetime.now(timezone.utc))
     assert payload["error"] == _ERROR
-    assert show_payload(0, {"verstr": "0.0.1"}, {}, [], None, {})["error"] is None
+    assert show_payload(0, {"verstr": "0.0.1"}, {}, [], None, {}, now=datetime.now(timezone.utc))["error"] is None
 
 
 def test_failure_alert_text_carries_the_error_summary():

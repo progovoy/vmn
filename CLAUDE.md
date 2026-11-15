@@ -42,6 +42,7 @@ Whenever you notice a problem or an opportunity to improve the code (a bug, dupl
 ## IO behind interfaces (dependency injection)
 All IO goes through an interface that the caller receives; logic never reaches for it directly. IO means: time (`time.time`/`monotonic`/`sleep`, `datetime.now`), sockets and HTTP, subprocesses, the filesystem, environment variables, SQLite, git, randomness/uuid, stdin/stdout.
 - Production wires the real implementations in the entry point (`version_stamp.cli:main`, `vmn_exp.cli.main:main`, the `vmn-exp ui` app factory) and passes them down. Tests construct the same code with fakes.
+- vmn-exp has two more kinds of entry point that build real IO (`vmn_exp.core.real_io.real_io()`), because neither is handed one: the command handler shims in `vmn_exp/cli/plugin.py` (one `real_io()` per invocation, until core vmn passes `vmn_ctx.io`), and the public functions of `vmn_exp.sdk` (`start_run` and the other functions `vmn_exp/sdk/__init__.py` exports or docs/vmn-exp/sdk.md documents; a library has no main). The index I/O helper process's `main()` (`vmn_exp/core/index_io_process.py`) builds `real_io()` too, because it is its own interpreter. Everything they call takes its IO as a parameter.
 - Logic takes its IO as constructor/function parameters (`clock`, `sleep`, `fs`, `http`, `run_process`, `env`, ...). Don't call `time.time()`, `subprocess.run()`, `open()`, `os.environ` etc. inside logic, and don't hide a real implementation in a default argument (`clock=time.time`) in new code — the real one is chosen in main.
 - Fakes are small in-memory classes kept with the tests (e.g. a `FakeClock` you advance by hand). Prefer them over `monkeypatch`/`mock.patch` of module globals.
 - The goal is that most code is covered by unit tests that run in milliseconds with no Docker, no git repo, no network and no real sleeping. Keep the Docker/real-git tests for the thin real implementations and a few end-to-end flows.
@@ -77,7 +78,7 @@ Key differentiators vs semantic-release/release-please:
 The repo is a uv workspace of three packages (see docs/packaging.md):
 `packages/vmn` (`version_stamp`), `packages/vmn-exp-sdk` (the job-side
 `vmn_exp.sdk`/`storage`/`core`/`registry`/`integrations`/`_base`) and
-`packages/vmn-exp` (`vmn_exp.cli`/`ui`/`snapshot`/`importers`/`gitmode`, the
+`packages/vmn-exp` (`vmn_exp.cli`/`ui`/`snapshot`/`importers`/`gitmode`/`reports`, the
 `vmn-exp` command and `webui/`). `vmn_exp` is a PEP 420 namespace package split
 across the last two — never add a `vmn_exp/__init__.py`.
 
@@ -120,6 +121,8 @@ Two suites (vmn-exp will become a separate product):
   (includes the core file). A test that needs `vmn_exp` or a vmn-exp command
   belongs here; one asserting vmn works *without* vmn-exp belongs in core.
 
+New vmn-exp behaviour gets its first test in `packages/vmn-exp/tests/unit/` (shared fakes in `tests/fakes/`); a guard there fails a test that sleeps, spawns a process or asks for `app_layout`.
+
 Tests require Docker. Activate the test venv first — the suites run through the
 active interpreter's `coverage`/`pytest`, and the release-notes tests need the
 `git-cliff` binary that `tests/test_requirements.txt` installs into it.
@@ -132,6 +135,9 @@ load tests.
 source ./venv/bin/activate
 ./tests/run_pytest.sh                        # core suite (= --suite core)
 ./packages/vmn-exp/tests/run_pytest.sh       # exp suite (= tests/run_pytest.sh --suite exp)
+./tests/run_pytest.sh --suite exp-unit       # packages/vmn-exp/tests/unit: fakes only, no Docker, no real sleep or subprocess
+make _test_ui                                # web client vitest suite (CI stage tests_webui; needs npm)
+make _lint_ui                                # web client ESLint, hooks rules (same stage)
 ```
 
 Run a specific test:
@@ -219,7 +225,8 @@ Full flag reference: README.md `<details>` blocks and `vmn <cmd> --help`.
 |---|---|
 | CLI reference, status/alerts, nesting, storage + plugin contract, offline/push, streams, env vars | `experiments.md` |
 | Python SDK (`start_run`, logging, autolog, readers, query language) | `sdk.md` |
-| `vmn-exp ui` + HTTP API, boards, outer runs, pivots, baselines | `ui.md` |
+| `vmn-exp ui`, boards, outer runs, pivots, baselines | `ui.md` |
+| HTTP API | `ui-api.md` |
 | Central server, settings, journal, auth | `server.md`, `byo-bucket.md` |
 | Model/dataset registry, sweeps, reports | `models.md`, `sweeps.md`, `reports.md` |
 
@@ -227,7 +234,7 @@ Invariants worth knowing without opening a doc:
 - Packages: `vmn_exp/sdk` depends only on `vmn_exp.core|storage|registry|_base` and `version_stamp.store`; the SDK subpackages reach vmn only through `version_stamp.store` (git-free), never the rest of `version_stamp`, nor `vmn_exp.snapshot`/`ui`/`cli`; vmn-exp reaches `version_stamp` through `version_stamp.api` and `version_stamp.store`; git-mode creation (`vmn_exp.gitmode`) is imported lazily.
 - Status is derived, never stored (`created`/`running`/`stuck`/`succeeded`/`failed`); `stuck` = stale heartbeat *and* stale store write time past `max(3 * interval, 60s)`.
 - Read-only actions never take the repo lock; `vmn-exp run` and the SDK hold it only for create/auto-init.
-- Run verstrs are claimed atomically (`create_exclusive`); local writes are temp + rename; only a stream's owner appends/ships/compacts it.
+- Run verstrs are claimed atomically (`create_exclusive`); local writes are temp + rename; only a stream's owner appends/ships/compacts it, and the owner is the record copy (every process of one local copy ships all its streams), not a process; each stream still has one appending process (an adopted run writes its own `<writer>-sdk~<owner>` stream). The one exception is `vmn-exp buffers ship`: it ships a log buffer's streams after taking that buffer's owner lock, which it can only when the owning process is gone or has given the buffer up. A live owner's buffer is never shipped from outside.
 - Store layout v2 (`store.yml`, `layout: 2`); v1 stores are refused with a migrate hint. Per-host state (index cache, push ledger) lives outside the store (`storage/host_dirs.py`).
 - Every vmn SQLite file goes through `core/sqlite_conn.py`.
 - The UI reads lock-free index snapshots kept fresh by a background refresher; never add per-request store listing.
@@ -235,7 +242,7 @@ Invariants worth knowing without opening a doc:
 ## Environment Variables
 
 Core: `VMN_WORKING_DIR`, `VMN_LOCK_FILE_PATH` (user override only; vmn never injects it into a child), `GITHUB_TOKEN`/`GH_TOKEN`, `VMN_GIT_PUSH_USER`/`VMN_GIT_PUSH_TOKEN`, `VMN_SNAPSHOT_MAX_FILE_MB`/`VMN_SNAPSHOT_MAX_TOTAL_MB`, `VMN_STORE`/`VMN_STORE_BUCKET`/`VMN_STORE_PREFIX`/`VMN_STORE_ENDPOINT_URL` (snapshot store; each read before its `VMN_EXPERIMENT_*` twin; conf `store:`, legacy `experiment.storage` moved on stamp).
-vmn-exp (`VMN_EXP_*`, `VMN_EXPERIMENT_*`, `VMN_MODE`, `VMN_CAPTURE_ENV`, `VMN_SYSTEM_METRICS`, `VMN_UI_TOKEN`, …): see docs/vmn-exp/experiments.md. `VMN_EXPERIMENT_ID` set in the environment auto-parents any new run.
+vmn-exp (`VMN_EXP_*`, `VMN_EXPERIMENT_*`, `VMN_MODE`, `VMN_CAPTURE_ENV`, `VMN_SYSTEM_METRICS`, `VMN_UI_TOKEN`, …): see docs/vmn-exp/experiments.md. `VMN_EXPERIMENT_ID` set in the environment auto-parents any new run, except the first plain `start_run()` in the direct child of `vmn-exp run`, `vmn-exp rerun` or a sweep trial, which records into that run (`--no-adopt` / `VMN_EXP_ADOPT=0` turn it off).
 
 ## Docs Layout
 
@@ -250,6 +257,8 @@ Core vmn and vmn-exp are documented separately (vmn-exp will become a separate p
   - `client-guide.md`: task walkthrough (store choice, submit/sweep, Kubernetes git-free recipe, in-job SDK, watch, compare, restore/goto/rerun/export, resume/rewind/fork, models, prune).
   - `experiments.md`: `vmn-exp` CLI reference, status/alerts, nesting, storage + plugin contract, offline + `push`, env vars.
   - `sdk.md`: the `vmn_exp.sdk` Python SDK (`start_run`, logging, autolog, readers, query language, integrations).
-  - `ui.md`: `vmn-exp ui` deployment + HTTP API. `models.md`: model/dataset registry. `sweeps.md`: sweeps.
+  - `ui.md`: `vmn-exp ui` deployment and the dashboard. `ui-api.md`: the HTTP API. `models.md`: model/dataset registry. `sweeps.md`: sweeps.
   - `server.md`: `vmn-exp ui` as a central server (`server.yml`, SQLite cache, change journal, resync/rebuild, OIDC/API tokens/roles). `byo-bucket.md`: store areas, the server's permission sets, journal lifecycle rule. `reports.md`: reports, panels, publish/export, comments.
-  - `ai-fleet-tracking.md`: for AI agents — which SDK/CLI call moves each UI fleet count (the parent group header). `vmn-vs-mlflow.md`, `migrating-from-mlflow.md`.
+  - `upgrading.md`: patch-only release rules (no deprecation period: old forms go at once), and the Behaviour changes / Formats tables. A behaviour change, removals included, adds its row; a format version bump adds a Formats row (`packages/vmn-exp/tests/test_upgrading_md.py` ratchets it).
+  - `notebooks.md`: the SDK in Jupyter (one run across cells, re-run cells, kernel restarts, the snapshot); its numbered cells are run by `packages/vmn-exp/tests/test_docs_notebook_cells.py`.
+  - `ai-fleet-tracking.md`: for AI agents — which SDK/CLI call moves each UI fleet count (the parent group header). `vmn-vs-mlflow.md`, `migrating-from-mlflow.md`, `vmn-vs-wandb.md` (W&B comparison and API mapping).

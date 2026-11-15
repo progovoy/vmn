@@ -60,7 +60,7 @@ def scan_app(storage, app_name, dry_run=False, notice=None, on_read=None):
 
 
 def _scan(storage, app_name, dry_run, notice, on_read):
-    with ThreadPoolExecutor(max_workers=WORKERS) as pool:
+    with ThreadPoolExecutor(max_workers=WORKERS, thread_name_prefix="vmn-children-scan") as pool:
         names = list(storage.list_verstrs(app_name))
         if notice:
             notice(len(names))

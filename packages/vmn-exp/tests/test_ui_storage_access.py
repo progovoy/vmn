@@ -3,6 +3,7 @@ import os
 
 from vmn_exp.storage.registry import open_store
 from vmn_exp.ui.storage_access import EDIT, READ, SERVER_AREA, probe_store
+from vmn_exp.core.real_io import RealRandom
 
 
 def _uri(tmp_path):
@@ -10,13 +11,13 @@ def _uri(tmp_path):
 
 
 def test_writable_store_reads_and_edits(tmp_path):
-    probe = probe_store(_uri(tmp_path))
+    probe = probe_store(_uri(tmp_path), random=RealRandom(), env=os.environ)
     assert probe.capabilities == [READ, EDIT]
     assert probe.warnings == []
 
 
 def test_probe_key_lands_under_the_server_area_and_is_cleaned_up(tmp_path):
-    probe_store(_uri(tmp_path))
+    probe_store(_uri(tmp_path), random=RealRandom(), env=os.environ)
     area_dir = tmp_path / "store" / SERVER_AREA
     leftovers = [p for _, _, files in os.walk(area_dir) for p in files]
     assert leftovers == []
@@ -39,19 +40,19 @@ class _NoReads(_NoWrites):
 
 
 def test_failed_conditional_write_leaves_read_only(tmp_path):
-    probe = probe_store(_uri(tmp_path), opener=lambda u, area: _NoWrites(open_store(u, area)))
+    probe = probe_store(_uri(tmp_path), opener=lambda u, area: _NoWrites(open_store(u, area, env=os.environ)), random=RealRandom(), env=os.environ)
     assert probe.capabilities == [READ]
     assert any("edit" in w for w in probe.warnings)
 
 
 def test_unreadable_store_has_no_capabilities(tmp_path):
-    probe = probe_store(_uri(tmp_path), opener=lambda u, area: _NoReads(open_store(u, area)))
+    probe = probe_store(_uri(tmp_path), opener=lambda u, area: _NoReads(open_store(u, area, env=os.environ)), random=RealRandom(), env=os.environ)
     assert probe.capabilities == []
 
 
 def test_delete_capable_role_warns_only_in_multi_tenancy(tmp_path):
-    assert probe_store(_uri(tmp_path), tenancy="single").warnings == []
-    multi = probe_store(_uri(tmp_path), tenancy="multi")
+    assert probe_store(_uri(tmp_path), tenancy="single", random=RealRandom(), env=os.environ).warnings == []
+    multi = probe_store(_uri(tmp_path), tenancy="multi", random=RealRandom(), env=os.environ)
     assert multi.capabilities == [READ, EDIT]
     assert any("delete" in w for w in multi.warnings)
 

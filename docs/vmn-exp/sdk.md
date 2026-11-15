@@ -40,10 +40,18 @@ app `vmn_examples`.
 - [Slim install](#slim-install)
 
 Public names in `vmn_exp.sdk`: `start_run`, `create_run`, `create_runs`, `Run`, `NoOpRun`, `current_run`,
-`install_signal_handlers`, `autolog`, `autolog_disable`, `sweep_params`, and the
+`RunExistsError`, `install_signal_handlers`, `autolog`, `autolog_disable`, `sweep_params`,
+the fork-safety helpers `pause_background`, `resume_background`,
+`background_paused`, the
 registry functions `register_model`, `set_alias`, `remove_alias`,
 `get_model_version`, `list_models`, `download_model`, `register_dataset`,
-`get_dataset_version`, `use_model`, `use_dataset`. Readers live in
+`get_dataset_version`, `use_model`, `use_dataset`, the readers `list_runs`,
+`get_run`, `get_run_state`, `get_run_states`, `get_lineage`, `similar_runs`,
+`runs_dataframe`, `get_metric_history`, `param_importance`, and
+`resolve_storage`, which builds a `storage=` for any of them. Registry and
+reader names load on first use, so `import vmn_exp.sdk` stays light; a
+`from vmn_exp.sdk import *` loads them all and binds names such as `list_runs`
+over your own. Readers live in
 `vmn_exp.sdk.reader`, run management in `vmn_exp.sdk.manage`, integrations in
 `vmn_exp.integrations.*`.
 
@@ -63,10 +71,16 @@ registry functions `register_model`, `set_alias`, `remove_alias`,
 list/show/compare`, the dashboard and remote sync work on SDK runs unchanged,
 and mixing the two is fine (`vmn-exp add` a number to a run your script opened).
 
+Both at once is one run: under `vmn-exp run my_app -- python train.py`, the
+first plain `start_run()` in `train.py` records into the run `vmn-exp run`
+created, in a stream of its own (`<writer>-sdk`), and the supervisor records
+how the process ended (its exit code wins over `finish(exit_code=)`; exit
+non-zero to fail the run). See [Nesting](#nesting).
+
 One difference: an SDK run records `sys.argv` as its command, with `runner:
 sdk`. So [`vmn-exp rerun`](experiments.md#rerun) needs the command spelled out
 (`vmn-exp rerun my_app -v <ref> -- python train.py`), and the script's
-`start_run()` then opens an inner run of the rerun record.
+`start_run()` then records into the rerun record.
 
 ---
 
@@ -74,7 +88,7 @@ sdk`. So [`vmn-exp rerun`](experiments.md#rerun) needs the command spelled out
 
 ```python
 start_run(
-    app_name=None, note=None, params=None, parent=None, nested=False,
+    app_name=None, *, note=None, params=None, parent=None, nested=False,
     heartbeat_interval_sec=None, storage=None, system_metrics=None,
     sync_interval_sec=<env/conf/30>, run_id=None, all_ranks=False, name=None, tags=None,
     capture_env=None, fork_from=None, fork_step=None, rewind_to_step=None,
@@ -82,6 +96,10 @@ start_run(
     on_sigterm=None, sigterm_exit=None, reopen=False, export_env=True,
 )
 ```
+
+Only `app_name` may be passed by position; every other argument is
+keyword-only, so `start_run("my_app", "baseline")` raises `TypeError` (write
+`note="baseline"`). `create_run` takes its arguments the same way.
 
 | Argument | Means |
 |---|---|
@@ -91,7 +109,7 @@ start_run(
 | `parent` | parent run, in any [addressing form](experiments.md#addressing-experiments) (verstr, unique prefix, `@N`, `latest`); an unknown one raises `ValueError` |
 | `nested` | parent to the calling context's open run (see [Nesting](#nesting)) |
 | `heartbeat_interval_sec` | beat cadence; also the `sys_*` sampling interval. Not given: `$VMN_EXP_HEARTBEAT_SEC`, else conf `experiment.heartbeat_interval_sec`, else 30 s. On S3/GCS/Azure a beat after this attempt's own write is one conditional PUT, with no read first ([status](experiments.md#run-status-did-my-job-die)) |
-| `storage` | a storage backend; default the app's configured one. Build one with `vmn_exp.core.storage_resolve.resolve_experiment_storage(store="s3://…")` (also takes `dir=`, `bucket=`, `prefix=`, `endpoint_url=`) |
+| `storage` | a storage backend; default the app's configured one. Build one with `vmn_exp.sdk.resolve_storage(store="s3://…")` (also takes `dir=`, `bucket=`, `prefix=`, `endpoint_url=`) |
 | `system_metrics` | `None`: sample `sys_*` unless opted out (below); `False`: off; `True`: on despite conf.yml, still off under `VMN_SYSTEM_METRICS=0` |
 | `sync_interval_sec` | push new log lines to the remote store at most this often, off the heartbeat thread, so a killed job still leaves its metrics remotely. `None`/`0`: only at `finish()`. Not given: `$VMN_EXP_SYNC_SEC`, else conf `experiment.sync_interval_sec`, else 30 s. Failed syncs are retried on a later beat |
 | `run_id` | reopen an existing run instead of creating one; falls back to `$VMN_RESUME_RUN_ID`. See [Resuming](#resuming-a-preempted-run) |
@@ -111,7 +129,17 @@ start_run(
 
 Calling `start_run()` again on a thread whose run is still open (a re-run
 notebook cell that never called `finish()`) raises `RuntimeError`; pass
-`nested=True` to nest on purpose, or finish the old run first.
+`nested=True` to nest on purpose, or finish the old run first. More on runs
+in notebooks: [notebooks.md](notebooks.md).
+
+A run shows itself: `repr(run)` is one line, `<Run my_app
+0.1.2-dev.3f9a.r4 "baseline" running>` (`finished exit 1` once finished), and
+a notebook cell ending in `run` renders a small table (app, run id, name,
+state) with the `vmn-exp show <app> -v <id>` command for it. Both read only
+what the run holds in memory, never the store: the state is this process's
+view (`running`), not the [derived status](experiments.md#run-status-did-my-job-die)
+another reader sees. A `NoOpRun` says it records nothing and why
+(`disabled` or `rank N`).
 
 Creating the run snapshots the working tree (dirty or clean) and assigns
 `run.id`. The first run in a repo vmn does not track yet cold-starts it: it
@@ -183,6 +211,44 @@ Where it records:
 Readers honour the same variables, so `list_runs()` in the job finds its own
 runs (see [Reading runs back](#reading-runs-back)).
 
+Without `VMN_SNAPSHOT_METADATA`, a run records the git checkout it starts in.
+`start_run()` (also with `run_id=`), `create_run()` and `create_runs()` in a
+directory that is not inside one (looked up from `VMN_WORKING_DIR`, else the
+cwd) raise `RuntimeError` naming the directory and the three ways out: make it a
+checkout (`git init && git commit --allow-empty -m init`), set
+`VMN_SNAPSHOT_METADATA`, or record no code (below). This comes before the app
+name is resolved and before the slim-install check below, since neither would
+help there.
+
+### Runs without code (`code=False`)
+
+A notebook on a hosted kernel, a scratch directory or an evaluation script
+with no checkout can still log metrics, by asking for it: `start_run(...,
+code=False)`, or `VMN_EXP_CODE=none` in the environment (an explicit
+`code=` wins over it). It is never a fallback: without one of them a
+directory outside a checkout is the error above. It works with
+vmn-exp-sdk alone.
+
+```python
+# VMN_EXPERIMENT_DIR=/mnt/runs  (or VMN_EXPERIMENT_STORE=s3://bucket/runs)
+with start_run("my_app", code=False) as run:
+    run.log_metric("loss", 0.25)
+```
+
+- The app must be named: `app_name` or `VMN_APP_NAME`.
+- The store comes from `storage=` or the variables in the list above;
+  neither is `ValueError`.
+- Every code-less run of an app is a run of the code version `0.0.0-nocode`:
+  `0.0.0-nocode`, `0.0.0-nocode.r2`, ... (or `0.0.0-nocode.<writer id>` with
+  `VMN_WRITER_ID`). Refer to them by their exact name or `@N`.
+- The record has no base commit and carries `codeless: true`. `vmn-exp show`
+  prints `Code: none (recorded with code=False)`; `rerun`, `restore`,
+  `export` and `diff` refuse it with `recorded with code=False; no code
+  snapshot`. Metrics, params, tags, artifacts, nesting (`parent=`,
+  `VMN_EXPERIMENT_ID`) and the readers work as for any run.
+- With `VMN_SNAPSHOT_METADATA` set the run records the export, whatever
+  `code=` says.
+
 ---
 
 ## Logging
@@ -211,6 +277,13 @@ Every call appends to the run's log; nothing is rewritten.
 | `register_model(...)`, `use_model(ref)`, `use_dataset(ref)` | [registry](#model-registry) shortcuts bound to this run |
 | `set_intent(text, keywords=None, generator=None)` | what the run is for ([similar runs](#similar-runs)); the latest intent wins. Also on a finished run, synced to the remote at once |
 
+Argument order comes in two families: file artifacts take the payload, then the
+file name (`log_dict(obj, name)`, `log_text(text, name)`, `log_figure(fig, name)`);
+keyed media take the key, then the payload (`log_table(name, data)`,
+`log_image(name, image)`, `log_histogram(name, values)`). A name that is not a
+`str` (and `log_text` text that is not one) raises `TypeError` saying the
+arguments look swapped.
+
 `Run` attributes: `id` (verstr), `app_name`, `name`, `step`, `start_step` (the
 step a fork/rewind continues from, else `None`), `pid` (the owning process),
 `disabled`. `run.similar(top=10)` reads instead of recording: the past runs
@@ -227,6 +300,14 @@ finished sees everything it logged). A reader never sees half a line, and live
 readers (`vmn-exp show`, the UI) see a metric within about a second. A write
 after `finish()` goes straight to the store; a forked child writing through an
 inherited `Run` writes nothing (see [Threads, forks](#threads-forks-and-current_run)).
+Direct to a bucket (no `VMN_EXPERIMENT_DIR`), those writes are local appends
+to the run's log buffer: shipping it to the bucket (its first lines at once,
+then at most every 5 s) is left to the run's `vmn-exp-sync` thread, so a hung
+store never stalls `log_metric` or the heartbeat. A run opened with a raw
+remote store as `start_run(storage=...)` still writes to it from the caller's
+thread. Local writes survive a process crash but are not fsynced, so a host
+crash can lose the last seconds of them; the remote copy is the durable one
+(see [Durability](experiments.md#durability)).
 
 **Metrics are not JSONL lines.** `log_metric`/`log_metrics` values go to the
 record copy's columnar metric stream (`metrics/<writer>~<owner>.vms`, one
@@ -304,7 +385,7 @@ run.log_metrics({"val_loss": vl, "val_acc": va, "epoch": epoch}, step=step)
 - `get_run(...)["step_metrics"]` maps each declaring metric to its x;
   `get_run(..., x="epoch")["series"]` joins every other metric on `epoch`
   (points `{"step", "ts", "value", "x"}`). The UI picks the declared x by
-  default ([ui.md](ui.md#custom-x-axis)).
+  default ([ui-api.md](ui-api.md#custom-x-axis)).
 
 ### Metric goals and summaries
 
@@ -322,6 +403,8 @@ run.define_metric("grad_*", hidden=True)         # out of the UI's default colum
   (including `"none"`) raises `ValueError`.
 - `hidden` (a bool) is display-only: the metric still sorts, queries and
   summarizes.
+- Any other keyword (a typo like `gaol="min"`) raises `TypeError`, on every
+  rank and in disabled mode alike; nothing is recorded.
 - The declaration is a `define_metric` log entry, so it travels with the run
   and needs no conf.yml; later declarations override per field.
   `vmn-exp add <app> -v <ref> --define-metric NAME [--goal] [--summary]
@@ -524,17 +607,19 @@ with start_run("my_app", note="rbf baseline") as run:
 |---|---|---|
 | `sklearn` | every estimator's `fit` | incl. meta-estimators and inherited `fit` |
 | `xgboost` | `XGBClassifier.fit`, `XGBRegressor.fit` | the scikit-learn wrappers; native `xgboost.train` is left alone |
+| `lightgbm` | `LGBMClassifier.fit`, `LGBMRegressor.fit`, `LGBMRanker.fit` | the scikit-learn wrappers; native `lightgbm.train` is left alone |
+| `catboost` | `fit` of `CatBoostClassifier`, `CatBoostRegressor`, `CatBoostRanker`, `CatBoost` | `get_params()` holds only the parameters you set, so the params row is short |
 | `keras`, `tensorflow` | `keras.Model.fit` | Keras 3, any backend; the two names patch the same method once |
 | `lightning`, `pytorch_lightning` | `Trainer.fit` of each package | both record under the `lightning_` prefix |
 | `transformers` | `Trainer.train` | injects a [`VmnCallback`](#hugging-face-transformers--vmncallback); patched when `transformers.trainer` is imported |
 
 What each records:
 
-| | scikit-learn / xgboost | Keras | Lightning |
-|---|---|---|---|
-| params | `sklearn_estimator` (class name), `sklearn_<k>` for every `get_params()` key (non-scalars as `repr`, addresses stripped; a meta-estimator's own `estimator` param as `sklearn_param_estimator`), search estimators' `sklearn_best_<param>` | `keras_estimator`, `keras_optimizer`, `keras_learning_rate`, `keras_loss_fn`, `keras_parameter_count` | `lightning_estimator`, `lightning_max_epochs`, `lightning_precision`, plus every `LightningModule.hparams` key (call `save_hyperparameters()`) |
-| metrics | `sklearn_score` (training set; prefer the CV score), `sklearn_best_cv_score` for search estimators | per epoch: `keras_loss` and each compiled metric, stepped by the real epoch (`initial_epoch` respected) | the final `trainer.callback_metrics`, e.g. `lightning_train_loss`; no per-epoch series |
-| `log_models=True` | pickle `sklearn_<Class>.pkl` (`_<n>` for the n-th of a class) | `keras_<Class>.keras` | `lightning_<Class>.ckpt` via `trainer.save_checkpoint`; skipped with a warning when `trainer.world_size > 1` |
+| | scikit-learn / xgboost | LightGBM / CatBoost | Keras | Lightning |
+|---|---|---|---|---|
+| params | `sklearn_estimator` (class name), `sklearn_<k>` for every `get_params()` key (non-scalars as `repr`, addresses stripped; a meta-estimator's own `estimator` param as `sklearn_param_estimator`), search estimators' `sklearn_best_<param>` | as scikit-learn, under `lightgbm_` / `catboost_`, plus `<label>_best_iteration` once training picked one (LightGBM early stopping; CatBoost with an eval set) | `keras_estimator`, `keras_optimizer`, `keras_learning_rate`, `keras_loss_fn`, `keras_parameter_count` | `lightning_estimator`, `lightning_max_epochs`, `lightning_precision`, plus every `LightningModule.hparams` key (call `save_hyperparameters()`) |
+| metrics | `sklearn_score` (training set; prefer the CV score), `sklearn_best_cv_score` for search estimators | `<label>_score` (training set); per iteration, one series per eval dataset and metric: `lightgbm_valid_0_l2` from `evals_result_`, `catboost_validation_RMSE` from `get_evals_result()`. `best_score_` is not logged | per epoch: `keras_loss` and each compiled metric, stepped by the real epoch (`initial_epoch` respected) | the final `trainer.callback_metrics`, e.g. `lightning_train_loss`; no per-epoch series |
+| `log_models=True` | pickle `sklearn_<Class>.pkl` (`_<n>` for the n-th of a class) | LightGBM: pickle as scikit-learn; CatBoost: `catboost_<Class>.cbm` via `save_model` | `keras_<Class>.keras` | `lightning_<Class>.ckpt` via `trainer.save_checkpoint`; skipped with a warning when `trainer.world_size > 1` |
 
 Guarantees:
 
@@ -557,7 +642,8 @@ Guarantees:
 autologged route.
 
 Adding a framework is one `_adapter(...)` entry in `SUPPORTED_FRAMEWORKS`
-(`vmn_exp/sdk/autolog.py`). Only `discover(module)` (the `(owner, attr)` pairs
+(`vmn_exp/sdk/autolog.py`), or a loader returning one to keep its module off
+the `import vmn_exp.sdk` path (as `lightgbm` and `catboost` do). Only `discover(module)` (the `(owner, attr)` pairs
 to wrap) is required, or `method_owners` when the entry point is not `fit`;
 `watch` names the module(s) whose import triggers patching. The rest default to
 the scikit-learn behaviour: `subject(call)` (the trained object), `params(call)`,
@@ -576,7 +662,16 @@ yourself when a `with` block doesn't fit. It is idempotent.
   run as **failed** (exit code 1) and is re-raised. `sys.exit(N)` inside it
   records `N` (0 for no argument).
 - A run still open at interpreter exit is finalized too: succeeded after a
-  clean exit, failed after an uncaught exception.
+  clean exit, failed after an uncaught exception (exit code 1), and failed
+  with exit code `N` after `sys.exit(N)` (`run = start_run(...)` then
+  `sys.exit(main())` reads what `main()` returned). The SDK learns `N` by
+  wrapping `sys.exit` from the first `start_run()`; only the main thread's
+  call counts, and one made before the run opened is forgotten. Two exits stay
+  unseen and read succeeded: a hand-written `raise SystemExit(N)` and
+  `os._exit(N)`; use `with start_run(...)` or `run.finish(exit_code=N)` there.
+  A `sys.exit(N)` that the application swallows (`except SystemExit`) after
+  the run opened, followed by a clean exit with the run still open, reads
+  failed with `N`.
 - A failed run records its exception in the final `run_state.yml` as `error`:
   `type` (the class, module-qualified unless a builtin, e.g.
   `torch.cuda.OutOfMemoryError`), `message` (`str(exc)`), `traceback` (capped
@@ -603,18 +698,32 @@ yourself when a `with` block doesn't fit. It is idempotent.
   in `run_state.yml`), so an OOM-killed or lost job goes
   [`stuck`](experiments.md#run-status-did-my-job-die) instead of `running`
   forever. Remote state and log uploads run off that thread; a hung PUT never
-  delays a beat.
+  delays a beat. A failing heartbeat upload warns once (`vmn: could not
+  upload the state of run X: <error>`) and is repaired by the next beat; a
+  failing periodic log sync stays at debug and is caught up by the next.
+- **The final state and the final log sync are retried** (after 0.5, 1, 2,
+  then every 5 s) until they land or `VMN_EXP_FINAL_UPLOAD_TIMEOUT_SEC` runs
+  out. One that never landed is a warning, never silent: `vmn: the final
+  state of run X was not uploaded: <error>` (or `... is still uploading` when
+  the upload was still in flight at the deadline, with no error).
+  `finish()`'s return value does not change.
 - **SIGTERM finalizes every open run** with exit code 143 and
   `received_signal: SIGTERM` (so it reads `failed`, never `stuck`) — or
   releases it, for a run opened with `on_sigterm="release"` — waits for
-  the final uploads up to `VMN_EXP_FINAL_UPLOAD_TIMEOUT_SEC` (default 60; one
-  shared wait for all runs), then calls the previous handler or re-delivers the
+  the final uploads up to `VMN_EXP_FINAL_UPLOAD_TIMEOUT_SEC` (default 25 s
+  under SIGTERM, so it fits a Kubernetes pod's default 30 s grace period; 60 s
+  for `finish()` and exit; one shared wait for all runs; if you raise the
+  variable, raise `terminationGracePeriodSeconds` with it). Media files still
+  uploading get at most half of that wait, and the final state is written
+  before anything else slow is waited for. It then calls the previous handler or re-delivers the
   signal — or, when an open run has `sigterm_exit="raise"` and no Python
   handler sits underneath, raises `SystemExit(143)` in the main thread, so
   the process exits 143 after its `finally` blocks. The handler is installed when `vmn_exp.sdk` is imported on the main
   thread (never over `SIG_IGN`). If you install your own SIGTERM handler later,
   or first import the SDK from a worker thread, call
-  `install_signal_handlers()` from the main thread to chain it.
+  `install_signal_handlers()` from the main thread to chain it. With no open
+  run it is inert: it puts the previous handler back and hands the signal on
+  at once. See [What importing the SDK changes](#what-importing-the-sdk-changes).
 
 ### Steps
 
@@ -651,8 +760,15 @@ The run is reopened (same verstr, `running` again with this pid/host) and this
 process appends its own log segment. `started_at` is kept, so `duration_sec`
 spans every attempt; `resume_count` and `resumed_at` record the restarts. A
 `note`/`params` passed on resume is appended. An unknown ref raises
-`ValueError`. `$VMN_RESUME_RUN_ID` is removed from the environment when used, so
+`ValueError` (`run_id=` never creates a run; the error points at `create_run`).
+`$VMN_RESUME_RUN_ID` is removed from the environment when used, so
 neither later runs nor subprocesses resume it again; an explicit `run_id` wins.
+
+| Call | Means |
+|---|---|
+| `start_run(run_id=X)` | reopen the existing run X |
+| `create_run(run_id=X)` | register a new run named exactly X (`RunExistsError` if taken) |
+| `name=` | a display label; never looked up |
 
 Only an unfinished run (created, released, running or stuck) resumes as is. A
 **finished** run — succeeded or failed, including a SIGTERM'd one under the
@@ -735,7 +851,7 @@ none unless its index is rebuilt.
 - `vmn-exp ui`: scoped or filtered `experiments-facets` list the top 20
   signatures, an outer run's timeline counts them per minute, and a failed
   run without an `error_summary` clusters by its latest one
-  ([ui.md](ui.md#outer-runs-scope-and-search)).
+  ([ui-api.md](ui-api.md#outer-runs-scope-and-search)).
 
 ### Forking a run
 
@@ -823,6 +939,21 @@ with start_run("my_app", note="lr sweep"):
 A run opened with `export_env=False` is not exported (nor does closing it
 restore or re-export anything), so subprocesses don't see it; nested runs in
 the same context still find it.
+
+One exception to the `$VMN_EXPERIMENT_ID` rule: in the process `vmn-exp run`
+(or `vmn-exp rerun`, or a sweep agent for a trial) started itself (its direct child, not a process further down, such as the
+workers of a shell launcher), the first `start_run()` that names no
+`parent=`, `nested=` or `fork_from=` records into the supervisor's run
+instead of opening an inner one. It appends to its own stream and writes no
+run state, no `run` entry and no finish alerts; `params=`, `note=`, `tags=`
+and `intent=` are appended as entries, `name=` is ignored (use
+`vmn-exp run --name`). A later `start_run()` in the process nests under the
+run as usual. When the script resolves a store that does not hold the run
+(the supervisor was given `--store`), it warns and opens a run of its own.
+`vmn-exp run --no-adopt` or `VMN_EXP_ADOPT=0` keep the two-run shape. Where a
+launcher spawns the script rather than exec'ing it (`conda run`, some `uv run`
+setups), nothing is adopted; put the launcher outside:
+`uv run vmn-exp run my_app -- python train.py`.
 
 To register a run without starting it (a fleet's *waiting* count),
 `create_run("my_app", name=, params=, tags=, note=, parent=)` returns the new
@@ -929,6 +1060,23 @@ run, else `None`.
   fresh SDK locks and none of the parent's threads. `subprocess` without
   `preexec_fn` execs at once and runs no fork handlers.
 
+#### What importing the SDK changes
+
+`import vmn_exp.sdk` on the main thread installs one SIGTERM handler, chained
+to the one that was current (never over `SIG_IGN`), and nothing else: a
+process that only reads runs keeps its `sys.excepthook` and gets no atexit
+handler. Without an open run the SIGTERM handler finalizes nothing; it puts
+the previous handler back and hands the signal on. To undo it, set your own
+handler after the import (`signal.signal(signal.SIGTERM, signal.SIG_DFL)`, or
+yours); runs then are not finalized on SIGTERM.
+
+The first `start_run()` of a process chains `sys.excepthook` (an uncaught
+exception marks an abandoned run failed), wraps `sys.exit` (it records `N`
+and calls the `sys.exit` that was current) and registers the atexit finalizer
+that finishes runs left open. Because it registers after the run's storage
+was imported, it runs before that storage's own exit flush (a bucket's log
+buffer, a local journal), which then ships what the finalizer wrote.
+
 ### Pausing background threads
 
 To quiesce a run by hand (a fork-pool you manage, a checkpoint you snapshot):
@@ -947,7 +1095,7 @@ flush or sync call in flight and starts no other until resumed; it returns
 (or yields) `True` if none was left in flight. Logging keeps working — entries
 queue in memory and are written once resumed. Pauses nest (each needs its
 resume); `finish()` ends them, so a paused run still finalizes completely. A
-run paused past its stuck window (`max(3 * heartbeat interval, 60s)`) reads
+run paused past its [stuck window](experiments.md#run-status-did-my-job-die) reads
 `stuck` until it resumes. `NoOpRun` has the same methods as no-ops. Alert
 sends (`run.alert`) and the one-off system-metrics setup thread are not paused.
 
@@ -964,13 +1112,16 @@ for run in list_runs("my_app", last=10, status="succeeded"):
 for run in list_runs("my_app", query='metrics.loss < 0.5 and params.optimizer = "adam"'):
     print(run["verstr"])
 
+best5 = list_runs("my_app", sort="loss", limit=5)   # the five best by loss
+newest = list_runs("my_app", sort="timestamp")      # newest first
+
 best = get_run("my_app", ref="latest")
 ```
 
 Without `storage=` readers read where `start_run()` records:
 `VMN_EXPERIMENT_DIR`, else the checkout found from the cwd (or
 `$VMN_WORKING_DIR`), fronting `VMN_EXPERIMENT_STORE`/the bucket shorthand —
-`vmn_exp.core.storage_resolve.resolve_experiment_storage()`, which also takes
+`vmn_exp.sdk.resolve_storage()`, which also takes
 `dir=`/`store=` explicitly. No checkout is needed. `app_name=None` resolves like
 `start_run()`: `VMN_APP_NAME`, then the app of `VMN_SNAPSHOT_METADATA`, then
 the sole app with runs in that storage. The conf.yml metrics schema applies
@@ -978,15 +1129,15 @@ only when a checkout is found and `app_name`/`storage` are not both given.
 
 | Function | Returns |
 |---|---|
-| `list_runs(app_name=None, *, storage=None, sort=None, last=None, status=None, query=None, use_index=True, include_archived=False)` | rows, oldest first. `status`: a status or list/comma-separated statuses; `query`: [the query language](#the-query-language) (`QueryError` on a bad one); `last` keeps the last N (before sorting); `sort` orders by a metric (default the configured [primary metric](experiments.md#metrics-schema-sorting--goals)); archived runs only with `include_archived=True`. While the index is still loading (a cold load, an upgrade re-deriving its rows) the rows are some of the app's: it warns `vmn_exp.sdk.reader.IndexingWarning` (`indexing 120k/734k runs — results incomplete`; `param_importance` and `runs_dataframe` too), and `vmn-exp list` prints that line to stderr |
+| `list_runs(app_name=None, *, storage=None, sort=None, descending=None, last=None, limit=None, status=None, query=None, use_index=True, include_archived=False, incomplete=None)` | rows ordered by `sort`, else by the configured [primary metric](experiments.md#metrics-schema-sorting--goals), else in storage order (oldest first). `sort` takes a metric (direction from its goal), `"timestamp"` or `"idx"` (newest first); `descending=True`/`False` forces the direction. `last` keeps the newest N *before* sorting; `limit` keeps the first N *after* it, so `list_runs("my_app", sort="loss", limit=5)` is the five best (`ValueError` unless a positive int). `status`: a status or list/comma-separated statuses; `query`: [the query language](#the-query-language) (`QueryError` on a bad one); archived runs only with `include_archived=True`. While the index is still loading (a cold load, an upgrade re-deriving its rows) the rows are some of the app's, so it raises `vmn_exp.sdk.reader.IndexingWarning` (`indexing 120k/734k runs — results incomplete`; `param_importance` and `runs_dataframe` too); `incomplete="warn"` warns it instead and returns the rows loaded so far. `vmn-exp list` prints that line to stderr |
 | `get_run(app_name=None, ref="latest", *, storage=None, x=None)` | one row plus `log`, `series` (metric → `[{"step", "ts", "value"}]` in log order), `step_metrics`, `artifacts`, `format_version` and the media indexes. `x=` joins series on a metric ([x axis](#custom-x-axis-step_metric)). `ValueError` for an unknown ref |
 | `get_run_state(app_name=None, verstr=None, *, storage=None)` | run `verstr`'s `run_state.yml` fields plus the derived status fields (`status`: `created` before it started): reads of that one run only, no index or listing. Exact verstr only; `ValueError` when no such run exists |
 | `get_run_states(app_name=None, refs=(), *, storage=None)` | `{ref: entry}` for many runs at once, for resume and audit over large stores: each entry is `get_run_state`'s fields plus `run_state` (the raw `run_state.yml`, `None` before the run started), `observed_at` (the store's write time of that file, an aware UTC datetime or `None`; `status` is derived with it, so a stale heartbeat with a fresh write is still `running`) and `verstr` (what the ref resolved to). A ref that resolves to no run maps to `None` (no exception). Runs are read concurrently, two reads each (state + write time; one existence check when there is no state). Full verstrs never build or consult the index nor list the app; `latest`/`@N` resolve through it once per call; prefixes are not resolved |
 | `get_lineage(app_name=None, ref="latest", *, depth=1, storage=None, limit=100)` | see [Lineage](#lineage) |
 | `similar_runs(app_name=None, ref="latest", *, storage=None, top=10, query=None, context=None, text_only=False, all_apps=False)` | the past runs most like run `ref`, most similar first; see [Similar runs](#similar-runs) |
-| `param_importance(app_name=None, metric=None, *, storage=None, query=None, status=None, include_archived=False)` | `[{"param", "importance", "correlation", "spearman", "kind", "n"}]`, most important first, over the runs `list_runs` would return. `importance` is a random-forest share (sums to 1); correlations are `None` for categorical params ([details](experiments.md#importance)). `ValueError` when no run carries `metric` |
+| `param_importance(app_name=None, metric=None, *, storage=None, query=None, status=None, include_archived=False, incomplete=None)` | `[{"param", "importance", "correlation", "spearman", "kind", "n"}]`, most important first, over the runs `list_runs` would return. `importance` is a random-forest share (sums to 1); correlations are `None` for categorical params ([details](experiments.md#importance)). `ValueError` when no run carries `metric` |
 | `runs_dataframe(app_name=None, **list_runs_kwargs)` | pandas, below |
-| `get_metric_history(metric, app_name=None, ref="latest", *, storage=None, step_range=None, max_points=None)` | pandas, below |
+| `get_metric_history(metric, *, app_name=None, ref="latest", storage=None, step_range=None, max_points=None)` | pandas, below. `app_name` and `ref` are keyword-only: the metric comes first, unlike `get_run` |
 
 A row carries each metric's [summary](#metric-goals-and-summaries) (the last
 value unless declared otherwise), `params`, `tags`, `inputs`, `outputs`, `name`,
@@ -1015,7 +1166,7 @@ from vmn_exp.sdk.reader import get_metric_history, runs_dataframe
 df = runs_dataframe("my_app", query="metrics.loss < 0.5", status="succeeded")
 df.sort_values("metrics.loss").head()
 
-loss = get_metric_history("loss", "my_app", ref="@3")   # columns: step, timestamp, value
+loss = get_metric_history("loss", app_name="my_app", ref="@3")   # columns: step, timestamp, value
 ```
 
 - `runs_dataframe` is `list_runs` as one flat DataFrame (like
@@ -1124,7 +1275,7 @@ similar_runs("my_app", ref=None, context="label smoothing", text_only=True, all_
 
 One expression language filters rows for `list_runs(query=)`, `vmn-exp list
 --query` ([experiments.md](experiments.md#list)), `prune --query` and the
-[REST API / UI](ui.md#filtering-with-a-query):
+[REST API / UI](ui-api.md#filtering-with-a-query):
 
 ```
 metrics.loss < 0.5 and status = "succeeded"
@@ -1169,7 +1320,7 @@ case-sensitive**, and an unknown field is a `QueryError`, not an empty result.
   `imported_from`, `forked_from`, `forked_from_step`, `rerun_of`,
   `end_reason`, `error_summary`, `signal`, `released_at`, `resume_count`,
   `queue_sec`, `duration_ratio`, `author`, `has_intent`, `intent`,
-  `keywords` (see [ui.md](ui.md#experiment-status-fields)). `queue_sec` is
+  `keywords` (see [ui-api.md](ui-api.md#experiment-status-fields)). `queue_sec` is
   creation to start (`null` until started); `duration_ratio` (duration over
   the siblings' median) is only on `vmn-exp ui` board rows, so elsewhere a
   comparison with it is false. `author` is who
@@ -1444,7 +1595,9 @@ Read (or set) by the SDK. CLI-only variables are in [experiments.md](experiments
 | `VMN_MODE` | `disabled`: no-op runs, `autolog()` patches nothing |
 | `VMN_RESUME_RUN_ID` | run to reopen (consumed when used) |
 | `VMN_EXPERIMENT_ID` | parent of new runs; exported while a run is open |
+| `VMN_EXP_ADOPT_RUN_ID` / `VMN_EXP_ADOPT_PID` | set by `vmn-exp run` for its direct child: the first plain `start_run()` there records into that run (consumed when used) |
 | `VMN_SNAPSHOT_METADATA` | git-free mode against an exported snapshot |
+| `VMN_EXP_CODE` | `none`: new runs record no code, as `start_run(code=False)` ([Runs without code](#runs-without-code-codefalse)); any other value raises `ValueError` |
 | `VMN_EXPERIMENT_DIR` | local experiment root |
 | `VMN_EXPERIMENT_STORE` | remote store URI |
 | `VMN_EXPERIMENT_BUCKET` / `_PREFIX` / `_ENDPOINT_URL` | `s3://` shorthand (prefix default `vmn`) |
@@ -1455,10 +1608,10 @@ Read (or set) by the SDK. CLI-only variables are in [experiments.md](experiments
 | `VMN_CAPTURE_ENV` | `0`/`false`/`no`/`off` disables environment capture |
 | `VMN_EXP_AUTHOR` | the email a new run's `features` author gets when git config has no `user.email` ([experiments.md](experiments.md#what-a-run-records-for-similar)) |
 | `VMN_EXP_OUTPUT_CAP_MB` | `capture_output` size cap (default 10) |
-| `VMN_EXP_FINAL_UPLOAD_TIMEOUT_SEC` | wait for final uploads at finish/SIGTERM/exit (default 60) |
+| `VMN_EXP_FINAL_UPLOAD_TIMEOUT_SEC` | wait for final uploads at finish/SIGTERM/exit (default 60 s at finish/exit, 25 s under SIGTERM; when set, it is both) |
 | `VMN_EXP_ALERT_WEBHOOK_URL` / `_SLACK_URL` / `_COMMAND` / `_ON` | alert sinks and triggers ([experiments.md](experiments.md#alerts)) |
 | `VMN_SWEEP_PARAMS` | sweep trial params, read by `sweep_params()` |
-| `VMN_EXP_CACHE_DIR` | base dir for per-host state (index cache, push ledger) |
+| `VMN_EXP_CACHE_DIR` | base dir for per-host state (index cache, push ledger, direct-to-bucket log buffers) |
 | `VMN_INDEX_CACHE_DIR` | index cache root only; `none` disables |
 | `VMN_EXP_MIN_STALE_SEC` | floor of the `stuck` window when readers derive status (default 60) |
 | `VMN_EXP_HEARTBEAT_SEC` | heartbeat cadence when `start_run(heartbeat_interval_sec=)` is not given (beats conf `experiment.heartbeat_interval_sec`; default 30; non-positive/invalid skipped) |
@@ -1475,16 +1628,14 @@ handlers. To see its debug output: `logging.basicConfig(level=logging.DEBUG)`.
 
 ## Slim install
 
-For recording-only environments (containers, CI workers, air-gapped jobs):
-
-```sh
-pip install vmn-exp-sdk    # + [s3]/[gcs]/[azure] for a bucket, [pandas] for DataFrames; pynvml for GPU metrics
-```
-
-`vmn-exp-sdk` is `vmn_exp.sdk` plus the storage, registry and record helpers it
-needs: no vmn, no GitPython, no git binary. Creating a run from a git checkout
+For recording-only environments (containers, CI workers, air-gapped jobs),
+install `vmn-exp-sdk` alone ([client-guide.md](client-guide.md#1-install) lists
+its extras). `vmn-exp-sdk` is `vmn_exp.sdk` plus the storage, registry and
+record helpers it needs: no vmn, no GitPython, no git binary. Creating a run from a git checkout
 needs `vmn-exp`; in a slim install `start_run()` in a checkout raises a
 `RuntimeError` pointing at `pip install vmn-exp` or the git-free variables
-([Runs without a git checkout](#runs-without-a-git-checkout-containers)). A
+([Runs without a git checkout](#runs-without-a-git-checkout-containers));
+outside a checkout it raises the not-a-checkout `RuntimeError` described
+there instead. A
 missing store extra raises `ImportError` naming it. See
 [packaging.md](../packaging.md) for the package split.

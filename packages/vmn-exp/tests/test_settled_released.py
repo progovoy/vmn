@@ -7,6 +7,7 @@ minute."""
 import datetime
 import os
 
+from fakes.clock import FakeClock
 from leaderboard_fleet import T0, Fleet, finished, iso, running
 from vmn_exp.core.query import filter_rows
 from vmn_exp.core.status import CREATED, SUCCEEDED, status_fields
@@ -14,8 +15,6 @@ from vmn_exp.core.tree import annotate_tree, fleet_summary, subtree_status
 from vmn_exp.ui.job_rollup_payload import job_payload
 from vmn_exp.ui.job_tally import RollupSpec, Tally
 from vmn_exp.ui.leaderboard_cache import LeaderboardCache
-
-from vmn_exp.core import status as status_mod
 
 LOST, NEVER = "lost", "never_started"
 SPEC = RollupSpec({})
@@ -35,7 +34,7 @@ def _released(verstr, parent="o"):
 
 
 def test_status_fields_carry_the_release_and_the_attempts():
-    fields = status_fields(_released_state(signal="SIGTERM"))
+    fields = status_fields(_released_state(signal="SIGTERM"), now=T0)
     assert fields["status"] == CREATED
     assert (fields["end_reason"], fields["signal"]) == ("released", "SIGTERM")
     assert (fields["released_at"], fields["resume_count"]) == (iso(T0), 2)
@@ -68,27 +67,27 @@ PARENT_OF = {"o": None, "r": "o", "w": "o"}
 
 
 def test_one_runs_subtree_settles_a_released_run_as_lost():
-    _, tree = subtree_status("r", PARENT_OF, STATES.get)
+    _, tree = subtree_status("r", PARENT_OF, STATES.get, now=T0)
     assert tree["settled"] == LOST
-    _, outer = subtree_status("o", PARENT_OF, STATES.get)
+    _, outer = subtree_status("o", PARENT_OF, STATES.get, now=T0)
     assert outer["tree_status"] == SUCCEEDED
 
 
 def test_the_fleet_counts_a_released_run_of_an_ended_outer_as_lost():
-    fleet = fleet_summary("o", {"o": ["r", "w"]}, STATES.get, closed=True)
+    fleet = fleet_summary("o", {"o": ["r", "w"]}, STATES.get, closed=True, now=T0)
     assert (fleet[LOST], fleet[NEVER]) == (1, 1)
-    open_fleet = fleet_summary("o", {"o": ["r", "w"]}, STATES.get)
+    open_fleet = fleet_summary("o", {"o": ["r", "w"]}, STATES.get, now=T0)
     assert open_fleet["counts"][CREATED] == 2
 
 
-def test_the_board_settles_a_released_run_when_its_outer_ends(monkeypatch):
-    monkeypatch.setattr(status_mod, "_now", lambda now=None: now or T0)
+def test_the_board_settles_a_released_run_when_its_outer_ends():
+    clock = FakeClock(start=T0)
     fleet = Fleet(5)
     for _ in range(100):
         fleet.append(state=finished(0))
     outer = fleet.append(state=running(T0))
     released = fleet.append(parent=outer, state=_released_state())
-    cache = LeaderboardCache()
+    cache = LeaderboardCache(now=clock.now)
     assert cache.job_rollup(fleet.snapshot(), {}, outer)["counts"]["waiting"] == 1
 
     fleet.set_state(fleet.index(outer), finished(0))
@@ -97,7 +96,8 @@ def test_the_board_settles_a_released_run_when_its_outer_ends(monkeypatch):
     assert (rollup[LOST], rollup[NEVER]) == (1, 0)
     rows = {r["verstr"]: r for r in cache.rows(snap, archived=True)}
     assert rows[released]["settled"] == LOST
-    fresh = {r["verstr"]: r["settled"] for r in LeaderboardCache().rows(snap, archived=True)}
+    fresh = {r["verstr"]: r["settled"]
+             for r in LeaderboardCache(now=clock.now).rows(snap, archived=True)}
     assert fresh[released] == LOST
 
 

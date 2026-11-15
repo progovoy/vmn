@@ -17,6 +17,7 @@ import time
 import tracemalloc
 
 import pytest
+from bench_timing import fastest_each
 from uiload import fgm_records, fgm_tree
 from vmn_exp.ui.job_views import JobViews
 from vmn_exp.ui.leaderboard_cache import LeaderboardCache
@@ -54,12 +55,11 @@ class Fleet:
 
 @pytest.fixture(scope="module")
 def fleet():
-    with pytest.MonkeyPatch.context() as patch:
-        at = fgm_records.freeze_clock(patch, NOW)
-        built = time.perf_counter()
-        fleet = Fleet(*fgm_records.snapshot(fgm_tree.get_profile(PROFILE), NOW))
-        print(f"\n{PROFILE}: {len(fleet.snap.rows)} runs built in {time.perf_counter() - built:.1f}s")
-        yield fleet, at
+    at = fgm_records.frozen_now(NOW)
+    built = time.perf_counter()
+    fleet = Fleet(*fgm_records.snapshot(fgm_tree.get_profile(PROFILE), NOW))
+    print(f"\n{PROFILE}: {len(fleet.snap.rows)} runs built in {time.perf_counter() - built:.1f}s")
+    yield fleet, at
 
 
 def _warm(cache, snap):
@@ -69,7 +69,7 @@ def _warm(cache, snap):
 
 @pytest.fixture(scope="module")
 def board(fleet):
-    return _warm(LeaderboardCache(), fleet[0].snap)
+    return _warm(LeaderboardCache(now=lambda: fleet[1]), fleet[0].snap)
 
 
 @pytest.fixture
@@ -85,38 +85,72 @@ def _budget(name):
     return BUDGETS.get(PROFILE, BUDGETS["fgm"])[name]
 
 
+def _boards(warmed):
+    """The warmed shared board, then fresh ones warm on the first generation."""
+    cache, fleet, at = warmed
+    yield cache
+    while True:
+        fresh = LeaderboardCache(now=lambda: at)
+        fresh.warm(fleet.snap)
+        yield fresh
+
+
+def _fastest(warmed, steps, budgets):
+    """``(fastest seconds of each step, what the last pass kept)`` over passes
+    of *steps(board)* (``({step: seconds}, kept)``), each on a board none of
+    whose keys an earlier pass read."""
+    boards, kept = _boards(warmed), []
+
+    def attempt():
+        took, keep = steps(next(boards))
+        kept.append(keep)
+        return took
+
+    return fastest_each(attempt, budgets), kept[-1]
+
+
 @pytest.mark.serial
 def test_experiments_status(warmed):
-    cache, fleet, at = warmed
+    _, fleet, at = warmed
     snap, later = fleet.snap, fleet.later
-    first = _timed(lambda: cache.status_summary(snap, at))
-    again = _timed(lambda: cache.status_summary(snap, at))
-    moved = _timed(lambda: cache.status_summary(later, at))
+    took, cache = _fastest(warmed, lambda cache: ({
+        "first": _timed(lambda: cache.status_summary(snap, at)),
+        "again": _timed(lambda: cache.status_summary(snap, at)),
+        "moved": _timed(lambda: cache.status_summary(later, at))}, cache),
+        {"first": _budget("status"), "again": MEMOIZED_SEC, "moved": _budget("status")})
     body = cache.status_summary(later, at)
-    print(f"experiments-status: first {_ms(first)}, again {_ms(again)}, next generation "
-          f"{_ms(moved)}; counts {body['counts']}")
+    print(f"experiments-status: first {_ms(took['first'])}, again {_ms(took['again'])}, "
+          f"next generation {_ms(took['moved'])}; counts {body['counts']}")
     assert body["total"] == len(snap.rows)
-    assert first <= _budget("status") and again <= MEMOIZED_SEC and moved <= _budget("status")
+    assert took["first"] <= _budget("status") and took["again"] <= MEMOIZED_SEC
+    assert took["moved"] <= _budget("status")
+
+
+def _summaries(cache, fleet, split):
+    views, snap, schema, live = JobViews(cache), fleet.snap, fleet.schema, fleet.live
+    times = {}
+    for name, launch in (("live", live), ("ended", fleet.ended)):
+        times[name] = _timed(lambda launch=launch: views.summary(snap, schema, launch, split))
+    times["again"] = _timed(lambda: views.summary(snap, schema, live, split))
+    times["moved"] = _timed(lambda: views.summary(fleet.later, schema, live, split))
+    return times, views
 
 
 @pytest.mark.serial
 @pytest.mark.parametrize("split", [None, SPLIT])
 def test_outer_run_summary(warmed, split):
-    cache, fleet, at = warmed
-    views, snap, schema, live = JobViews(cache), fleet.snap, fleet.schema, fleet.live
-    times = {}
-    for name, launch in (("live", live), ("ended", fleet.ended)):
-        times[name] = _timed(lambda launch=launch: views.summary(snap, schema, launch, split))
-    again = _timed(lambda: views.summary(snap, schema, live, split))
-    moved = _timed(lambda: views.summary(fleet.later, schema, live, split))
-    body = views.summary(fleet.later, schema, live, split)
+    _, fleet, _ = warmed
+    summary = _budget("summary")
+    times, views = _fastest(warmed, lambda cache: _summaries(cache, fleet, split), {
+        "live": summary, "ended": summary, "again": MEMOIZED_SEC, "moved": summary})
+    body = views.summary(fleet.later, fleet.schema, fleet.live, split)
     print(f"summary split={split}: live launch {_ms(times['live'])}, ended launch "
-          f"{_ms(times['ended'])}, again {_ms(again)}, next generation {_ms(moved)}; "
-          f"{body['total']} runs, declared {body['declared_progress']}")
+          f"{_ms(times['ended'])}, again {_ms(times['again'])}, next generation "
+          f"{_ms(times['moved'])}; {body['total']} runs, declared {body['declared_progress']}")
     assert body["declared_progress"]["unit"] == "dates"
     assert (body["by"] is not None) == bool(split)
-    assert max(times.values()) <= _budget("summary") and again <= MEMOIZED_SEC
-    assert moved <= _budget("summary")
+    assert max(times["live"], times["ended"]) <= summary and times["again"] <= MEMOIZED_SEC
+    assert times["moved"] <= summary
 
 
 BOARDS = {
@@ -130,32 +164,46 @@ BOARDS = {
 @pytest.mark.serial
 @pytest.mark.parametrize("shape", sorted(BOARDS))
 def test_grouped_board(warmed, shape):
-    cache, fleet, at = warmed
+    _, fleet, _ = warmed
     params = BOARDS[shape](fleet.live, fleet.ended)
-    grouped = lambda: cache.groups(fleet.snap, fleet.schema, limit=50, **params)  # noqa: E731
-    first = _timed(grouped)
-    again = statistics.median(_timed(grouped) for _ in range(5))
+
+    def steps(cache):
+        grouped = lambda: cache.groups(fleet.snap, fleet.schema, limit=50, **params)  # noqa: E731
+        return {"first": _timed(grouped),
+                "again": statistics.median(_timed(grouped) for _ in range(5))}, grouped
+
+    took, grouped = _fastest(warmed, steps, {"first": _budget("board"), "again": MEMOIZED_SEC})
     body = grouped()
-    print(f"grouped board {shape}: first {_ms(first)}, again {_ms(again)}; "
+    print(f"grouped board {shape}: first {_ms(took['first'])}, again {_ms(took['again'])}; "
           f"{body['total_groups']} groups, {body['total_rows']} rows")
     assert body["total_groups"] > 0
-    assert first <= _budget("board") and again <= MEMOIZED_SEC
+    assert took["first"] <= _budget("board") and took["again"] <= MEMOIZED_SEC
+
+
+MINUTES = 3
+
+
+def _waiting_counts(cache, fleet):
+    page = lambda q: cache.page(fleet.snap, fleet.schema, query=q, limit=1)["total"]  # noqa: E731
+    times, totals = {}, []
+    for minute in range(MINUTES):
+        since = fgm_records.iso(NOW - 3600 + 60 * minute)
+        query = f'status = "created" and timestamp < "{since}"'
+        times[minute] = _timed(lambda q=query: totals.append(page(q)))
+    times["plain"] = _timed(lambda: page('tags.health = "unstable"'))
+    return times, totals
 
 
 @pytest.mark.serial
 def test_a_minute_keyed_waiting_count(warmed):
     """P1's ``status = "created" and timestamp < ago("1h")`` is rebuilt once a
     minute: each minute's literal is a fresh filtered order."""
-    cache, fleet, at = warmed
-    page = lambda q: cache.page(fleet.snap, fleet.schema, query=q, limit=1)["total"]  # noqa: E731
-    times, totals = [], []
-    for minute in range(3):
-        since = fgm_records.iso(NOW - 3600 + 60 * minute)
-        query = f'status = "created" and timestamp < "{since}"'
-        times.append(_timed(lambda q=query: totals.append(page(q))))
-    plain = _timed(lambda: page('tags.health = "unstable"'))
+    _, fleet, _ = warmed
+    took, totals = _fastest(warmed, lambda cache: _waiting_counts(cache, fleet),
+                            dict.fromkeys(range(MINUTES), _budget("waiting")))
+    times = [took[minute] for minute in range(MINUTES)]
     print(f"minute-keyed waiting count: {[_ms(t) for t in times]} ({totals[0]} runs); "
-          f"a time-free query's first build {_ms(plain)}")
+          f"a time-free query's first build {_ms(took['plain'])}")
     assert totals[0] > 0
     assert max(times) <= _budget("waiting")
 
@@ -165,7 +213,7 @@ def test_split_tallies_memory_per_outer_run(fleet):
     """P3: the split rollups' memory over the plain ones, per run with
     children (a board of its own: the shared one may hold the split)."""
     fleet, at = fleet
-    views, snap, schema = JobViews(_warm(LeaderboardCache(), fleet.snap)), fleet.snap, fleet.schema
+    views, snap, schema = JobViews(_warm(LeaderboardCache(now=lambda: at), fleet.snap)), fleet.snap, fleet.schema
     views.summary(snap, schema, fleet.live)
     tracemalloc.start()
     try:

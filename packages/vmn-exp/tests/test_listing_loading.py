@@ -6,10 +6,12 @@ from types import SimpleNamespace
 
 import pytest
 
+from fakes.clock import FakeClock
 import vmn_exp.core.index as experiment_index
 import vmn_exp.core.index_list as index_list
 from vmn_exp.cli.experiment import experiment_list
 from vmn_exp.core.index import ExperimentIndex
+from vmn_exp.core.real_io import RealConsole
 from vmn_exp.storage.local import LocalSnapshotStorage
 
 APP = "app"
@@ -37,18 +39,19 @@ def _listed_snapshots(monkeypatch, listed, published):
 
 def _list(storage):
     return experiment_list(None, None, storage, SimpleNamespace(
-        name=APP, query=None, archived=False, last=None, sort=None, top=None, json=False))
+        name=APP, query=None, archived=False, last=None, sort=None, top=None, json=False),
+        RealConsole(), FakeClock())
 
 
 def test_snapshot_listing_returns_the_listed_snapshots_loading(storage, monkeypatch):
     _listed_snapshots(monkeypatch, listed=(3, 10), published=None)
-    rows, _, any_runs, loading = index_list.snapshot_listing(storage, APP)
+    rows, _, any_runs, loading = index_list.snapshot_listing(storage, APP, clock=FakeClock())
     assert [r["verstr"] for r in rows] == [RUN] and any_runs
     assert loading == (3, 10)
 
 
 def test_a_whole_listed_snapshot_has_no_loading(storage):
-    assert index_list.snapshot_listing(storage, APP)[3] is None
+    assert index_list.snapshot_listing(storage, APP, clock=FakeClock())[3] is None
 
 
 def test_vmn_exp_list_says_incomplete_though_the_load_ended_since(storage, monkeypatch, capsys):

@@ -8,10 +8,11 @@ from test_series_reader import APP, V, _storage
 from vmn_exp.core.metric_compact import compact_writer, seal_writer
 from vmn_exp.core.metric_stream import MetricWriter
 from vmn_exp.core.series_reader import SeriesReader
+import time
 
 
 def _block(storage, step, value, ts_us):
-    w = MetricWriter(storage, APP, V, "w")
+    w = MetricWriter(storage, APP, V, "w", clock=time.time)
     w.add("loss", value, step=step, ts_us=ts_us)
     assert w.flush()
 

@@ -14,22 +14,22 @@ least :data:`COST_MULTIPLE` times the last publish's cost — passed: a
 constant cost per record however big the store, with the first chunk
 published at once and the board moving every few seconds while it is small.
 """
-import time
 
 from vmn_exp.core.index_snapshot import IndexSnapshot
 
 PUBLISH_FRACTION = 0.05
 PUBLISH_EVERY_SEC = 10.0
 COST_MULTIPLE = 20
-_monotonic = time.monotonic
 
 
 class BulkPublish:
     """The changes a bulk load has not published yet, and when it should."""
 
-    def __init__(self):
+    def __init__(self, monotonic):
+        """*monotonic*: the clock publishes are timed on."""
+        self._monotonic = monotonic
         self.new, self.touched, self.resort, self.removed = [], set(), False, False
-        self._published_at, self._cost = _monotonic(), 0.0
+        self._published_at, self._cost = self._monotonic(), 0.0
 
     def add(self, new, removed, redescribed, touched):
         self.new += new
@@ -46,7 +46,7 @@ class BulkPublish:
         if len(self.new) >= max(chunk, PUBLISH_FRACTION * published_rows):
             return True
         every = max(PUBLISH_EVERY_SEC, COST_MULTIPLE * self._cost)
-        return self.pending() and _monotonic() - self._published_at >= every
+        return self.pending() and self._monotonic() - self._published_at >= every
 
     def take(self):
         """``(new keys, resort, touched or None when a record went)`` to
@@ -57,7 +57,7 @@ class BulkPublish:
 
     def published(self, started):
         """A publish begun at monotonic *started* just ended."""
-        now = _monotonic()
+        now = self._monotonic()
         self._published_at, self._cost = now, now - started
 
 

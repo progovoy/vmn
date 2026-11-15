@@ -90,7 +90,7 @@ class GCSSnapshotStorage(S3SnapshotStorage):
     scheme = "gs"
 
     def __init__(self, bucket, prefix="vmn/snapshots", client=None, client_factory=None,
-                 options=None):
+                 options=None, *, env=None):
         """*client_factory* (a :class:`GCSObjectClient` builder, used instead
         of a ``google.cloud.storage`` *client*) builds the client again in a
         forked child; without either, one from Application Default Credentials."""
@@ -99,7 +99,7 @@ class GCSSnapshotStorage(S3SnapshotStorage):
         elif client_factory is None:
             client_factory = functools.partial(_default_adapter, bucket, None)
         super().__init__(bucket, prefix=prefix, client=client, client_factory=client_factory,
-                         options=options)
+                         options=options, env=env)
 
     def open_artifact(self, app_name, verstr, name):
         """Streamed, never buffered: a GCS read is one whole-object download."""
@@ -123,7 +123,7 @@ def _default_adapter(bucket, endpoint_url):
     return GCSObjectClient(_default_client(endpoint_url), bucket)
 
 
-def open_gcs_store(uri, area):
+def open_gcs_store(uri, area, env):
     factory = functools.partial(_default_adapter, uri.location, uri.options.get("endpoint_url"))
     return GCSSnapshotStorage(uri.location, prefix=default_prefix(uri, area),
-                              client_factory=factory, options=uri.options)
+                              client_factory=factory, options=uri.options, env=env)

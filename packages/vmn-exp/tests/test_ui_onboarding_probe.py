@@ -6,6 +6,7 @@ from botocore.exceptions import ClientError
 from s3_helpers import BUCKET, PREFIX, mocked_bucket
 from vmn_exp.ui import onboarding
 from vmn_exp.ui.onboarding_probe import probe_role
+from vmn_exp.core.real_io import RealRandom
 
 ROLE = "arn:aws:iam::123456789012:role/vmn-exp-reader"
 EXT = "ext-123"
@@ -55,7 +56,7 @@ def _failed(probe):
 def test_read_edit_role_without_delete_passes(bucket):
     _lifecycle(bucket)
     probe = probe_role(ROLE, EXT, BUCKET, PREFIX, edits=True,
-                       client_for=_factory(deny={"delete_object"}))
+                       client_for=_factory(deny={"delete_object"}), random=RealRandom())
     assert _failed(probe) == []
     assert probe.capabilities == ["read", "edit"]
     assert not probe.refused and probe.warnings == []
@@ -64,7 +65,7 @@ def test_read_edit_role_without_delete_passes(bucket):
 def test_read_only_role_is_detected(bucket):
     _lifecycle(bucket)
     probe = probe_role(ROLE, EXT, BUCKET, PREFIX, edits=True,
-                       client_for=_factory(deny={"put_object", "delete_object"}))
+                       client_for=_factory(deny={"put_object", "delete_object"}), random=RealRandom())
     assert _failed(probe) == ["write"]
     assert probe.capabilities == ["read"]
     assert not probe.refused
@@ -72,7 +73,7 @@ def test_read_only_role_is_detected(bucket):
 
 def test_role_that_can_delete_is_refused(bucket):
     _lifecycle(bucket)
-    probe = probe_role(ROLE, EXT, BUCKET, PREFIX, edits=True, client_for=_factory())
+    probe = probe_role(ROLE, EXT, BUCKET, PREFIX, edits=True, client_for=_factory(), random=RealRandom())
     assert "no_delete" in _failed(probe)
     assert probe.refused and probe.capabilities == []
 
@@ -80,13 +81,13 @@ def test_role_that_can_delete_is_refused(bucket):
 def test_each_failing_check_is_reported(bucket):
     probe = probe_role(ROLE, EXT, BUCKET, PREFIX, edits=False,
                        client_for=_factory(deny={"list_objects_v2", "get_object",
-                                                 "delete_object"}))
+                                                 "delete_object"}), random=RealRandom())
     assert _failed(probe) == ["list", "read"]
     assert probe.capabilities == []
 
 
 def test_missing_lifecycle_rule_warns(bucket):
-    probe = probe_role(ROLE, EXT, BUCKET, PREFIX, client_for=_factory(deny={"delete_object"}))
+    probe = probe_role(ROLE, EXT, BUCKET, PREFIX, client_for=_factory(deny={"delete_object"}), random=RealRandom())
     assert any("lifecycle" in w for w in probe.warnings)
     assert probe.capabilities == ["read"]
 
@@ -104,11 +105,11 @@ class _Sts:
 
 def test_probe_assumes_the_role_with_the_org_external_id(bucket):
     sts = _Sts(EXT)
-    probe_role(ROLE, EXT, BUCKET, PREFIX, sts=sts, client_for=_factory(deny={"delete_object"}))
+    probe_role(ROLE, EXT, BUCKET, PREFIX, sts=sts, client_for=_factory(deny={"delete_object"}), random=RealRandom())
     assert sts.calls[0]["RoleArn"] == ROLE and sts.calls[0]["ExternalId"] == EXT
 
 
 def test_wrong_external_id_fails_assume_role_and_stops(bucket):
-    probe = probe_role(ROLE, "wrong", BUCKET, PREFIX, sts=_Sts(EXT), client_for=_factory())
+    probe = probe_role(ROLE, "wrong", BUCKET, PREFIX, sts=_Sts(EXT), client_for=_factory(), random=RealRandom())
     assert [(c.name, c.ok) for c in probe.checks] == [("assume_role", False)]
     assert probe.capabilities == []

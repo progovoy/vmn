@@ -1,6 +1,7 @@
 """env.yml records whether the run's Python is free-threaded and whether its GIL
 is actually enabled (``python.free_threaded`` / ``python.gil_enabled``); the
 metadata env summary carries both at its top level, so they are queryable."""
+import os
 import sys
 import sysconfig
 
@@ -72,7 +73,7 @@ def test_capture_env_safe_of_another_interpreter_reports_its_own_values(monkeypa
     expected_gil = is_enabled() if is_enabled else True
     _simulate(monkeypatch, 0 if expected_free else 1, gil_enabled=not expected_gil)
 
-    python = capture_env_safe(sys.executable)["python"]
+    python = capture_env_safe(os.environ, sys.executable)["python"]
     assert python["free_threaded"] is expected_free
     assert python["gil_enabled"] is expected_gil
 

@@ -4,13 +4,14 @@ Everything here is exercised against a fake, duck-typed storage: the point of
 ``core.experiment_writer`` is that it knows how to shape an experiment record
 without knowing anything about git, argparse or S3.
 """
+import datetime
 import hashlib
 import os
 
 import pytest
 import yaml
 from vmn_exp.core.record_format import RECORD_FORMAT_VERSION
-from vmn_exp.core.status import RUN_STATE_FILE
+from vmn_exp.core.status import CREATED, RUN_STATE_FILE, derive_status, load_run_state
 from vmn_exp.core.streams import display_writer
 from vmn_exp.core.writer import (
     allocate_run_verstr,
@@ -25,6 +26,8 @@ from vmn_exp.core.writer import (
     save_artifact,
     save_run_state,
 )
+from vmn_exp.core.real_io import real_io
+from writer_args import process_suffix, process_writer
 
 
 class _FakeStorage:
@@ -86,11 +89,39 @@ def test_append_to_log_writes_through_the_per_writer_jsonl(monkeypatch):
     monkeypatch.setenv("VMN_WRITER_ID", "pod-7")
     storage = _FakeStorage()
 
-    append_to_log(storage, "app", "0.0.1", {"type": "note", "text": "hi"})
+    append_to_log(storage, "app", "0.0.1", {"type": "note", "text": "hi"}, writer=process_writer())
 
     [(app, verstr, stream, entry)] = storage.log_entries
     assert (app, verstr, entry) == ("app", "0.0.1", {"type": "note", "text": "hi"})
     assert display_writer(stream) == "pod-7"
+
+
+class _SealFailingStorage(_FakeStorage):
+    """Stores metric blocks; listing the stream to seal it raises."""
+
+    def __init__(self):
+        super().__init__()
+        self.blocks = []
+
+    def append_metric_block(self, app_name, verstr, writer_id, data):
+        self.blocks.append(data)
+        return True
+
+    def metric_objects(self, app_name, verstr):
+        raise OSError("listing failed")
+
+
+def test_a_failed_seal_does_not_fail_the_metric_append(monkeypatch):
+    from vmn_exp.core import metric_compact
+    from vmn_exp.core.writer import append_metric_entries
+
+    monkeypatch.setattr(metric_compact, "SEAL_POINTS", 1)
+    storage = _SealFailingStorage()
+    entry = {"type": "metrics", "step": 0, "timestamp": "2026-01-01T00:00:00Z",
+             "values": {"loss": 0.5}}
+
+    assert append_metric_entries(storage, "app", "0.0.1", [entry], writer=process_writer()) is True
+    assert len(storage.blocks) == 1
 
 
 # ---------------------------------------------------------------------------
@@ -116,6 +147,19 @@ def test_save_run_state_without_updates_republishes_the_current_state():
     save_run_state(storage, "app", "0.0.1", state)
 
     assert yaml.safe_load(storage.load_file("app", "0.0.1", RUN_STATE_FILE)) == state
+
+
+@pytest.mark.parametrize("empty", ["", b""])
+def test_an_empty_run_state_file_reads_as_no_state(empty):
+    """experiments.md "Durability": a host crash can leave a just-renamed
+    run_state.yml empty; readers take it as a run with no state yet."""
+    storage = _FakeStorage()
+    storage.save_file("app", "0.0.1", RUN_STATE_FILE, empty)
+
+    state = load_run_state(storage, "app", "0.0.1")
+
+    assert state is None
+    assert derive_status(state, now=datetime.datetime(2026, 11, 11, tzinfo=datetime.timezone.utc)) == CREATED
 
 
 # ---------------------------------------------------------------------------
@@ -154,19 +198,19 @@ def test_save_artifact_delegates_to_the_storage(tmp_path):
 def test_get_writer_id_prefers_the_env_over_the_conf(monkeypatch):
     monkeypatch.setenv("VMN_WRITER_ID", "from-env")
 
-    assert get_writer_id(conf_writer_id="from-conf") == "from-env"
+    assert get_writer_id(real_io().env, real_io().host, conf_writer_id="from-conf") == "from-env"
 
 
 def test_get_writer_id_falls_back_to_conf_then_hostname_env(monkeypatch):
     monkeypatch.setenv("HOSTNAME", "host-env")
 
-    assert get_writer_id(conf_writer_id="from-conf") == "from-conf"
+    assert get_writer_id(real_io().env, real_io().host, conf_writer_id="from-conf") == "from-conf"
 
 
 def test_get_writer_id_falls_back_to_the_hostname_env(monkeypatch):
     monkeypatch.setenv("HOSTNAME", "host-env")
 
-    assert get_writer_id() == "host-env"
+    assert get_writer_id(real_io().env, real_io().host) == "host-env"
 
 
 def test_get_writer_id_falls_back_to_the_real_hostname(monkeypatch):
@@ -174,15 +218,15 @@ def test_get_writer_id_falls_back_to_the_real_hostname(monkeypatch):
 
     monkeypatch.delenv("HOSTNAME", raising=False)
 
-    assert get_writer_id() == socket.gethostname()
+    assert get_writer_id(real_io().env, real_io().host) == socket.gethostname()
 
 
 def test_get_writer_id_is_cached_for_the_process(monkeypatch):
     monkeypatch.setenv("VMN_WRITER_ID", "first")
-    assert get_writer_id() == "first"
+    assert get_writer_id(real_io().env, real_io().host) == "first"
 
     monkeypatch.setenv("VMN_WRITER_ID", "second")
-    assert get_writer_id() == "first"
+    assert get_writer_id(real_io().env, real_io().host) == "first"
 
 
 # ---------------------------------------------------------------------------
@@ -218,7 +262,7 @@ def test_merge_conf_into_params_fills_unset_keys():
     vcs = _Vcs(experiment={"storage": {"bucket": "b", "prefix": "p"}})
     params = {"bucket": None, "prefix": None}
 
-    merge_conf_into_params(vcs, params)
+    merge_conf_into_params(vcs, params, os.environ)
 
     assert params == {"bucket": "b", "prefix": "p"}
 
@@ -227,7 +271,7 @@ def test_merge_conf_into_params_ignores_a_backend_key():
     vcs = _Vcs(experiment={"storage": {"backend": "s3", "bucket": "b"}})
     params = {"bucket": None}
 
-    merge_conf_into_params(vcs, params)
+    merge_conf_into_params(vcs, params, os.environ)
 
     assert params == {"bucket": "b"}
 
@@ -236,7 +280,7 @@ def test_merge_conf_into_params_lets_explicit_cli_values_win():
     vcs = _Vcs(experiment={"storage": {"bucket": "from-conf"}})
     params = {"bucket": "from-cli"}
 
-    merge_conf_into_params(vcs, params)
+    merge_conf_into_params(vcs, params, os.environ)
 
     assert params["bucket"] == "from-cli"
 
@@ -244,7 +288,7 @@ def test_merge_conf_into_params_lets_explicit_cli_values_win():
 def test_merge_conf_into_params_tolerates_a_vcs_without_conf():
     params = {"bucket": "b"}
 
-    merge_conf_into_params(None, params)
+    merge_conf_into_params(None, params, os.environ)
 
     assert params == {"bucket": "b"}
 
@@ -283,7 +327,7 @@ def _meta(verstr):
 def test_allocate_run_verstr_uses_the_code_verstr_when_it_is_free():
     storage = _FakeStorage()
 
-    assert allocate_run_verstr(storage, "app", "0.0.1-dev.aaa.bbb") == "0.0.1-dev.aaa.bbb"
+    assert allocate_run_verstr(storage, "app", "0.0.1-dev.aaa.bbb", suffix=process_suffix()) == "0.0.1-dev.aaa.bbb"
 
 
 def test_allocate_run_verstr_increments_the_run_suffix():
@@ -292,7 +336,7 @@ def test_allocate_run_verstr_increments_the_run_suffix():
     )
 
     assert (
-        allocate_run_verstr(storage, "app", "0.0.1-dev.aaa.bbb")
+        allocate_run_verstr(storage, "app", "0.0.1-dev.aaa.bbb", suffix=process_suffix())
         == "0.0.1-dev.aaa.bbb.r3"
     )
 
@@ -302,7 +346,7 @@ def test_allocate_run_verstr_uses_a_writer_unique_suffix_in_k8s_mode(monkeypatch
     storage = _FakeStorage()
 
     assert (
-        allocate_run_verstr(storage, "app", "0.0.1-dev.aaa.bbb")
+        allocate_run_verstr(storage, "app", "0.0.1-dev.aaa.bbb", suffix=process_suffix())
         == "0.0.1-dev.aaa.bbb.pod-7"
     )
 
@@ -312,7 +356,7 @@ def test_allocate_run_verstr_disambiguates_a_taken_writer_suffix(monkeypatch):
     storage = _FakeStorage([_meta("0.0.1-dev.aaa.bbb.pod-7")])
 
     assert (
-        allocate_run_verstr(storage, "app", "0.0.1-dev.aaa.bbb")
+        allocate_run_verstr(storage, "app", "0.0.1-dev.aaa.bbb", suffix=process_suffix())
         == "0.0.1-dev.aaa.bbb.pod-7.2"
     )
 
@@ -350,7 +394,7 @@ def test_allocate_run_verstr_prefers_a_code_verstr_scoped_listing():
         ]
     )
 
-    verstr = allocate_run_verstr(storage, "app", "0.0.1-dev.aaa.bbb")
+    verstr = allocate_run_verstr(storage, "app", "0.0.1-dev.aaa.bbb", suffix=process_suffix())
 
     assert verstr == "0.0.1-dev.aaa.bbb.r3"
     assert storage.list_run_verstrs_calls == ["0.0.1-dev.aaa.bbb"]
@@ -385,7 +429,7 @@ def test_create_run_claims_the_verstr_and_writes_the_create_entry():
         note="n",
         create_data={"params": {"lr": 0.1}},
         parent="0.0.1-dev.aaa.bbb",
-        name="sweep",
+        name="sweep", writer=process_writer(), suffix=process_suffix()
     )
 
     assert verstr == "0.0.1-dev.aaa.bbb.r2"
@@ -411,7 +455,7 @@ def test_create_run_never_makes_the_run_its_own_parent():
     storage = _RecordingStorage()
 
     verstr = create_run(
-        storage, "app", "0.0.1-dev.aaa.bbb", {}, {}, parent="0.0.1-dev.aaa.bbb"
+        storage, "app", "0.0.1-dev.aaa.bbb", {}, {}, parent="0.0.1-dev.aaa.bbb", writer=process_writer(), suffix=process_suffix()
     )
 
     assert "parent" not in storage.saved[verstr][0]

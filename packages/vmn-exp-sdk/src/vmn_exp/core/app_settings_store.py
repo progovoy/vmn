@@ -58,13 +58,14 @@ def _parsed(app_name, text):
         return {}
 
 
-def write_settings(storage, app_name, text, actor=None):
-    """Validate *text* (SettingsError) and make it the app's settings."""
+def write_settings(storage, app_name, text, actor=None, *, env, host):
+    """Validate *text* (SettingsError) and make it the app's settings, as
+    *actor* (default: the :func:`actor_identity` of *env* and *host*)."""
     parse_settings(text)
     area = settings_area(storage)
     area.save(app_name, RECORD, stamped({
         "verstr": RECORD, "type": "app_settings", "app": app_name, "updated_at": now_iso(),
-        "updated_by": actor or actor_identity(),
+        "updated_by": actor or actor_identity(env, host),
     }), {})
     area.save_file(app_name, RECORD, SETTINGS_FILE, text)
 

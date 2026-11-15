@@ -7,6 +7,7 @@ else ``run_cap``; None for an uncapped random/bayes sweep). The index puts it on
 the sweep outer's row as ``sweep_planned`` (from the metadata's ``sweep`` spec),
 and :mod:`vmn_exp.core.tree` stays pure: it reads only the rows.
 """
+from datetime import datetime, timezone
 from vmn_exp.core.log import experiment_row
 from vmn_exp.core.status import CREATED, FAILED, RUNNING, SUCCEEDED
 from vmn_exp.core.sweep.spec import parse_spec, planned_trials
@@ -138,7 +139,7 @@ class TestRollup:
         for t in trials:
             del t["status"]
         states = {t["verstr"]: {"state": "finished", "exit_code": 0} for t in trials}
-        rows = {r["verstr"]: r for r in annotate_rows([outer] + trials, states)}
+        rows = {r["verstr"]: r for r in annotate_rows([outer] + trials, states, now=datetime.now(timezone.utc))}
         assert rows[SWEEP]["tree_status"] == CREATED
         assert rows[SWEEP]["sweep_planned"] == 3
         assert rows[SWEEP]["sweep_trials"] == 2
@@ -157,7 +158,7 @@ class TestOneRun:
         parent_of = {v: r.get("parent") for v, r in rows.items()}
         finished = {"state": "finished", "exit_code": 0}
         return run_status(SWEEP, parent_of, lambda v: None if v == SWEEP else finished,
-                          row_of=rows.get)
+                          row_of=rows.get, now=datetime.now(timezone.utc))
 
     def test_16_of_20_is_created_and_says_so(self):
         status = self._status(20, 16)
@@ -171,6 +172,7 @@ class TestOneRun:
         rows = self._rows(20, 16)
         parent_of = {v: r.get("parent") for v, r in rows.items()}
         finished = {"state": "finished", "exit_code": 0}
-        _, tree = subtree_status(SWEEP, parent_of, lambda v: None if v == SWEEP else finished)
+        _, tree = subtree_status(SWEEP, parent_of, lambda v: None if v == SWEEP else finished,
+                                 now=datetime.now(timezone.utc))
         assert tree["tree_status"] == SUCCEEDED
         assert "sweep_planned" not in tree

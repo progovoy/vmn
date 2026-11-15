@@ -1,5 +1,7 @@
 # Plan 27: `vmn-exp ui` at millions of runs
 
+Status: **proposal** (2026-10-27).
+
 > A client's store reached 576,580 runs in one app (2026-10-27). Two costs grow with
 > the total number of runs, not with what anyone looks at:
 >

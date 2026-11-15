@@ -11,6 +11,9 @@ from vmn_exp.core.metric_files import indexed_name, stream_name
 from vmn_exp.storage.buffered import BufferedRemoteStorage
 from vmn_exp.storage.journal import journaled
 from vmn_exp.storage.local import LocalSnapshotStorage
+from vmn_exp.core.real_io import RealClock
+import time
+from writer_args import process_writer
 
 APP, V, W = "app", "1.0.0-dev.abc.0001", "w"
 
@@ -78,10 +81,10 @@ def test_local_first_put_indexed_reaches_the_remote(host, tmp_path):
     assert host.metric_objects(APP, V)[W] == [(indexed_name(W), 7)]
 
 
-def test_buffered_storage_ships_blocks_to_the_bucket():
+def test_buffered_storage_ships_blocks_to_the_bucket(tmp_path):
     remote = s3_storage()
     remote.save(APP, V, meta(V), {})
-    pod = BufferedRemoteStorage(remote, area="runs")
+    pod = BufferedRemoteStorage(remote, str(tmp_path), area="runs", clock=RealClock())
     pod.append_metric_block(APP, V, W, _block(1.0))
     pod.append_metric_block(APP, V, W, _block(2.0))
     pod.close()
@@ -100,7 +103,7 @@ class _Sink:
 def test_every_metric_write_is_journaled(tmp_path):
     sink = _Sink()
     store = journaled(LocalSnapshotStorage(str(tmp_path), "runs"), sink=sink,
-                      writer_id="host_1", backoff=lambda attempt: None)
+                      writer_id="host_1", backoff=lambda attempt: None, clock=time.time)
     store.save(APP, V, meta(V), {})
     before = len(sink.keys)
     store.append_metric_block(APP, V, W, _block(1.0))
@@ -115,13 +118,13 @@ def test_local_first_ships_the_blocks_appended_after_a_seal_to_the_next_stream(h
     from vmn_exp.core.metric_compact import seal_writer
     from vmn_exp.core.writer import own_stream
 
-    sealed = own_stream(host, APP, V)
+    sealed = own_stream(host, APP, V, writer=process_writer())
     host.append_metric_block(APP, V, sealed, _block(1.0))
     host.append_metric_block(APP, V, sealed, _block(2.0))
     host.sync_metrics_to_remote(APP, V, sealed)
     assert seal_writer(host, APP, V, sealed)
     assert _metric_keys() == [indexed_name(sealed)]
-    following = own_stream(host, APP, V)
+    following = own_stream(host, APP, V, writer=process_writer())
     host.append_metric_block(APP, V, following, _block(3.0))
     host.sync_metrics_to_remote(APP, V, following)
     assert following != sealed

@@ -10,6 +10,7 @@ from vmn_exp.registry.store import ensure_model, register_version
 from vmn_exp.storage.local import LocalSnapshotStorage
 from vmn_exp.storage.open import open_storage
 from vmn_exp.storage.s3 import S3SnapshotStorage
+from vmn_exp.core.real_io import RealClock, real_io
 
 REAL_APPS = ["my_app", "root/svc"]
 
@@ -53,7 +54,7 @@ def test_s3_storage_lists_its_apps_without_registry(bucket):
 
 
 def test_cached_storage_merges_local_and_remote_apps(bucket, tmp_path):
-    storage = open_storage(f"s3://{bucket}/exps", str(tmp_path), area="runs")
+    storage = open_storage(f"s3://{bucket}/exps", str(tmp_path), area="runs", clock=RealClock(), env=os.environ)
     _record(storage._remote, "remote_app")
     _record(storage._local, "local_app")
     assert storage.list_apps() == ["local_app", "remote_app"]
@@ -71,7 +72,7 @@ def test_file_store_workspace_lists_its_apps(tmp_path):
     manager = WorkspaceManager(str(tmp_path / "data"))
     manager.add_store("ws", f"file://{os.path.abspath(store_dir)}")
 
-    rows = TestClient(create_app(manager)).get("/api/v1/workspaces/ws/apps").json()
+    rows = TestClient(create_app(manager, io=real_io())).get("/api/v1/workspaces/ws/apps").json()
 
     assert [(r["name"], r["experiments"]) for r in rows] == [
         ("my_app", 1),

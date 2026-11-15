@@ -7,20 +7,28 @@ captured per job without touching vmn's process-global logger. At most one
 mutation runs per workspace at a time; a crashing job can't take the server
 down.
 """
-import shutil
 import subprocess
 import sys
 import threading
-import uuid
 from collections import OrderedDict
 
-from vmn_exp.ui.jobs_exp_meta import (
+from vmn_exp.ui.job_argv import ACTIONS, opt, positional, switch
+from vmn_exp.ui.job_calls import CallTimedOut, call_bounded
+from vmn_exp.ui.jobs_exp_meta import (  # noqa: F401  (_metric_args: tests)
     MAX_ARCHIVE_BATCH,
+    _metric_args,
+    _valid_verstr,
+    exp_add_command,
     exp_archive_command,
+    exp_create_command,
+    exp_note_command,
+    exp_prune_command,
     exp_push_command,
+    exp_restore_command,
     exp_rewind_command,
     exp_tag_command,
 )
+from vmn_exp.ui.tenancy import SINGLE_TENANT_ORG, effective_org
 
 # A job that waits on a credential prompt or a lock must not pin its workspace
 # forever: it fails after this long and frees the slot.
@@ -44,6 +52,11 @@ def _tail(text):
     )
 
 
+def start_daemon(target, *args):
+    """The real thread starter :class:`JobRunner` takes: a daemon thread."""
+    threading.Thread(target=target, args=args, daemon=True).start()
+
+
 def _as_text(output):
     if output is None:
         return ""
@@ -52,121 +65,76 @@ def _as_text(output):
     return output
 
 
-def _metric_args(metrics):
-    """Validate a {name: value} mapping and render it as ``--metrics k=v ...``.
+_RELEASE_MODES = ("major", "minor", "patch", "hotfix")
 
-    Returns (args, error_message_or_None); ``([], None)`` when there are none.
-    """
-    metrics = metrics or {}
-    for key in metrics:
-        if not key or "=" in key or any(c.isspace() for c in key):
-            return None, f"Invalid metric name '{key}'"
-    if not metrics:
+
+def _version_args(body):
+    """``--version=<verstr>``, or nothing for a missing or empty verstr."""
+    verstr = body.get("verstr")
+    if verstr is None or verstr == "":
         return [], None
-    return ["--metrics"] + [f"{k}={v}" for k, v in metrics.items()], None
+    if not _valid_verstr(verstr):
+        return None, "A valid verstr is required"
+    return [opt("--version", verstr)], None
+
+
+def _stamp_command(app_name, body):
+    mode, prerelease = body.get("release_mode"), body.get("prerelease")
+    if mode not in _RELEASE_MODES:
+        return None, "release_mode must be major|minor|patch|hotfix"
+    cmd = ["vmn", "stamp", opt("--release-mode", mode)]
+    if prerelease:
+        if not isinstance(prerelease, str) or not prerelease.isprintable():
+            return None, "prerelease must be a printable string"
+        cmd.append(opt("--pr", prerelease))
+    if body.get("dry_run"):
+        cmd.append(switch("--dry-run"))
+    return cmd + [positional(app_name)], None
+
+
+def _core_version_command(verb):
+    """``vmn release|goto [--version=<verstr>] <app>``."""
+    def build(app_name, body):
+        args, err = _version_args(body)
+        if err:
+            return None, err
+        return ["vmn", verb, *args, positional(app_name)], None
+
+    return build
+
+
+def _exp_archive(verb):
+    return lambda app_name, body: exp_archive_command(verb, app_name, body)
+
+
+_BUILDERS = {
+    "stamp": _stamp_command,
+    "release": _core_version_command("release"),
+    "goto": _core_version_command("goto"),
+    "restore": exp_restore_command,
+    "prune": exp_prune_command,
+    "exp_create": exp_create_command,
+    "exp_add": exp_add_command,
+    "note": exp_note_command,
+    "exp_tag": exp_tag_command,
+    "exp_rewind": exp_rewind_command,
+    "exp_push": exp_push_command,
+    "exp_archive": _exp_archive("archive"),
+    "exp_unarchive": _exp_archive("unarchive"),
+}
 
 
 def build_command(action, app_name, body):
-    """Translate an action + request body into a ``vmn`` argv list.
+    """Translate an action + request body into a ``vmn``/``vmn-exp`` argv list.
 
     Returns (argv, error_message_or_None). Kept pure for testing/preview.
     """
-    body = body or {}
-    if action == "stamp":
-        mode = body.get("release_mode")
-        if mode not in ("major", "minor", "patch", "hotfix"):
-            return None, "release_mode must be major|minor|patch|hotfix"
-        cmd = ["vmn", "stamp", "-r", mode]
-        if body.get("prerelease"):
-            cmd += ["--pr", body["prerelease"]]
-        if body.get("dry_run"):
-            cmd += ["--dry-run"]
-        cmd.append(app_name)
-        return cmd, None
-
-    if action == "release":
-        cmd = ["vmn", "release"]
-        if body.get("verstr"):
-            cmd += ["-v", body["verstr"]]
-        cmd.append(app_name)
-        return cmd, None
-
-    if action == "restore":
-        verstr = body.get("verstr")
-        if not verstr:
-            return None, "verstr is required"
-        return ["vmn-exp", "experiment", "restore", app_name, "-v", verstr], None
-
-    if action == "goto":
-        verstr = body.get("verstr")
-        cmd = ["vmn", "goto"]
-        if verstr:
-            cmd += ["-v", verstr]
-        cmd.append(app_name)
-        return cmd, None
-
-    if action == "prune":
-        cmd = ["vmn-exp", "experiment", "prune", app_name]
-        if body.get("keep") is not None:
-            cmd += ["--keep", str(body["keep"])]
-        elif body.get("older_than"):
-            cmd += ["--older-than", body["older_than"]]
-        else:
-            return None, "prune needs keep or older_than"
-        return cmd, None
-
-    if action == "exp_create":
-        cmd = ["vmn-exp", "experiment", "create", app_name]
-        if body.get("note"):
-            cmd += ["--note", body["note"]]
-        metric_args, err = _metric_args(body.get("metrics"))
-        if err:
-            return None, err
-        return cmd + metric_args, None
-
-    if action == "exp_add":
-        verstr = body.get("verstr")
-        if not verstr:
-            return None, "verstr is required"
-        metric_args, err = _metric_args(body.get("metrics"))
-        if err:
-            return None, err
-        note = body.get("note")
-        if not metric_args and not note:
-            return None, "exp_add needs metrics or a note"
-        cmd = ["vmn-exp", "experiment", "add", app_name, "-v", verstr]
-        if note:
-            cmd += ["--note", note]
-        return cmd + metric_args, None
-
-    if action == "note":
-        verstr, note = body.get("verstr"), body.get("note")
-        if not verstr or note is None:
-            return None, "verstr and note are required"
-        return [
-            "vmn-exp",
-            "experiment",
-            "add",
-            app_name,
-            "-v",
-            verstr,
-            "--note",
-            note,
-        ], None
-
-    if action == "exp_tag":
-        return exp_tag_command(app_name, body)
-
-    if action == "exp_rewind":
-        return exp_rewind_command(app_name, body)
-
-    if action == "exp_push":
-        return exp_push_command(app_name, body)
-
-    if action in ("exp_archive", "exp_unarchive"):
-        return exp_archive_command(action.split("_", 1)[1], app_name, body)
-
-    return None, f"Unknown action '{action}'"
+    if action not in ACTIONS:
+        return None, f"Unknown action '{action}'"
+    try:
+        return _BUILDERS[action](app_name, body or {})
+    except ValueError as e:
+        return None, str(e)
 
 
 class Job:
@@ -178,6 +146,9 @@ class Job:
         self.exit_code = None
         self.log = ""
         self.progress = None
+        # Who may read it (plan 42 E6); never in the payload.
+        self.workspace = None
+        self.org_id = SINGLE_TENANT_ORG
 
     def to_dict(self):
         job = {
@@ -200,17 +171,27 @@ class JobRunner:
     finished first) and the size of each job's captured log.
     """
 
-    def __init__(self, timeout_sec=DEFAULT_JOB_TIMEOUT_SEC, max_jobs=MAX_JOBS):
+    def __init__(self, timeout_sec=DEFAULT_JOB_TIMEOUT_SEC, max_jobs=MAX_JOBS, *,
+                 processes, random, start_thread):
         self._jobs = OrderedDict()
         self._lock = threading.Lock()
         self._active_workspaces = set()
+        # Their timed-out store call has not returned yet (plan 40 C16).
+        self._waiting_workspaces = set()
         self._timeout_sec = timeout_sec
         self._max_jobs = max_jobs
+        self._processes, self._random, self._start_thread = processes, random, start_thread
 
     def get(self, job_id):
         with self._lock:
             job = self._jobs.get(job_id)
             return job.to_dict() if job else None
+
+    def get_scoped(self, job_id):
+        """``(job_dict, workspace, org_id)`` of *job_id*, or ``None``."""
+        with self._lock:
+            job = self._jobs.get(job_id)
+            return (job.to_dict(), job.workspace, job.org_id) if job else None
 
     def _evict_finished(self):
         """Forget the oldest finished jobs beyond the cap; running ones stay."""
@@ -223,19 +204,19 @@ class JobRunner:
 
     def submit(self, workspace_name, cwd, command):
         """Start a job. Returns (job_dict, error_message_or_None)."""
-        return self._start(workspace_name, Job(uuid.uuid4().hex, command, cwd), self._run)
+        return self._start(workspace_name, Job(self._random.hex_id(), command, cwd), self._run)
 
     def submit_call(self, workspace_name, command, call):
         """Start an in-process job: *call()* returns its log text; raising
         fails the job with the exception's message as its log."""
-        job = Job(uuid.uuid4().hex, command, None)
-        return self._start(workspace_name, job, lambda ws, j: self._call(ws, j, call))
+        job = Job(self._random.hex_id(), command, None)
+        return self._start(workspace_name, job, lambda ws, j: self._call(ws, j, self._bounded(call)))
 
     def submit_bulk(self, workspace_name, command, resolve, act):
         """Start a bulk job (plan 23 S4): *resolve()* names its runs when it
         starts, *act(batch)* acts on each :data:`MAX_ARCHIVE_BATCH` of them
         (returning log text, raising to fail); ``progress`` counts them."""
-        job = Job(uuid.uuid4().hex, command, None)
+        job = Job(self._random.hex_id(), command, None)
         job.progress = {"done": 0, "total": None}
 
         def call():
@@ -244,7 +225,7 @@ class JobRunner:
             logs = []
             for at in range(0, len(verstrs), MAX_ARCHIVE_BATCH):
                 batch = verstrs[at : at + MAX_ARCHIVE_BATCH]
-                logs.append(str(act(batch) or ""))
+                logs.append(str(self._bounded(lambda: act(batch))() or ""))
                 job.progress["done"] += len(batch)
             return "\n".join(logs)
 
@@ -254,24 +235,26 @@ class JobRunner:
         """Run *command* as a job does; ``(exit_code, output)``, raising
         :class:`subprocess.TimeoutExpired` past the job timeout."""
         # Prefer the real console script (faithful to the CLI equivalent
-        # shown to the user); fall back to the current interpreter otherwise.
-        if shutil.which(command[0]):
-            argv = command
-        else:
-            argv = [sys.executable, "-m", _CLI_MODULES[command[0]]] + command[1:]
-        proc = subprocess.run(
-            argv,
-            cwd=cwd,
-            capture_output=True,
-            text=True,
-            # The server's stdin is not the job's: a prompt must fail, not hang.
-            stdin=subprocess.DEVNULL,
-            timeout=self._timeout_sec,
-        )
+        # shown to the user); fall back to the current interpreter without it.
+        proc = self._run_argv(command, cwd)
+        if proc is None:
+            proc = self._run_argv([sys.executable, "-m", _CLI_MODULES[command[0]]] + command[1:], cwd)
         return proc.returncode, (proc.stdout or "") + (proc.stderr or "")
 
+    def _run_argv(self, argv, cwd):
+        """*argv*'s finished process, or None when its binary is missing."""
+        return self._processes.run(
+            argv, cwd=cwd, capture_output=True, text=True,
+            # The server's stdin is not the job's: a prompt must fail, not hang.
+            stdin=subprocess.DEVNULL, timeout=self._timeout_sec,
+        )
+
     def _start(self, workspace_name, job, target):
+        # The org the submitting request is bound to (0 in single tenancy).
+        job.workspace, job.org_id = workspace_name, effective_org(SINGLE_TENANT_ORG)
         with self._lock:
+            if workspace_name in self._waiting_workspaces:
+                return None, "The previous action is still waiting for the store"
             if workspace_name in self._active_workspaces:
                 return None, "Another action is already running in this workspace"
             self._jobs[job.id] = job
@@ -279,19 +262,34 @@ class JobRunner:
             self._active_workspaces.add(workspace_name)
             submitted = job.to_dict()
 
-        thread = threading.Thread(target=target, args=(workspace_name, job), daemon=True)
-        thread.start()
+        self._start_thread(target, workspace_name, job)
         return submitted, None
+
+    def _bounded(self, call):
+        """*call* bounded by the job timeout (plan 40 C16)."""
+        return lambda: call_bounded(call, self._timeout_sec, self._start_thread)
+
+    def _timed_out(self):
+        return f"Job timed out after {self._timeout_sec}s"
 
     def _call(self, workspace_name, job, call):
         try:
             job.log = _tail(str(call() or ""))
             job.exit_code, job.status = 0, "succeeded"
+        except CallTimedOut as e:
+            # The store is not safe for two actions at once: the slot stays
+            # taken until the late call really returns.
+            with self._lock:
+                self._waiting_workspaces.add(workspace_name)
+            job.log = f"{self._timed_out()}: {e}"
+            job.exit_code, job.status = -1, "failed"
+            e.returned.wait()
         except Exception as e:
             job.log = _tail(str(e))
             job.exit_code, job.status = 1, "failed"
         finally:
             with self._lock:
+                self._waiting_workspaces.discard(workspace_name)
                 self._active_workspaces.discard(workspace_name)
 
     def _run(self, workspace_name, job):
@@ -301,7 +299,7 @@ class JobRunner:
             job.status = "succeeded" if job.exit_code == 0 else "failed"
         except subprocess.TimeoutExpired as e:
             output = _as_text(e.stdout) + _as_text(e.stderr)
-            job.log = _tail(output + f"\nJob timed out after {self._timeout_sec}s")
+            job.log = _tail(output + f"\n{self._timed_out()}")
             job.exit_code = -1
             job.status = "failed"
         except Exception as e:  # pragma: no cover - defensive

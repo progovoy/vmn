@@ -1,5 +1,6 @@
 """``vmn_search_rows`` are written by the replica leading an app's index, on
 its refresh; a search request only reads them (plan 25 F5)."""
+import os
 import threading
 
 import pytest
@@ -13,6 +14,7 @@ from pg_locks import until  # noqa: E402
 from vmn_exp.storage.areas import RUNS  # noqa: E402
 from vmn_exp.storage.open import open_storage  # noqa: E402
 from vmn_exp.ui.search_pg import PgRowSearch  # noqa: E402
+from vmn_exp.core.real_io import RealClock, real_io
 
 APP = "app"
 SEARCH = "/api/v1/search"
@@ -29,7 +31,7 @@ def _replica(tmp_path, name, store, pg_dsn, **kw):
 
     manager = WorkspaceManager(str(tmp_path / f"data-{name}"))
     manager.add_store("ws", store)
-    return TestClient(create_app(manager, search_dsn=pg_dsn, **kw))
+    return TestClient(create_app(manager, io=real_io(), search_dsn=pg_dsn, **kw))
 
 
 def _hits(client):
@@ -41,7 +43,7 @@ def _hits(client):
 @pytest.fixture
 def store(tmp_path):
     uri = f"file://{tmp_path}/store"
-    return uri, open_storage(uri, area=RUNS)
+    return uri, open_storage(uri, area=RUNS, clock=RealClock(), env=os.environ)
 
 
 def test_followers_search_what_the_index_leader_refreshed(tmp_path, pg_dsn, store):

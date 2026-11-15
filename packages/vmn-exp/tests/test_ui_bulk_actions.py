@@ -10,6 +10,7 @@ pytest.importorskip("fastapi")
 from fastapi.testclient import TestClient
 from vmn_exp.storage.areas import RUNS
 from vmn_exp.storage.open import open_storage
+from vmn_exp.core.real_io import RealClock, real_io
 
 APP = "my_app"
 BASE = f"/api/v1/workspaces/ws/apps/{APP}"
@@ -26,7 +27,7 @@ def _manager(tmp_path, matching=3, other=2, archived=()):
     from vmn_exp.ui.workspaces import WorkspaceManager
 
     uri = f"file://{tmp_path}/store"
-    storage = open_storage(uri, area=RUNS)
+    storage = open_storage(uri, area=RUNS, clock=RealClock(), env=os.environ)
     storage.save(APP, JOB, {"verstr": JOB, "timestamp": "2026-01-01T00:00:00Z"}, {})
     for i in range(matching + other):
         meta = {"verstr": _v(i), "timestamp": "2026-01-01T00:00:01Z", "parent": JOB,
@@ -42,7 +43,7 @@ def _manager(tmp_path, matching=3, other=2, archived=()):
 def _client(tmp_path, **kw):
     from vmn_exp.ui.server import create_app
 
-    return TestClient(create_app(_manager(tmp_path, **kw)))
+    return TestClient(create_app(_manager(tmp_path, **kw), io=real_io()))
 
 
 def _wait(client, job_id, timeout=60):
@@ -163,7 +164,7 @@ def test_an_unknown_scope_is_a_404(tmp_path):
 def test_read_only_refuses_even_a_preview(tmp_path):
     from vmn_exp.ui.server import create_app
 
-    client = TestClient(create_app(_manager(tmp_path), read_only=True))
+    client = TestClient(create_app(_manager(tmp_path), io=real_io(), read_only=True))
     r = client.post(f"{BASE}/actions/exp_archive", json={**QUERY, "dry_run": True})
     assert r.status_code == 403
 
@@ -180,9 +181,21 @@ def test_a_viewer_is_refused(tmp_path):
         def authenticate(self, request):
             return people.get(request.headers.get("Authorization", ""))
 
-    client = TestClient(create_app(_manager(tmp_path), auth=AuthenticatorChain([Fixed()])))
+    client = TestClient(create_app(_manager(tmp_path), io=real_io(), auth=AuthenticatorChain([Fixed()])))
     url = f"{BASE}/actions/exp_archive"
     body = {**QUERY, "dry_run": True}
     assert client.post(url, json=body, headers={"Authorization": "Bearer v"}).status_code == 403
     r = client.post(url, json=body, headers={"Authorization": "Bearer e"})
     assert r.status_code == 200 and r.json()["count"] == 3
+
+
+def test_a_bulk_store_action_first_retries_an_earlier_pending_edit(tmp_path, monkeypatch):
+    from test_ui_jobs_store_api import stuck_edit_storage
+
+    stuck_edit_storage(monkeypatch)
+    client = _client(tmp_path, matching=3, other=2)
+    r = client.post(f"{BASE}/actions/exp_archive", json=QUERY)
+    job = _wait(client, r.json()["id"])
+    assert job["status"] == "failed"
+    assert "An earlier edit is still pending" in job["log"]
+    assert not any(row.get("archived") for row in _rows(client).values())

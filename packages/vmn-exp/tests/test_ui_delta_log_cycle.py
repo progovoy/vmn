@@ -7,14 +7,14 @@ import threading
 from collections import OrderedDict
 
 import pytest
+from fakes.clock import FakeClock
 from leaderboard_fleet import T0, Fleet
 from vmn_exp.core.traced_lock import TracedLock
 from vmn_exp.ui.leaderboard_cache import LeaderboardCache
 from vmn_exp.ui.leaderboard_delta import DeltaLog
 from vmn_exp.ui.memo import LRU, Generations, TTLCache
 
-from vmn_exp.core import status as status_mod
-
+CLOCK = FakeClock(start=T0)
 DEFAULT = dict(sort="idx", offset=0, limit=200)
 
 
@@ -34,11 +34,6 @@ class _Base:
     def __init__(self, token, prev=None):
         self.token, self.rows = token, []
         self.delta = None if prev is None else (prev, [], [], [])
-
-
-@pytest.fixture
-def frozen(monkeypatch):
-    monkeypatch.setattr(status_mod, "_now", lambda now=None: now or T0)
 
 
 def _guarded(log):
@@ -85,21 +80,21 @@ def test_add_is_never_blocked_by_a_slow_walk():
     assert not blocked
 
 
-def test_a_held_snapshot_rebuilt_after_eviction_still_serves_orders(frozen):
+def test_a_held_snapshot_rebuilt_after_eviction_still_serves_orders():
     fleet = Fleet(3)
     fleet.seed_jobs(3, 40, T0, live=4)
     snaps = []
     for _ in range(4):
         fleet.append(state=fleet.ended(T0))
         snaps.append(fleet.snapshot())
-    cache = LeaderboardCache()
+    cache = LeaderboardCache(now=CLOCK.now)
     _guarded(cache._deltas)
     cache.page(snaps[0], {}, **DEFAULT)  # an order last served at generation 0
     for snap in snaps[1:]:
         cache._base(snap)
     cache._base(snaps[1])  # evicted (two bases kept), rebuilt from the newest
     page = cache.page(snaps[3], {}, **DEFAULT)
-    assert page == LeaderboardCache().page(snaps[3], {}, **DEFAULT)
+    assert page == LeaderboardCache(now=CLOCK.now).page(snaps[3], {}, **DEFAULT)
 
 
 @pytest.mark.parametrize("make", [
@@ -107,10 +102,10 @@ def test_a_held_snapshot_rebuilt_after_eviction_still_serves_orders(frozen):
     lambda: LRU(2)._lock,
     lambda: Generations(2)._lock,
     lambda: TTLCache(1)._lock,
-    lambda: LeaderboardCache()._warmer._lock,
-    lambda: LeaderboardCache()._facets._lock,
-    lambda: LeaderboardCache()._top_counts._lock,
-    lambda: LeaderboardCache()._search._lock,
+    lambda: LeaderboardCache(now=CLOCK.now)._warmer._lock,
+    lambda: LeaderboardCache(now=CLOCK.now)._facets._lock,
+    lambda: LeaderboardCache(now=CLOCK.now)._top_counts._lock,
+    lambda: LeaderboardCache(now=CLOCK.now)._search._lock,
 ])
 def test_the_board_locks_show_in_diag_dumps(make):
     assert isinstance(make(), TracedLock)

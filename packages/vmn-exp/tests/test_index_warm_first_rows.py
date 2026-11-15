@@ -3,6 +3,7 @@ their share of every persisted run — and only then reads the rest back.
 Reading every persisted row first is O(runs) before anything shows: at
 ~700k runs a recycled server showed an empty board for minutes."""
 import threading
+from datetime import datetime, timezone
 
 import pytest
 
@@ -52,7 +53,8 @@ def test_a_warm_restart_serves_the_newest_rows_before_reading_them_all(persisted
     assert first.loading == (FIRST, N)
     assert [r["verstr"] for r in first.rows] == [r["verstr"] for r in newest]
     assert [r["idx"] for r in first.rows] == [r["idx"] for r in newest]
-    assert all(first.status_of(r["verstr"]) == full.status_of(r["verstr"]) for r in newest)
+    now = datetime.now(timezone.utc)
+    assert all(first.status_of(r["verstr"], now) == full.status_of(r["verstr"], now) for r in newest)
 
 
 def test_the_first_rows_decode_only_their_own(persisted, held_full_read, monkeypatch):

@@ -9,11 +9,11 @@ its version token (S3/Azure ETag, GCS generation, a local content hash) and
 writes only while the token still matches; refused, it reads again and decides
 again. Two finishers racing cannot both land.
 """
-import uuid
 
 import yaml
 
 from vmn_exp import _base
+from vmn_exp.core.status import RUN_STATE_FILE
 from vmn_exp.storage.cached import CachedSnapshotStorage, local_side
 
 # Each refusal is another writer landing in between: a live attempt's beat,
@@ -51,9 +51,30 @@ def finished_by_another(stored, attempt):
     )
 
 
-def new_attempt_id():
+def publish_final_if_unfinished(side, app_name, verstr, local_state):
+    """Write *local_state*, a run's final state, over the stored one when that
+    is unfinished and of the same attempt (or has none); whether it wrote.
+
+    Never ends another attempt that is alive, and never one without an
+    ``attempt`` of its own: nothing proves it is the stored state's attempt.
+    """
+    def update(stored):
+        return local_state if _is_own_unfinished(stored, local_state) else None
+
+    return compare_and_save(side, app_name, verstr, RUN_STATE_FILE, update) is not None
+
+
+def _is_own_unfinished(stored, local_state):
+    attempt = local_state.get("attempt")
+    return bool(attempt) and local_state.get("state") == "finished" and (
+        stored.get("state") != "finished"
+        and stored.get("attempt") in (None, attempt)
+    )
+
+
+def new_attempt_id(random):
     """A new id of one process's attempt at a run (its state's ``attempt``)."""
-    return uuid.uuid4().hex[:12]
+    return random.token_hex(6)
 
 
 def compare_and_save(side, app_name, verstr, filename, update):

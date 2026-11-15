@@ -64,6 +64,18 @@ class CommandSpec:
     commits: Union[bool, Callable] = False
 
 
+@dataclass(frozen=True)
+class Frontend:
+    """Who the CLI says it is: ``prog`` in usage lines, ``--version``'s string
+    (None: vmn's own), whether vmn's built-in commands are offered, and a help
+    epilog. The default is ``vmn`` itself."""
+
+    prog: str = "vmn"
+    version: Optional[str] = None
+    builtins: bool = True
+    epilog: Optional[str] = None
+
+
 # ---------------------------------------------------------------------------
 # Registry
 # ---------------------------------------------------------------------------

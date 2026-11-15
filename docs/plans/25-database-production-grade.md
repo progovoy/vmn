@@ -1,5 +1,7 @@
 # Plan 25: production-grade database use (index cache, Postgres server, control plane)
 
+Status: **done** (2026-10-16), with the untested targets listed in the plans index.
+
 > The data model is right. Storage is the source of truth, and every database is a
 > rebuildable cache (plan 11 §2) or the control plane. Every query is parameterized.
 > An audit on 2026-10-16 (three code reads, key claims re-checked against the source)

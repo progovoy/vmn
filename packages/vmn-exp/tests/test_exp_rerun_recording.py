@@ -3,6 +3,7 @@
 """
 import argparse
 import os
+import threading
 
 import pytest
 from exp_helpers import _PY, _bootstrap, _exec_script, _exp, _storage
@@ -11,9 +12,11 @@ from vmn_exp.core.code_store import code_key, find_code_key, store_code
 from vmn_exp.core.fold import fold_row, new_fold
 from vmn_exp.core.log import experiment_row
 from vmn_exp.core.query import filter_rows
+from vmn_exp.core.real_io import real_io
 from vmn_exp.core.rerun import RUNNER_CLI, RUNNER_SDK
 from vmn_exp.core.status import load_run_state
 from vmn_exp.snapshot import LocalSnapshotStorage
+from vmn_exp.core.real_io import RealClock
 
 META = {"verstr": "0.0.1-dev.a.r2", "timestamp": "2026-01-01T00:00:00Z"}
 
@@ -70,7 +73,7 @@ def test_detail_returns_rerun_of(tmp_path):
     storage = LocalSnapshotStorage(str(tmp_path))
     storage.save("app", "b", dict(META, verstr="b", rerun_of="a"), {})
     storage.append_log_entry("app", "b", "w", {"timestamp": META["timestamp"], "type": "create"})
-    detail, err = experiment_detail(storage, "app", "b")
+    detail, err = experiment_detail(storage, "app", "b", now=RealClock().now())
     assert err is None
     assert detail["rerun_of"] == "a"
 
@@ -138,7 +141,8 @@ def test_supervision_cwd_param_overrides_child_cwd(app_layout, tmp_path):
     probe = "import os; open('where.txt', 'w').write(os.getcwd())"
 
     sup = _Supervision(storage, app_layout.app_name, verstr, args,
-                       cwd=str(child_dir), root=str(root))
+                       cwd=str(child_dir), root=str(root), wait=threading.Event().wait,
+                       io=real_io())
     assert sup.run([_PY, "-c", probe]) == 0
 
     where = (child_dir / "where.txt").read_text()
@@ -152,7 +156,8 @@ def test_supervision_without_root_records_null_cwd(app_layout):
     from vmn_exp.cli.run import _Supervision
 
     storage, verstr, args = _created_run(app_layout)
-    assert _Supervision(storage, app_layout.app_name, verstr, args).run([_PY, "-c", "0"]) == 0
+    assert _Supervision(storage, app_layout.app_name, verstr, args,
+                        wait=threading.Event().wait, io=real_io()).run([_PY, "-c", "0"]) == 0
     assert load_run_state(storage, app_layout.app_name, verstr)["cwd"] is None
 
 
@@ -163,7 +168,8 @@ def test_supervision_extra_env_none_removes_the_variable(app_layout, tmp_path, m
     monkeypatch.setenv("VMN_RESUME_RUN_ID", "stale")
     probe = "import os; open('env.txt', 'w').write(repr(os.environ.get('VMN_RESUME_RUN_ID')))"
     sup = _Supervision(storage, app_layout.app_name, verstr, args,
-                       extra_env={"VMN_RESUME_RUN_ID": None}, cwd=str(tmp_path))
+                       extra_env={"VMN_RESUME_RUN_ID": None}, cwd=str(tmp_path),
+                       wait=threading.Event().wait, io=real_io())
     assert sup.run([_PY, "-c", probe]) == 0
     assert (tmp_path / "env.txt").read_text() == "None"
 

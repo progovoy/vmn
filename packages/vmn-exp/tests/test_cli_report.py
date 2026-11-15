@@ -8,6 +8,7 @@ from vmn_exp.cli.main import vmn_exp_run
 from vmn_exp.reports import comments, published, store
 from vmn_exp.cli import report_export as rx
 from vmn_exp.storage.local import LocalSnapshotStorage
+from vmn_exp.core.real_io import real_io
 
 
 @pytest.fixture
@@ -19,7 +20,7 @@ def store_dir(tmp_path, monkeypatch):
 
 
 def _run(*argv):
-    code, _ = vmn_exp_run(list(argv))
+    code, _ = vmn_exp_run(list(argv), real_io())
     return code
 
 
@@ -81,7 +82,7 @@ def test_export_writes_one_html_file(store_dir, tmp_path, capsys):
 @pytest.mark.skipif(not os.path.isdir(rx.BUNDLE_DIR), reason="web bundle not built")
 def test_export_published_revision_and_unknowns(store_dir, tmp_path, capsys):
     rid = _put_new(store_dir, tmp_path)["rid"]
-    published.publish(_storage(store_dir), rid, 1, {"p1": {"app": "a", "verstrs": [], "media": [], "queries": []}})
+    published.publish(_storage(store_dir), rid, 1, {"p1": {"app": "a", "verstrs": [], "media": [], "queries": []}}, env=real_io().env, host=real_io().host)
     out = tmp_path / "r.html"
     assert _run("report", "export", rid, "--rev", "1", "-o", str(out), "--dir", store_dir) == 0
     assert '"p1"' in out.read_text() and "not published" not in capsys.readouterr().err
@@ -94,7 +95,7 @@ def test_export_records_media_not_inlined_and_the_cap(store_dir, tmp_path, monke
     monkeypatch.setattr(rx, "load_bundle", lambda: ("", ""))
     rid = _put_new(store_dir, tmp_path)["rid"]
     gone = "vmn://a/v1/media/gone.png"
-    published.publish(_storage(store_dir), rid, 1, {"p1": {"app": "a", "verstrs": [], "media": [gone], "queries": []}})
+    published.publish(_storage(store_dir), rid, 1, {"p1": {"app": "a", "verstrs": [], "media": [gone], "queries": []}}, env=real_io().env, host=real_io().host)
     out = tmp_path / "r.html"
     assert _run("report", "export", rid, "--rev", "1", "-o", str(out), "--max-media-mb", "5", "--dir", store_dir) == 0
     raw = out.read_text().split('id="vmn-report-data">')[1].split("</script>")[0]

@@ -1,5 +1,5 @@
 """``store.yml``: the marker at a store root — core's
-:mod:`version_stamp.store.marker` (docs/plans/37-s3-snapshot-store-in-core.md).
+:mod:`version_stamp.store.marker` (docs/plans/45-s3-snapshot-store-in-core.md).
 
 Core takes the time a writer stamps and waits on as parameters; this module is
 the SDK callers' composition point that wires the real ``time`` functions and

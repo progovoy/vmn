@@ -10,6 +10,7 @@ from test_ui_events import _next, _row, _running, _snap
 from vmn_exp.core.index_snapshot import IndexSnapshot
 from vmn_exp.ui.live_events import live_change, snapshot_change
 from vmn_exp.ui.search_index import SearchIndexes
+from vmn_exp.core.real_io import RealClock
 
 
 def _counting_lookups(monkeypatch):
@@ -52,8 +53,8 @@ def test_old_snapshots_are_not_kept_alive():
         snaps.append(_next(snaps[-1], changed=["a"]))
     for old, new in zip(snaps, snaps[1:]):
         snapshot_change(old, new)
-        live_change(new, "top")
-        live_change(new, "a")
+        live_change(new, "top", now=RealClock().now())
+        live_change(new, "a", now=RealClock().now())
     first = weakref.ref(snaps[0])
     del snaps[:2], old, new
     gc.collect()
@@ -64,9 +65,9 @@ def test_old_snapshots_are_not_kept_alive():
 def test_live_runs_of_a_scope_follow_the_snapshot():
     snap = _snap([_row("a"), _row("a1", "a"), _row("b"), _row("c")],
                  {"a1": _running(), "b": _running()})
-    assert live_change(snap, "a") == {"rows": 1, "jobs": ["a"]}
-    assert live_change(snap) == {"rows": 2, "jobs": ["a", "b"]}
-    assert live_change(snap, "c") is None
+    assert live_change(snap, "a", now=RealClock().now()) == {"rows": 1, "jobs": ["a"]}
+    assert live_change(snap, now=RealClock().now()) == {"rows": 2, "jobs": ["a", "b"]}
+    assert live_change(snap, "c", now=RealClock().now()) is None
 
 
 def test_one_apps_generations_do_not_evict_another_apps_index():
@@ -93,5 +94,5 @@ def test_a_stuck_run_is_not_live_but_a_fresh_running_one_is():
     running = IndexSnapshot.build("app", 2, [_row("a")], {"a": fresh},
                                   observed_at={"a": fresh_at})
 
-    assert live_change(stuck) is None
-    assert live_change(running) == {"rows": 1, "jobs": ["a"]}
+    assert live_change(stuck, now=RealClock().now()) is None
+    assert live_change(running, now=RealClock().now()) == {"rows": 1, "jobs": ["a"]}

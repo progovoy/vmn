@@ -10,10 +10,11 @@ the slot is held across the call's retries but not while a ``GetObject``
 body is read afterwards. A thread already holding a slot of that prefix (a
 call made from inside another one's hooks) takes none: nested calls never
 deadlock. The cap is :data:`DEFAULT_PREFIX_CONCURRENCY`, or
-``VMN_EXP_S3_PREFIX_CONCURRENCY`` (read when a prefix is first seen; 0 or
-invalid = the default). :func:`prefix_cap_stats` is the diag dump's view of
+``VMN_EXP_S3_PREFIX_CONCURRENCY`` of the env the client was capped with
+(read when a prefix is first seen; 0 or invalid = the default). :func:`prefix_cap_stats` is the diag dump's view of
 in-flight calls and waits. Hooks never raise into the request path.
 """
+import functools
 import os
 import threading
 import time
@@ -40,9 +41,9 @@ _caps_pid = os.getpid()
 _held = threading.local()  # .depth: {_PrefixCap: calls of this thread in it}
 
 
-def limit():
+def limit(env):
     try:
-        value = int(os.environ.get(ENV, ""))
+        value = int(env.get(ENV, ""))
     except ValueError:
         return DEFAULT_PREFIX_CONCURRENCY
     return value if value > 0 else DEFAULT_PREFIX_CONCURRENCY
@@ -107,12 +108,12 @@ def _own_caps():
     return _caps
 
 
-def _cap_of(bucket, prefix):
+def _cap_of(bucket, prefix, env):
     caps = _own_caps()
     with _lock:
         cap = caps.get((bucket, prefix))
         if cap is None:
-            cap = caps[(bucket, prefix)] = _PrefixCap(bucket, prefix, limit())
+            cap = caps[(bucket, prefix)] = _PrefixCap(bucket, prefix, limit(env))
         return cap
 
 
@@ -131,9 +132,9 @@ def _before_parameter_build(params=None, context=None, **_):
         pass
 
 
-def _before_call(context=None, **_):
+def _before_call(context=None, *, env, **_):
     try:
-        cap = _cap_of(*context[_TARGET])
+        cap = _cap_of(*context[_TARGET], env)
         depth = _depths()
         if not depth.get(cap):
             cap.acquire()
@@ -157,12 +158,12 @@ def _after_call(context=None, **_):
         pass
 
 
-def cap_prefixes(client):
-    """Cap *client*'s calls per prefix; returns *client*."""
+def cap_prefixes(client, env):
+    """Cap *client*'s calls per prefix, at the limit *env* sets; returns *client*."""
     try:
         events = client.meta.events
         events.register("before-parameter-build.s3", _before_parameter_build)
-        events.register("before-call.s3", _before_call)
+        events.register("before-call.s3", functools.partial(_before_call, env=env))
         events.register("after-call.s3", _after_call)
         events.register("after-call-error.s3", _after_call)
     except Exception:
@@ -171,9 +172,11 @@ def cap_prefixes(client):
 
 
 def prefix_cap_stats():
-    """The dump section: the cap and the most waited-on prefixes."""
+    """The dump section: the highest cap in use (the default before any)
+    and the most waited-on prefixes."""
     caps = _own_caps()
     with _lock:
         rows = [cap.as_dict() for cap in caps.values()]
     rows.sort(key=lambda r: (-r["waiting"], -r["waits"], -r["peak_in_flight"]))
-    return {"limit": limit(), "prefixes_seen": len(rows), "prefixes": rows[:PREFIXES_SHOWN]}
+    cap = max((r["limit"] for r in rows), default=DEFAULT_PREFIX_CONCURRENCY)
+    return {"limit": cap, "prefixes_seen": len(rows), "prefixes": rows[:PREFIXES_SHOWN]}

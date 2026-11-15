@@ -4,6 +4,7 @@ an incremental refresh, a removal and a rewind, in-process or through the
 I/O helper."""
 import json
 import sqlite3
+from datetime import datetime, timezone
 
 import pytest
 from vmn_exp.core import sqlite_files
@@ -76,7 +77,7 @@ def _normal(value):
 
 
 def _expected(index):
-    snap = index.snapshot()
+    snap, now = index.snapshot(), datetime.now(timezone.utc)
     out = {}
     for key, record in index.records.items():
         meta = record["meta"]
@@ -90,7 +91,7 @@ def _expected(index):
         if note is not None:
             sides["create_note"] = note
         out[key] = {
-            "columns": (idx, snap.status_of(verstr), row.get("parent"),
+            "columns": (idx, snap.status_of(verstr, now), row.get("parent"),
                         chain[-1] if chain else None, row["timestamp"], row.get("name"),
                         row["archived"]),
             "row": _normal(row), "sides": _normal(sides),

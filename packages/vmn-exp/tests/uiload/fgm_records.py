@@ -12,7 +12,6 @@ recent, or while its *live_interval_sec* says it may beat that rarely
 """
 import datetime
 
-from vmn_exp.core import status as status_mod
 from vmn_exp.core.fold import fold_log
 from vmn_exp.core.index import snapshot_of_folds
 from vmn_exp.core.index_snapshot import IndexSnapshot
@@ -64,12 +63,10 @@ def last_write(spec, now):
     return spec["released_at"] if fate == "released" else spec["finished_at"]
 
 
-def freeze_clock(patch, now):
-    """Derive statuses as of *now* (epoch seconds) under the monkeypatch
-    *patch*; returns *now* as a datetime."""
-    at = datetime.datetime.fromtimestamp(now, datetime.timezone.utc)
-    patch.setattr(status_mod, "_now", lambda when=None: when or at)
-    return at
+def frozen_now(now):
+    """*now* (epoch seconds) as the aware datetime a board derives the
+    statuses at (``LeaderboardCache(now=lambda: at)``)."""
+    return datetime.datetime.fromtimestamp(now, datetime.timezone.utc)
 
 
 def run_state(spec, now, live_interval_sec=HEARTBEAT_SEC):

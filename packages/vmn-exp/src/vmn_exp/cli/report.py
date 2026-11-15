@@ -7,8 +7,8 @@ import os
 import sys
 
 from vmn_exp.cli import report_export
-from vmn_exp.registry.cli import _get_storage
-from vmn_exp.registry.cli_parser import _add_storage_args
+from vmn_exp.cli.model_cmd import _get_storage
+from vmn_exp.cli.storage_flags import _add_storage_args
 from vmn_exp.reports import store
 
 
@@ -103,18 +103,20 @@ def _title_of(body, path):
     return os.path.splitext(os.path.basename(path))[0]
 
 
-def _cmd_put(storage, args):
+def _cmd_put(storage, args, io):
     if args.new == bool(args.rid):
         return _error("Give a report id or --new (not both)")
     with open(args.file, encoding="utf-8") as f:
         body = f.read()
     if args.new:
-        rid = store.create(storage, args.title or _title_of(body, args.file), body)
+        rid = store.create(storage, args.title or _title_of(body, args.file), body,
+                           random=io.random, env=io.env, host=io.host)
         print(f"{rid}  v1")
         return 0
     if store.get(storage, args.rid) is None:
         return _error(f"Report {args.rid!r} not found")
-    result = store.save(storage, args.rid, store.latest_rev(storage, args.rid), body, args.message)
+    result = store.save(storage, args.rid, store.latest_rev(storage, args.rid), body, args.message,
+                        env=io.env, host=io.host)
     if isinstance(result, store.Conflict):
         return _error(f"Revision {result.rev} was saved concurrently; retry")
     print(f"{args.rid}  v{result}")
@@ -128,9 +130,11 @@ def _cmd_delete(storage, args):
     return 0
 
 
-_DISPATCH = {"list": _cmd_list, "show": _cmd_show, "export": _cmd_export,
-             "put": _cmd_put, "delete": _cmd_delete}
+_DISPATCH = {"list": _cmd_list, "show": _cmd_show, "export": _cmd_export, "delete": _cmd_delete}
 
 
-def report_run_without_repo(args):
-    return _DISPATCH[args.action](_get_storage(args), args)
+def report_run_without_repo(args, io):
+    storage = _get_storage(args, io.clock, io.env)
+    if args.action == "put":
+        return _cmd_put(storage, args, io)
+    return _DISPATCH[args.action](storage, args)

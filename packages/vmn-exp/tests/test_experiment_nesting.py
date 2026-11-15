@@ -1,4 +1,5 @@
 """Outer/inner experiment nesting: `vmn exp run` links the runs it spawns."""
+from datetime import datetime, timezone
 import os
 
 from vmn_exp.cli.main import vmn_exp_run
@@ -14,12 +15,13 @@ from exp_helpers import (
     _experiment,
     _storage,
 )
+from vmn_exp.core.real_io import real_io
 
 
 def _exp_argv(*argv):
     """Raw `vmn exp ...` argv — for flag combinations helpers don't model."""
     reset_logger()
-    return vmn_exp_run(["exp"] + list(argv))[0]
+    return vmn_exp_run(["exp"] + list(argv), real_io())[0]
 
 
 def _last_dev_verstr(output):
@@ -176,6 +178,7 @@ def test_show_reads_run_state_only_within_the_subtree(app_layout, capfd, monkeyp
         app_layout.app_name,
         outer,
         _metadata(app_layout, outer),
+        print, now=datetime.now(timezone.utc),
     )
     out = capfd.readouterr().out
     assert inner in out, "Children must still be printed"
@@ -201,7 +204,8 @@ def test_show_skips_tree_reads_for_a_lone_experiment(app_layout, capfd, monkeypa
         lambda s, a, v: (reads.append(v), real_load(s, a, v))[1],
     )
     exp_mod._print_status_block(
-        _storage(app_layout), app_layout.app_name, solo, _metadata(app_layout, solo)
+        _storage(app_layout), app_layout.app_name, solo, _metadata(app_layout, solo), print,
+        now=datetime.now(timezone.utc),
     )
     assert reads == [solo]
 

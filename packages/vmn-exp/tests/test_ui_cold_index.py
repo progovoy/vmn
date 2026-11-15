@@ -13,6 +13,7 @@ import boto3  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402
 
 from vmn_exp.storage.s3 import S3SnapshotStorage  # noqa: E402
+from vmn_exp.core.real_io import real_io  # noqa: E402
 
 APP = "app"
 BASE = f"/api/v1/workspaces/ws/apps/{APP}"
@@ -43,7 +44,7 @@ def held(tmp_path, monkeypatch):
 
         manager = WorkspaceManager(str(tmp_path / "data"))
         manager.add_store("ws", "s3://vmn-bucket/st")
-        app = create_app(manager, background_refresh=True)
+        app = create_app(manager, io=real_io(), background_refresh=True)
         yield TestClient(app), release
         release.set()
         app.state.refresher.stop()

@@ -1,6 +1,6 @@
 # 14 — Store layout v2
 
-Status: **accepted 2026-10-02, not started**, from a sweep of the current folder and file structure,
+Status: **done** (accepted and built 2026-10-02; confirmed in code 2026-11-11), from a sweep of the current folder and file structure,
 done before implementing plans 11–13. Old clients don't need supporting, so this is a clean
 layout change plus one migration command.
 

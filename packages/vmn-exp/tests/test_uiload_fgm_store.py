@@ -18,6 +18,7 @@ from vmn_exp.sdk.reader import list_runs
 from vmn_exp.snapshot import open_storage
 from vmn_exp.storage.areas import local_store_root
 from vmn_exp.storage.store_marker import MARKER
+from vmn_exp.core.real_io import RealClock
 
 APP = fgm_records.APP
 NOW = 1_800_000_000.0
@@ -59,7 +60,7 @@ def test_the_seed_writes_a_layout_2_store_and_its_manifest(seeded):
 def test_the_seeded_runs_read_back_as_planned(seeded):
     root, profile, manifest = seeded
     specs = {s["verstr"]: s for s in fgm_tree.plan_runs(profile, manifest["now"])}
-    rows = list_runs(APP, storage=open_storage(root=local_store_root(root), area="runs"))
+    rows = list_runs(APP, storage=open_storage(root=local_store_root(root), area="runs", clock=RealClock(), env=os.environ))
     assert len(rows) == len(specs)
     for row in rows:
         spec = specs[row["verstr"]]
@@ -91,7 +92,7 @@ def test_the_tiny_store_meets_its_fgm_budgets(seeded, tmp_path):
 def test_the_seed_writes_fgm_like_store_settings(seeded):
     """P1's attention queries and P3's split reach the server through A0."""
     root, _, _ = seeded
-    ui = read_settings(open_storage(root=local_store_root(root), area="runs"), APP)["ui"]
+    ui = read_settings(open_storage(root=local_store_root(root), area="runs", clock=RealClock(), env=os.environ), APP)["ui"]
     assert ui["split_by"] == "tags.kind"
     queries = {entry["key"]: entry["query"] for entry in ui["attention"]}
     assert queries["waiting"] == probe_fgm.WAITING

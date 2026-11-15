@@ -10,6 +10,8 @@ from vmn_exp.reports.index import ReportIndex
 from vmn_exp.storage.journal import journaled
 from vmn_exp.storage.journal_sinks import journal_list_fn
 from vmn_exp.storage.local import LocalSnapshotStorage
+from vmn_exp.core.real_io import RealRandom
+from vmn_exp.core.real_io import real_io
 
 TARGET = ("run", "trainer", "0.1.0-dev.a")
 
@@ -67,8 +69,8 @@ def test_a_fed_index_shows_writes_without_listing_the_journal(storage, clock, fo
     _feed(index, follower)
     own_listings.clear()
     clock.now += 1
-    rid = rstore.create(storage, "New", "")
-    comments.add(storage, TARGET, "one")
+    rid = rstore.create(storage, "New", "", random=RealRandom(), env=real_io().env, host=real_io().host)
+    comments.add(storage, TARGET, "one", random=RealRandom(), env=real_io().env, host=real_io().host)
     _feed(index, follower)
     index.refresh()
     assert [r["rid"] for r in index.reports()] == [rid]
@@ -80,7 +82,7 @@ def test_a_first_feed_catches_up_what_the_follower_read_before(storage, clock, f
     index = _index(storage, clock)
     index.refresh()
     clock.now += 1
-    rid = rstore.create(storage, "Early", "")
+    rid = rstore.create(storage, "Early", "", random=RealRandom(), env=real_io().env, host=real_io().host)
     follower.tick()  # consumed before the index was fed
     clock.now += 1
     _feed(index, follower)
@@ -88,7 +90,7 @@ def test_a_first_feed_catches_up_what_the_follower_read_before(storage, clock, f
 
 
 def test_a_feed_before_any_refresh_builds_the_index(storage, clock, follower):
-    rid = rstore.create(storage, "T", "")
+    rid = rstore.create(storage, "T", "", random=RealRandom(), env=real_io().env, host=real_io().host)
     index = _index(storage, clock)
     _feed(index, follower)
     assert [r["rid"] for r in index.reports()] == [rid]
@@ -98,7 +100,7 @@ def test_an_overflowing_comments_scope_recounts_its_app(storage, clock):
     index = _index(storage, clock)
     index.refresh()
     index.feed({}, set(), None)
-    comments.add(storage, TARGET, "one")
+    comments.add(storage, TARGET, "one", random=RealRandom(), env=real_io().env, host=real_io().host)
     index.feed({}, {("comments", "trainer")}, None)
     assert index.comment_counts("trainer") == {"0.1.0-dev.a": {"total": 1, "unresolved": 1}}
 
@@ -108,7 +110,7 @@ def test_a_stale_feeder_hands_following_back_to_the_index(storage, clock, follow
     index = _index(storage, clock)
     _feed(index, follower)
     clock.now += 60
-    rid = rstore.create(storage, "Late", "")
+    rid = rstore.create(storage, "Late", "", random=RealRandom(), env=real_io().env, host=real_io().host)
     own_listings.clear()
     index.refresh()
     assert [r["rid"] for r in index.reports()] == [rid]

@@ -20,9 +20,10 @@ from vmn_exp.core.app_settings import attention_entries, metrics_overlay, ui_ove
 from vmn_exp.core.index_point import shared_store
 from vmn_exp.core.index_store import SqliteStore
 from vmn_exp.core.query_extra import bind_similar_scope
-from vmn_exp.core.status import run_state_observed_at
+from vmn_exp.core.status import MIN_STALE_SEC, run_state_observed_at
 from vmn_exp.storage.areas import app_key
 from vmn_exp.ui import index as ui_index
+from vmn_exp.ui.app_deps import wall_seconds
 from vmn_exp.ui.cache_health import SqliteHealth
 from vmn_exp.ui.cache_resync import WorkspaceCache
 from vmn_exp.ui.freshness import DEFAULT_STALE_AFTER_MIN, freshness
@@ -79,7 +80,7 @@ def _latest_memoized(snap):
     return resolve
 
 
-def _open_journal(ws, storage, cache_path):
+def _open_journal(ws, storage, cache_path, clock, index_clock=None):
     from vmn_exp.storage.journal_sinks import journal_list_fn
     from vmn_exp.ui.journal_follow import WorkspaceJournal
 
@@ -87,12 +88,17 @@ def _open_journal(ws, storage, cache_path):
         list_fn = journal_list_fn(storage)
     except AttributeError:  # a backend without a journal sink
         return None
-    return WorkspaceJournal(list_fn, SqliteStore(cache_path), ws.name)
+    return WorkspaceJournal(list_fn, SqliteStore(cache_path, clock=index_clock), ws.name,
+                            wall_seconds(clock))
 
 
 class ExperimentSource:
     def __init__(self, data_dir, use_index=True, refresher=None, cache_dsn=None,
-                 search_rows=None, store_upkeep=None):
+                 search_rows=None, store_upkeep=None, *, clock, env, processes, index_clock=None, min_stale_sec=MIN_STALE_SEC):
+        """*index_clock*, *min_stale_sec*: the indexes' and their caches' (see
+        :class:`~vmn_exp.core.index.ExperimentIndex`; None: their modules'
+        own clocks). *env*: the host's, which git workspaces' stores read."""
+        self._index_clock, self._env, self.min_stale_sec = index_clock, env, min_stale_sec
         self._db_dir = os.path.join(data_dir, "index")
         # --no-index: git workspaces' indexes are kept in memory only.
         self._ws_db_dir = self._db_dir if use_index else None
@@ -105,10 +111,9 @@ class ExperimentSource:
         self._schemas = MetricsSchemaCache()
         self._conf_uis = MetricsSchemaCache(read=exp_reader.conf_ui, path=app_conf_path)
         # Inline refreshes see every write made before the request.
-        self._settings = SettingsCache(SETTINGS_RECHECK_SEC if self.refresher.background else 0)
+        self._settings = SettingsCache(SETTINGS_RECHECK_SEC if self.refresher.background else 0, clock.monotonic)
         self._lock = threading.Lock()
-        self._search_rows = search_rows
-        self._upkeep = store_upkeep
+        self._search_rows, self._upkeep, self._clock, self._processes = search_rows, store_upkeep, clock, processes
         self._owners = SnapshotOwners()
         self.refresher.add_listener(self._owners.refreshed)
         if store_upkeep is not None:
@@ -122,13 +127,15 @@ class ExperimentSource:
         if cache_dsn:
             from vmn_exp.ui.pg_mode import PgIndexes
 
-            self._pg = PgIndexes(cache_dsn, self.refresher)
+            self._pg = PgIndexes(cache_dsn, self.refresher, min_stale_sec)
 
     def workspace_index(self, ws):
         """The git workspace's read cache (in memory only with ``--no-index``)."""
         with self._lock:
             if ws.name not in self._indexes:
-                self._indexes[ws.name] = ui_index.WorkspaceIndex(ws.path, self._ws_db_dir)
+                self._indexes[ws.name] = ui_index.WorkspaceIndex(
+                    ws.path, self._ws_db_dir, processes=self._processes, clock=self._clock, env=self._env,
+                    index_clock=self._index_clock, min_stale_sec=self.min_stale_sec)
             return self._indexes[ws.name]
 
     def snapshot(self, ws, app_name, s3_storage=None, schema=None):
@@ -169,9 +176,10 @@ class ExperimentSource:
             snap = ui_index.app_snapshot(
                 s3_storage, app_name, cache_path, refresher, schema,
                 self._journal(ws, s3_storage, cache_path), ws.reconcile_sec,
+                index_clock=self._index_clock, min_stale_sec=self.min_stale_sec,
             )
             self._heal(ws, app_name, s3_storage, cache_path, lambda: experiment_index.shared_index(
-                s3_storage, app_name, cache_path))
+                s3_storage, app_name, cache_path, clock=self._index_clock, min_stale_sec=self.min_stale_sec))
             return snap
         index = self.workspace_index(ws)
         snap = index.snapshot(app_name, refresher, schema)
@@ -224,9 +232,9 @@ class ExperimentSource:
             cache_path = self._indexes[ws.name].db_path if ws.name in self._indexes else None
         health = SqliteHealth(cache_path) if cache_path else None
         # Inline refreshes check on every request, background ones per tick.
-        cache = WorkspaceCache(ws.name, cache_path, health,
-                               journal_of=lambda: self._journals.get(ws.name),
-                               check_sec=getattr(self.refresher, "interval_sec", 0))
+        cache = WorkspaceCache(ws.name, cache_path, health, journal_of=lambda: self._journals.get(
+            ws.name), check_sec=getattr(self.refresher, "interval_sec", 0),
+            clock=self._clock.monotonic, index_clock=self._index_clock)
         if cache_path:
             cache.on_swapped(lambda: self._reopen(ws.name, cache_path))
         return cache
@@ -235,7 +243,7 @@ class ExperimentSource:
         """A rebuild renamed a new file over *cache_path*: reconnect to it."""
         journal = self._journals.get(ws_name)
         if journal is not None:
-            journal.use_cache(SqliteStore(cache_path))
+            journal.use_cache(SqliteStore(cache_path, clock=self._index_clock))
         if ws_name in self._indexes:
             self._indexes[ws_name].reopen()
 
@@ -251,7 +259,7 @@ class ExperimentSource:
             return None
         with self._lock:
             if ws.name not in self._journals:
-                journal = _open_journal(ws, storage, cache_path)
+                journal = _open_journal(ws, storage, cache_path, self._clock, self._index_clock)
                 if journal is not None:
                     journal.on_settings(lambda key: self._settings.forget(ws.name, key))
                 self._journals[ws.name] = journal
@@ -273,7 +281,8 @@ class ExperimentSource:
         if self._pg is not None:
             self._pg.index(ws, app_name, s3_storage).refresh()
             return
-        ui_index.refresh_app(s3_storage, app_name, ui_index.s3_cache_path(self._db_dir, ws))
+        ui_index.refresh_app(s3_storage, app_name, ui_index.s3_cache_path(self._db_dir, ws),
+                             index_clock=self._index_clock, min_stale_sec=self.min_stale_sec)
 
     def owner_of(self, snapshot):
         """``(workspace, app name)`` of the app *snapshot* was served or

@@ -1,9 +1,10 @@
 #!/bin/bash
 # Release vmn-exp and vmn-exp-sdk together with a patch bump: stamp the vmn_exp
 # app (vmn writes the version into both pyproject.toml files, commits, tags and
-# pushes), build, and upload (see `make upload` for which ~/.pypirc section each
-# file uses). vmn itself is released separately, and first: vmn-exp needs
-# vmn>0.10.2rc9 and vmn-exp-sdk vmn>0.11.2.
+# pushes), build, upload (see `make upload` for which ~/.pypirc section each
+# file uses), then regenerate packages/vmn-exp/CHANGELOG.md (`make _changelog`).
+# vmn itself is released separately, and first: vmn-exp needs vmn>0.10.2rc9
+# and vmn-exp-sdk vmn>0.11.2.
 set -euo pipefail
 cd "$(dirname "$0")"
 
@@ -26,6 +27,9 @@ release() {
     vmn stamp -r "${mode}" "${app}"
     make _build NAME="${app}"
     make upload NAME="${app}"
+    # Rebuilt from tags after the release is out, so the tag holds the
+    # changelog up to the previous release; rerun it if its push failed.
+    make _changelog NAME="${app}"
 }
 
 release vmn_exp

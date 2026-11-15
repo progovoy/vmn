@@ -11,6 +11,8 @@ from typing import Optional, Tuple
 
 import yaml
 
+from vmn_exp.ui.auth.oidc import OIDCError, require_https
+
 DEFAULT_HOST = "127.0.0.1"
 DEFAULT_PORT = 8265
 DEFAULT_DATA_DIR = os.path.join(os.path.expanduser("~"), ".vmn-ui")
@@ -48,6 +50,8 @@ class OIDCSection:
     client_id: str
     client_secret_env: Optional[str] = None
     groups_claim: str = "groups"
+    session_ttl_hours: int = 12
+    login_token_ttl_days: int = 90
 
 
 @dataclass(frozen=True)
@@ -86,10 +90,9 @@ class ServerConfig:
     audit: AuditSection = AuditSection()
     workspaces: Tuple[WorkspaceSeed, ...] = ()
 
-    def token(self, env=None):
+    def token(self, env):
         """The static API token: the ``--token`` flag recorded at resolve
-        time, else the env var named by ``auth.static_token_env``."""
-        env = os.environ if env is None else env
+        time, else the env var named by ``auth.static_token_env`` in *env*."""
         if self._flag_token:
             return self._flag_token
         name = self.auth.static_token_env or "VMN_UI_TOKEN"
@@ -133,6 +136,14 @@ def _choice(value, choices, where):
     return value
 
 
+def checked_https(url, where):
+    """*url* when https (or loopback http), else a :class:`ConfigError` naming *where*."""
+    try:
+        return require_https(url, where)
+    except OIDCError as e:
+        raise ConfigError(str(e))
+
+
 def _server(data):
     data = dict(data or {})
     if "endpoint_allowlist" in data:
@@ -152,6 +163,9 @@ def _auth(data):
     data = dict(data)
     if data.get("oidc") is not None:
         data["oidc"] = _build(OIDCSection, data["oidc"], "auth.oidc")
+        checked_https(data["oidc"].issuer, "auth.oidc.issuer")
+        _positive(data["oidc"].session_ttl_hours, "auth.oidc.session_ttl_hours")
+        _positive(data["oidc"].login_token_ttl_days, "auth.oidc.login_token_ttl_days")
     data["role_mappings"] = tuple(
         _build(RoleMapping, m, f"auth.role_mappings[{i}]")
         for i, m in enumerate(data.get("role_mappings") or ())
@@ -208,11 +222,10 @@ def _flag(args, name, default=None):
     return None if value == default else value
 
 
-def resolve_config(args, env=None):
+def resolve_config(args, env):
     """The effective config for a ``vmn-exp ui`` invocation, or ``None``
-    when neither ``--config`` nor a DB (flag or env) is given — today's
+    when neither ``--config`` nor a DB (flag or *env*) is given — today's
     standalone behaviour."""
-    env = os.environ if env is None else env
     path = getattr(args, "config", None)
     db = _flag(args, "db") or env.get(ENV_DB)
     if not path and not db:
@@ -237,3 +250,11 @@ def resolve_config(args, env=None):
         ),
         _flag_token=getattr(args, "token", None),
     )
+
+
+def static_token(cfg, args, env):
+    """The static API token of an invocation: *cfg*'s when a server config
+    is in play, else ``--token`` or ``VMN_UI_TOKEN`` in *env*."""
+    if cfg is not None:
+        return cfg.token(env)
+    return args.token or env.get("VMN_UI_TOKEN")

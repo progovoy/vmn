@@ -5,7 +5,7 @@ Keys: ``<prefix>/<app key>/<safe verstr>/<file>``, *prefix* being an area's
 (``<root>/snapshots``, docs/plans/14-store-layout.md). No record-API name is
 defined here (``exists``, ``load*``, ``list_*``, ``save``, ``delete``,
 ``update_*``): vmn-exp-sdk's ``S3Base`` subclasses this, and such a name
-would shadow its own format-gated one (plan 37, R3).
+would shadow its own format-gated one (plan 45, R3).
 """
 import copy
 import logging

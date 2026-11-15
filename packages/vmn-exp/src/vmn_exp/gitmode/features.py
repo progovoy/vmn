@@ -42,9 +42,10 @@ def features_from_patches(patch_texts) -> dict:
     return core_features.features_from_patches(patch_texts, skip_authors=(VMN_USER_NAME,))
 
 
-def capture_features(vcs, captured):
-    """The ``features`` entry of *captured* (a run's tree), or None."""
-    return _best_effort(_tree_entry, vcs, captured)
+def capture_features(vcs, captured, env, host):
+    """The ``features`` entry of *captured* (a run's tree), its author as
+    *env* and *host* say, or None."""
+    return _best_effort(_tree_entry, vcs, captured, (env, host))
 
 
 def features_for_working_tree(vcs, captured=None) -> dict:
@@ -55,16 +56,16 @@ def features_for_working_tree(vcs, captured=None) -> dict:
         captured, err = capture.capture_snapshot(vcs)
         if err is not None:
             return {}
-    entry = _best_effort(_tree_entry, vcs, captured, False) or {}
+    entry = _best_effort(_tree_entry, vcs, captured, None) or {}
     entry.pop("type", None)
     return entry
 
 
-def rerun_features(vcs, log, metadata, patches):
+def rerun_features(vcs, log, metadata, patches, env, host):
     """A rerun's ``features`` entry, or None: the original's facts when *log*
     has them at the current version, else its code's (*patches*, the stored
-    code object), with the rerunner as the author."""
-    return _best_effort(_rerun_entry, vcs, log, metadata, patches or {})
+    code object), with the rerunner (as *env* and *host* say) as the author."""
+    return _best_effort(_rerun_entry, vcs, log, metadata, patches or {}, env, host)
 
 
 def _best_effort(build, *args):
@@ -77,14 +78,15 @@ def _best_effort(build, *args):
         return None
 
 
-def _tree_entry(vcs, captured, with_author=True):
+def _tree_entry(vcs, captured, author_io):
+    """*author_io*: the ``(env, host)`` the author is read from; None: no author."""
     parsed = features_from_patches(patch_items(captured.identity))
     changed = dict(parsed["changed"], untracked=_untracked_paths(vcs, captured))
-    author = _author(vcs, parsed) if with_author else None
+    author = _author(vcs, parsed, *author_io) if author_io else None
     return build_features_entry("capture", author=author, **dict(parsed, changed=changed))
 
 
-def _rerun_entry(vcs, log, metadata, patches):
+def _rerun_entry(vcs, log, metadata, patches, env, host):
     original = log_features(log)
     if is_current(original):
         facts = code_facts(original)
@@ -94,7 +96,7 @@ def _rerun_entry(vcs, log, metadata, patches):
         untracked = _tarball_paths(patches.get("untracked_files"))
         facts = dict(parsed, changed=dict(parsed["changed"], untracked=untracked))
     # The rerunner's identity only: the original's committer did not rerun it.
-    author = run_author(vcs.backend.repo_path, [env_author()])
+    author = run_author(env, host, vcs.backend.repo_path, [env_author(env)])
     return build_features_entry("rerun", author=author, **facts)
 
 
@@ -104,10 +106,10 @@ def _stored_deps(metadata, patches):
     return {paths.get(name, name): dep for name, dep in (patches.get("deps") or {}).items()}
 
 
-def _author(vcs, parsed):
+def _author(vcs, parsed, env, host):
     commit = author_from_commits(parsed["commit_authors"]) or {}
-    return run_author(vcs.backend.repo_path,
-                      [env_author(), ("commit", commit.get("git_user_email"))])
+    return run_author(env, host, vcs.backend.repo_path,
+                      [env_author(env), ("commit", commit.get("git_user_email"))])
 
 
 def _untracked_paths(vcs, captured):

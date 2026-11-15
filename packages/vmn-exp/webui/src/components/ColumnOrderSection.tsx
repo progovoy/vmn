@@ -48,8 +48,6 @@ function Group({
   onMove: (key: string, delta: number) => void;
   onPin: (key: string) => void;
 }) {
-  if (cells.length === 0) return null;
-
   // After a move, focus the moved item's button once cells update.
   // Using a ref avoids triggering a re-render just for focus tracking.
   const pendingFocus = useRef<{ key: string; dir: "up" | "down" } | null>(null);
@@ -67,6 +65,7 @@ function Group({
     btn?.focus();
   }, [cells]);
 
+  if (cells.length === 0) return null;
   return (
     <>
       {cells.map((cell, idx) => {

@@ -8,6 +8,7 @@ from vmn_exp.core.app_settings_store import read_settings_text, write_settings
 from vmn_exp.sdk.reader import list_runs
 from vmn_exp.storage.areas import local_store_root
 from vmn_exp.storage.local import LocalSnapshotStorage
+from vmn_exp.core.real_io import real_io
 
 APP = "app"
 TEXT = "# ours\nmetrics: {loss: {goal: min, primary: true}}\n"
@@ -22,7 +23,7 @@ def store_dir(tmp_path, monkeypatch):
 
 
 def _run(*argv):
-    code, _ = vmn_exp_run(list(argv))
+    code, _ = vmn_exp_run(list(argv), real_io())
     return code
 
 
@@ -54,7 +55,7 @@ def test_set_refuses_invalid_settings(store_dir, tmp_path, capsys):
 
 
 def test_set_needs_a_file(store_dir, capsys):
-    assert _run("settings", APP, "set", "--dir", store_dir) == 1
+    assert _run("settings", APP, "set", "--dir", store_dir) == 2
 
 
 def _store_run(storage, n, loss):
@@ -69,7 +70,7 @@ def test_list_runs_sorts_by_the_store_settings(tmp_path):
     storage = LocalSnapshotStorage(str(tmp_path / "store"), "runs")
     low, high = _store_run(storage, 1, 0.1), _store_run(storage, 2, 0.9)
     assert [r["verstr"] for r in list_runs(APP, storage=storage)] == [low, high]
-    write_settings(storage, APP, "metrics: {loss: {goal: max, primary: true}}\n")
+    write_settings(storage, APP, "metrics: {loss: {goal: max, primary: true}}\n", env=real_io().env, host=real_io().host)
     assert [r["verstr"] for r in list_runs(APP, storage=storage)] == [high, low]
 
 
@@ -84,7 +85,7 @@ def test_vmn_exp_list_sorts_by_the_checkouts_store_settings(app_layout, capfd):
         _experiment(app_layout.app_name, metrics=[f"loss={loss}"])
         assert extract_dev_verstr(capfd.readouterr().out)
     store = LocalSnapshotStorage(local_store_root(app_layout.repo_path), "runs")
-    write_settings(store, app_layout.app_name, TEXT)
+    write_settings(store, app_layout.app_name, TEXT, env=real_io().env, host=real_io().host)
     assert _experiment(app_layout.app_name, action="list") == 0
     lines = [ln for ln in capfd.readouterr().out.strip().split("\n") if ln.startswith("[")]
     assert "loss=0.3" in lines[0] and "loss=0.5" in lines[-1]

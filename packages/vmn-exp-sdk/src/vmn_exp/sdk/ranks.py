@@ -10,6 +10,7 @@ recording nothing, with no heartbeat thread and no git or storage access.
 import contextlib
 import os
 
+from vmn_exp.sdk import run_repr
 from vmn_exp.sdk.steps import StepCounter
 
 
@@ -20,14 +21,13 @@ def as_int(value):
         return None
 
 
-def process_rank(env=None):
+def process_rank(env):
     """This process's rank in a distributed job, or None when it is not in one.
 
     ``RANK`` (torchrun's global rank) is authoritative when set. Without it,
     ``LOCAL_RANK`` counts only in a job of several processes (``WORLD_SIZE >
     1``), then ``SLURM_PROCID``. Unparseable values are ignored.
     """
-    env = os.environ if env is None else env
     rank = as_int(env.get("RANK"))
     if rank is not None:
         return rank
@@ -38,7 +38,7 @@ def process_rank(env=None):
     return as_int(env.get("SLURM_PROCID"))
 
 
-def is_secondary_rank(env=None):
+def is_secondary_rank(env):
     """Whether this process is a non-zero rank, whose runs must not record."""
     rank = process_rank(env)
     return rank is not None and rank > 0
@@ -56,12 +56,16 @@ class NoOpRun:
     name = None
     start_step = None
 
-    def __init__(self, app_name=None, disabled=False):
+    def __init__(self, app_name=None, disabled=False, rank=None):
         self.app_name = app_name
         self.disabled = disabled
+        self.rank = rank
         self.pid = os.getpid()
         # Counted like a real run's, so `run.step` in user code works anywhere.
         self._steps = StepCounter()
+
+    def __repr__(self):
+        return run_repr.noop_text(self.app_name, self.disabled, self.rank)
 
     @property
     def step(self):
@@ -106,10 +110,10 @@ class NoOpRun:
 
     def use_artifact(self, ref, path, name=None, app_name=None):
         """The artifact's local path, as rank 0 gets it — nothing is recorded."""
-        from vmn_exp.core.storage_resolve import resolve_experiment_storage
         from vmn_exp.sdk.run_artifacts import fetch_artifact
+        from vmn_exp.sdk.store_resolve import resolve_storage
 
-        storage = resolve_experiment_storage()
+        storage = resolve_storage()
         return fetch_artifact(storage, app_name or self.app_name, ref, path)[2]
 
     def use_model(self, ref, *, storage=None):
@@ -130,10 +134,16 @@ class NoOpRun:
         """No runs: a run that records nothing has nothing to compare."""
         return []
 
+    def define_metric(
+        self, name, step_metric=None, summary=None, goal=None, hidden=None, chart=None,
+    ):
+        """Records nothing; an unknown keyword fails as on a real run."""
+        return None
+
     def _ignore(self, *args, **kwargs):
         return None
 
-    set_tag = set_tags = remove_tag = define_metric = alert = set_intent = set_progress = _ignore
+    set_tag = set_tags = remove_tag = alert = set_intent = set_progress = _ignore
     mark_range = _ignore
     log_dict = log_text = log_figure = log_artifacts = _ignore
     log_table = log_image = log_histogram = register_model = _ignore

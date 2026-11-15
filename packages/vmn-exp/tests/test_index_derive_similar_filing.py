@@ -23,6 +23,7 @@ from vmn_exp.core.similar_doc import PROFILE_VERSION
 from vmn_exp.core.sqlite_conn import connect
 from vmn_exp.snapshot import open_storage
 from vmn_exp.ui.similar_corpora import SimilarCorpora
+from vmn_exp.core.real_io import RealClock
 
 pytestmark = pytest.mark.skipif(not similar_fts.fts5_available(),
                                 reason="no SQLite FTS5 here")
@@ -149,7 +150,7 @@ class _Refresher:
 
 
 def _served(tmp_path, notes):
-    storage = open_storage(root=str(tmp_path / "store"), area="runs")
+    storage = open_storage(root=str(tmp_path / "store"), area="runs", clock=RealClock(), env=os.environ)
     runs = [seed(storage, "app", verstr(n), note=note) for n, note in enumerate(notes, 1)]
     path = str(tmp_path / "index.sqlite")
     index = ExperimentIndex(storage, "app", path, full_sweep_sec=0)

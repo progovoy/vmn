@@ -16,6 +16,7 @@ from vmn_exp.core.index_io_process import _Helper
 
 from vmn_exp.core import index_io_process, index_workers
 from vmn_exp.snapshot import LocalSnapshotStorage
+from vmn_exp.core.real_io import RealClock
 
 APP = "app"
 
@@ -52,7 +53,7 @@ def test_a_cold_build_worker_loads_with_collection_paused(monkeypatch):
 
 def test_the_io_helper_answers_with_collection_paused(tmp_path, monkeypatch):
     st, db = _persisted(tmp_path)
-    helper = _Helper(st.io_process_args(), APP, db)
+    helper = _Helper(st.io_process_args(), APP, db, clock=RealClock())
     seen = []
     monkeypatch.setattr(helper.watch, "full_changes",
                         lambda: seen.append(gc.isenabled()) or ({}, set()))
@@ -67,7 +68,7 @@ def test_the_io_helper_answers_with_collection_paused(tmp_path, monkeypatch):
 
 def test_the_io_helper_sends_persisted_records_undecoded(tmp_path):
     st, db = _persisted(tmp_path)
-    helper = _Helper(st.io_process_args(), APP, db)
+    helper = _Helper(st.io_process_args(), APP, db, clock=RealClock())
 
     rows, states = helper.load()
 

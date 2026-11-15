@@ -30,7 +30,7 @@ from vmn_exp.core.log import filter_archived
 from vmn_exp.core.query import filter_rows, parse_query
 from vmn_exp.core.query_below import LOST_BELOW
 from vmn_exp.core.query_extra import store_extra
-from vmn_exp.core.status import RUNNING, STUCK
+from vmn_exp.core.status import MIN_STALE_SEC, RUNNING, STUCK
 from vmn_exp.core.tree import annotate_rows
 
 _COLUMNS = ("status", "parent", "verstr", "name")
@@ -68,13 +68,16 @@ def _narrow(clause, where, params):
     params += sorted(values)
 
 
-def list_view(storage, app_name, query=None, archived=False, last=None, schema=None):
+def list_view(storage, app_name, query=None, archived=False, last=None, schema=None,
+              *, clock, min_stale_sec=MIN_STALE_SEC):
     """``(rows, declared schema, app has runs)`` — *rows* the annotated runs
     *query* and the archived filter keep (the *last* ones without a query),
     in storage order, as a full listing builds them — or None when the
-    persisted index cannot answer (the caller lists from a snapshot)."""
+    persisted index cannot answer (the caller lists from a snapshot).
+    *clock* (a :class:`~vmn_exp.core.ports.Clock`): the index's and the
+    statuses' (None: the modules' own); *min_stale_sec*: the statuses' stuck floor."""
     path = index_path(storage, app_name)
-    if not path or not experiment_index.shared_index(storage, app_name).sync():
+    if not path or not experiment_index.shared_index(storage, app_name, clock=clock).sync():
         return None
     where, params = sql_filter(query, archived)
     has_query = bool(query and query.strip())
@@ -84,30 +87,36 @@ def list_view(storage, app_name, query=None, archived=False, last=None, schema=N
         return None
     total, keep, found, declared = parts
     snap = _snapshot(app_name, found).summarized(schema)
-    rows = [row for row in _matching(storage, app_name, snap, query, True)[0]
+    rows = [row for row in _matching(storage, app_name, snap, query, True, clock.now(),
+                                     min_stale_sec)[0]
             if row["verstr"] in keep]
     return filter_archived(rows, archived), runs_declared_schema(*declared), total > 0
 
 
-def snapshot_listing(storage, app_name, query=None, schema=None, with_create_note=False):
+def snapshot_listing(storage, app_name, query=None, schema=None, with_create_note=False,
+                     *, clock, min_stale_sec=MIN_STALE_SEC):
     """``(rows, declared schema, app has runs, loading)`` — the annotated
     runs *query* keeps, in storage order — from an up-to-date snapshot of the
     app, whose ``loading`` it is (None when whole): what a listing
-    :func:`list_view` cannot answer, and ``prune --query``, read."""
-    snap = experiment_index.indexed_snapshot(storage, app_name, wait=True, schema=schema)
-    rows, tree = _matching(storage, app_name, snap, query, with_create_note)
+    :func:`list_view` cannot answer, and ``prune --query``, read. *clock*,
+    *min_stale_sec*: see :func:`list_view`."""
+    snap = experiment_index.indexed_snapshot(storage, app_name, wait=True, schema=schema,
+                                             clock=clock)
+    rows, tree = _matching(storage, app_name, snap, query, with_create_note, clock.now(),
+                           min_stale_sec)
     return rows, snap.declared_schema(), bool(tree), snap.loading
 
 
-def _matching(storage, app_name, snap, query, with_create_note):
+
+def _matching(storage, app_name, snap, query, with_create_note, now, min_stale_sec):
     """``(rows *query* keeps, all rows)`` of *snap*, annotated: status and
     tree fields span every run, so depth, tree_status and the query see the
     whole tree whatever subset is kept. A kept outer run adds ``lost_below``
     (plan 34 §3), the query's count."""
     tree = annotate_rows(row_copies(snap, with_create_note), snap.run_states,
-                         snap.run_state_observed_at)
+                         snap.run_state_observed_at, now=now, min_stale_sec=min_stale_sec)
     extra = store_extra(storage, app_name, snap, tree)
-    kept = filter_rows(tree, query, extra=extra)
+    kept = filter_rows(tree, query, extra=extra, now=now)
     for row in kept:
         if row["children"]:
             row[LOST_BELOW] = extra[LOST_BELOW](row["verstr"])

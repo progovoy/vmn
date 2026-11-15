@@ -59,9 +59,10 @@ class PgRowSearch:
             elif removed:
                 conn.execute(_DELETE_LISTED, key + (list(removed),))
 
-    def search(self, workspaces, text, limit, archived=False):
-        """Up to *limit* ``(workspace, app, row)`` of *workspaces* matching *text*."""
-        where, params = compile_sql(text, column="data")
+    def search(self, workspaces, text, limit, archived, now):
+        """Up to *limit* ``(workspace, app, row)`` of *workspaces* matching *text*
+        (its ``ago()`` pinned to *now*)."""
+        where, params = compile_sql(text, column="data", now=now)
         org = effective_org(0)
         params.update(_org=org, _ws=list(workspaces), _limit=limit)
         sql = (

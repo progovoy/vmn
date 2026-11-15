@@ -5,12 +5,14 @@ import os
 
 import pytest
 import yaml
+from fakes.clock import FakeClock
 from similar_ui_fixture import OTHER, TARGET, TWIN, client_for
 from vmn_exp.core.app_conf import read_experiment_conf
 from vmn_exp.core.similar_search import find
 from vmn_exp.core.similar_weights import SIGNALS
 from vmn_exp.snapshot import open_storage
 from vmn_exp.storage.areas import local_store_root
+from vmn_exp.core.real_io import RealClock
 
 pytest.importorskip("fastapi")
 
@@ -55,11 +57,11 @@ def test_conf_weights_change_the_ranking_of_a_runs_similar_runs(client, tmp_path
 def test_the_ui_ranks_like_the_cli_and_sdk_under_the_same_conf(client, tmp_path):
     root = str(tmp_path / "ws1")
     _write_weights(root, BRANCH_ONLY)
-    storage = open_storage(root=local_store_root(root), area="runs")
+    storage = open_storage(root=local_store_root(root), area="runs", clock=RealClock(), env=os.environ)
 
-    expected = find(storage, "app1", TARGET, read_experiment_conf("app1", root))
+    expected = find(storage, "app1", TARGET, read_experiment_conf("app1", root), clock=FakeClock())
 
     items = _items(client.get(f"{APP1}/experiments/{TARGET}/similar"))
     assert _ranked(items) == _ranked(expected)
-    default = find(storage, "app1", TARGET, {})
+    default = find(storage, "app1", TARGET, {}, clock=FakeClock())
     assert _ranked(items) != _ranked(default)

@@ -6,6 +6,8 @@ import datetime
 
 from vmn_exp.core import status as st
 from vmn_exp.core.alerts import transitions as tr
+from fakes.clock import FakeClock
+from vmn_exp.core.real_io import RealClock
 
 NOW = datetime.datetime(2026, 11, 7, 12, 0, 0, tzinfo=datetime.timezone.utc)
 
@@ -63,7 +65,8 @@ def _watch(monkeypatch, run_state, observed_at, within_sec, now=NOW, storage=Non
     snap = _Snap("0.0.1-dev.1", run_state, observed_at)
     monkeypatch.setattr(tr.experiment_index, "indexed_snapshot", lambda *a, **k: snap)
     alerter = _Alerter()
-    fired = tr.watch_app(storage or _Storage(), "app", alerter, within_sec, now=now)
+    fired = tr.watch_app(storage or _Storage(), "app", alerter, within_sec, now=now,
+                         clock=FakeClock(now))
     return fired, alerter
 
 
@@ -95,7 +98,7 @@ def test_a_run_stuck_by_its_store_time_alerts_within_the_window(monkeypatch):
 
 def test_the_stuck_key_is_the_liveness_time():
     state, observed = _stuck(heartbeat_age=86400), _ago(600)
-    assert tr.transition_key(st.STUCK, state, observed_at=observed) == (
+    assert tr.transition_key(st.STUCK, state, observed_at=observed, now=RealClock().now()) == (
         f"stuck@{_iso(_ago(600))}"
     )
     assert tr.transition_key(st.STUCK, state) == f"stuck@{_iso(_ago(86400))}"

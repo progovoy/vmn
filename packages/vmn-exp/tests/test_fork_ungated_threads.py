@@ -18,6 +18,7 @@ from exp_helpers import _PY, _SRC_PATH
 from vmn_exp.core.alerts import Alerter, make_alert
 from vmn_exp.core.alerts.config import AlertConfig
 from vmn_exp.sdk.background_gate import BackgroundGate
+import time
 
 needs_fork = pytest.mark.skipif(
     not hasattr(os, "register_at_fork") or sys.platform == "win32", reason="needs fork"
@@ -25,6 +26,7 @@ needs_fork = pytest.mark.skipif(
 
 _PRELUDE = r"""
 import os, sys, threading, time
+from vmn_exp.core.real_io import RealClock, RealHost
 from vmn_exp.sdk import fork_safety, sysmetrics
 
 IN_FLIGHT = threading.Event()
@@ -60,7 +62,7 @@ _FORK_DURING_NVML_INIT = _PRELUDE + r"""
 sysmetrics.MIN_SAMPLE_INTERVAL_SEC = 5.0   # the priming sleep: never waited for
 
 
-def slow_build_collector(pid=None):
+def slow_build_collector(pid=None, clock=None):
     IN_FLIGHT.set()
     RELEASE.wait()
     DONE.set()
@@ -68,7 +70,7 @@ def slow_build_collector(pid=None):
 
 
 sysmetrics.build_collector = slow_build_collector
-sampler = sysmetrics.Sampler(lambda values: None, enabled=True)
+sampler = sysmetrics.Sampler(lambda values: None, enabled=True, clock=RealClock())
 assert IN_FLIGHT.wait(10), "nvmlInit never started"
 waited = fork_and_check()
 assert waited < 3, f"the fork waited {waited:.2f}s: it waited for the priming sleep"
@@ -78,8 +80,9 @@ print("OK")
 _FORK_DURING_ALERT_SEND = _PRELUDE + r"""
 from vmn_exp.core.alerts import Alerter
 from vmn_exp.core.alerts.config import AlertConfig
-from vmn_exp.sdk.run import Run
+from vmn_exp.sdk.run import Run, _real_process_hooks
 from vmn_exp.snapshot import LocalSnapshotStorage
+from vmn_exp.core.real_io import RealRandom
 
 
 class SlowSink:
@@ -91,9 +94,10 @@ class SlowSink:
 
 storage = LocalSnapshotStorage(sys.argv[1], area="runs")
 storage.save("app", "0.0.1-dev.a.b", {"verstr": "0.0.1-dev.a.b"}, {})
-run = Run(storage, "app", "0.0.1-dev.a.b", 60)
+run = Run(storage, "app", "0.0.1-dev.a.b", 60, clock=RealClock(), host=RealHost(), random=RealRandom(),
+          env=os.environ, install_hooks=_real_process_hooks())
 run._open()
-run._alerter_instance = Alerter(AlertConfig(sinks=[SlowSink()], on=["alert"]))
+run._alerter_instance = Alerter(AlertConfig(sinks=[SlowSink()], on=["alert"]), clock=time.monotonic)
 assert run.alert("loss exploded") is True
 assert IN_FLIGHT.wait(10), "the alert send never started"
 fork_and_check()
@@ -136,7 +140,7 @@ def _alert():
 
 def test_send_async_waits_while_its_gate_is_paused():
     sink, gate = _RecordingSink(), BackgroundGate()
-    alerter = Alerter(AlertConfig(sinks=[sink], on=["alert"]))
+    alerter = Alerter(AlertConfig(sinks=[sink], on=["alert"]), clock=time.monotonic)
     gate.pause()
     alerter.send_async(_alert(), gate=gate)
     assert not sink.sent.wait(0.3)
@@ -146,5 +150,5 @@ def test_send_async_waits_while_its_gate_is_paused():
 
 def test_send_async_without_a_gate_sends_at_once():
     sink = _RecordingSink()
-    Alerter(AlertConfig(sinks=[sink], on=["alert"])).send_async(_alert())
+    Alerter(AlertConfig(sinks=[sink], on=["alert"]), clock=time.monotonic).send_async(_alert())
     assert sink.sent.wait(5)

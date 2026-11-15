@@ -3,6 +3,7 @@ an I/O helper process (see vmn_exp.core.index_io_process): under request load
 a refresh doing its own stat/open calls starved on the GIL and new runs never
 showed up. Stopping the refresher stops the helpers."""
 import os
+import time
 
 import pytest
 
@@ -10,6 +11,7 @@ from vmn_exp.core.index import ExperimentIndex
 from vmn_exp.snapshot import LocalSnapshotStorage
 from vmn_exp.ui.refresher import InlineRefresher, Refresher
 from vmn_exp.storage.areas import local_store_root
+from vmn_exp.core.real_io import real_io
 
 APP = "app"
 
@@ -32,7 +34,7 @@ def _alive(pid):
 
 def test_a_background_watched_index_uses_a_helper_until_stopped(tmp_path):
     index = ExperimentIndex(_seed(tmp_path), APP, cache_path=str(tmp_path / "idx.sqlite"))
-    refresher = Refresher(interval_sec=0.02, idle_sec=60)
+    refresher = Refresher(interval_sec=0.02, idle_sec=60, clock=time.monotonic)
     snap = refresher.snapshot(index)
     assert len(snap.rows) == 3
     helper = index._io._proc.pid
@@ -62,7 +64,7 @@ def test_the_server_lists_through_the_helper(tmp_path):
     _seed(root)
     manager = WorkspaceManager(str(tmp_path / "data"))
     manager.attach_path("ws", str(root))
-    app = create_app(manager, background_refresh=True)
+    app = create_app(manager, io=real_io(), background_refresh=True)
     try:
         with TestClient(app) as client:
             body = client.get(f"/api/v1/workspaces/ws/apps/{APP}/experiments?limit=10").json()

@@ -1,4 +1,4 @@
-"""Which store a command uses: flags, environment and conf.yml (plan 37).
+"""Which store a command uses: flags, environment and conf.yml (plan 45).
 
 Pure: the caller passes the CLI params, the environment as a mapping and the
 app's conf mapping (the dict under ``conf:``). Each store param is filled from

@@ -5,13 +5,13 @@ same snapshot answers."""
 import datetime
 
 import pytest
+from fakes.clock import FakeClock
 from job_rollup_reference import annotated, jobs
 from job_rollup_reference import rolled as reference
 from leaderboard_fleet import T0, Fleet
 from vmn_exp.ui.job_aggregate import JobAgg
 from vmn_exp.ui.leaderboard_cache import LeaderboardCache
 
-from vmn_exp.core import status as status_mod
 from vmn_exp.ui import job_rollup
 
 SCHEMA = {"loss": {"goal": "min", "primary": True}, "acc": {"goal": "max"}}
@@ -40,8 +40,8 @@ class DateFleet(Fleet):
             self.edit(i, date=self.rng.choice(DATES), kind=self.rng.choice(KINDS))
 
 
-def _at(monkeypatch, when):
-    monkeypatch.setattr(status_mod, "_now", lambda now=None: now or when)
+def _move(clock, when):
+    clock.advance((when - clock.now()).total_seconds())
 
 
 def _top(rows):
@@ -51,7 +51,7 @@ def _top(rows):
 
 
 def _check(cache, snap):
-    rows = annotated(snap)
+    rows = annotated(snap, cache.now())
     top = _top(rows)
     for agg in AGGS:
         got = cache.job_aggregates.rolled(snap, SCHEMA, agg)
@@ -71,25 +71,25 @@ def _check(cache, snap):
 
 
 @pytest.mark.parametrize("seed", range(5))
-def test_rolled_matches_a_brute_force_walk_across_generations(monkeypatch, seed):
+def test_rolled_matches_a_brute_force_walk_across_generations(seed):
     fleet = DateFleet(seed)
     fleet.seed(240, T0, sweeps=5, live=10)
     for root in fleet.rng.sample([s["verstr"] for s in fleet.specs], 12):
         fleet.append(parent=root, state=fleet.ended(T0))
-    cache, now = LeaderboardCache(), T0
+    clock = FakeClock(T0)
+    cache, now = LeaderboardCache(now=clock.now), T0
     for _ in range(12):
-        _at(monkeypatch, now)
+        _move(clock, now)
         _check(cache, fleet.snapshot())
         now += datetime.timedelta(seconds=fleet.rng.choice([0, 1, 45, 70]))
         fleet.mutate(now, fleet.rng.choice([1, 4, 12]))
         fleet.redate(fleet.rng.choice([0, 1, 3]))
 
 
-def test_removing_a_dates_best_holder_rebuilds_it(monkeypatch):
-    _at(monkeypatch, T0)
+def test_removing_a_dates_best_holder_rebuilds_it():
     fleet = DateFleet(3)
     fleet.seed_jobs(2, 30, T0)
-    cache = LeaderboardCache()
+    cache = LeaderboardCache(now=FakeClock(T0).now)
     _check(cache, fleet.snapshot())
     for _ in range(4):
         snap = fleet.snapshot()
@@ -102,10 +102,9 @@ def test_removing_a_dates_best_holder_rebuilds_it(monkeypatch):
 
 
 def test_a_generation_moves_the_units_on_instead_of_rebuilding(monkeypatch):
-    _at(monkeypatch, T0)
     fleet = DateFleet(4)
     fleet.seed_jobs(4, 60, T0, live=6)
-    cache = LeaderboardCache()
+    cache = LeaderboardCache(now=FakeClock(T0).now)
     _check(cache, fleet.snapshot())
     builds = []
     real = job_rollup.StaticRollups.build

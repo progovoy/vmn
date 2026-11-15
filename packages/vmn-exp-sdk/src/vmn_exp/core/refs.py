@@ -12,22 +12,35 @@ match the CLI's ``_resolve_verstr`` results and error strings; if the index is
 unavailable, a snapshot built from a metadata-only listing answers instead.
 
 Storage is duck-typed; like the rest of ``core`` this imports nothing from
-``cli``, ``ui`` or ``exp``.
+``cli``, ``ui`` or ``exp``. The index modules are imported on first use, so
+``import vmn_exp.sdk`` and an exact ref never load them (plan 41 D1).
 """
 
-import vmn_exp.core.index as experiment_index
 from vmn_exp._base import VMN_LOGGER
-from vmn_exp.core.direct_placement import direct_placement
-from vmn_exp.core.index_point import point_view
-from vmn_exp.core.index_snapshot import IndexSnapshot
 from vmn_exp.core.resolve_ref import LATEST_WORDS
 
 KIND = "experiment"
 
 
+def point_view(storage, app_name):
+    """:func:`~vmn_exp.core.index_point.point_view`, imported on first use."""
+    from vmn_exp.core.index_point import point_view as real
+
+    return real(storage, app_name)
+
+
+def direct_placement(storage, app_name, verstr):
+    """:func:`~vmn_exp.core.direct_placement.direct_placement`, imported on first use."""
+    from vmn_exp.core.direct_placement import direct_placement as real
+
+    return real(storage, app_name, verstr)
+
+
 def _listed_snapshot(storage, app_name, schema):
     """An :class:`IndexSnapshot` of placement fields only, from a metadata-only
     listing — the fallback when the index is unavailable."""
+    from vmn_exp.core.index_snapshot import IndexSnapshot
+
     rows = [
         {
             "idx": idx,
@@ -40,11 +53,17 @@ def _listed_snapshot(storage, app_name, schema):
     return IndexSnapshot.build(app_name, 0, rows, {})
 
 
-def placement_snapshot(storage, app_name, snapshot=None):
+def placement_snapshot(storage, app_name, snapshot=None, clock=None):
     """*snapshot*, else the index's refreshed now (``latest`` right after a
-    create resolves to it), else one built from a metadata-only listing."""
-    return snapshot or experiment_index.indexed_snapshot(
-        storage, app_name, wait=True, fallback=_listed_snapshot
+    create resolves to it; *clock*: see
+    :func:`~vmn_exp.core.index.shared_index`), else one built from a
+    metadata-only listing."""
+    if snapshot:
+        return snapshot
+    import vmn_exp.core.index as experiment_index
+
+    return experiment_index.indexed_snapshot(
+        storage, app_name, wait=True, fallback=_listed_snapshot, clock=clock
     )
 
 

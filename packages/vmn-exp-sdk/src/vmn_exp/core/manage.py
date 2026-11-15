@@ -26,9 +26,9 @@ def set_archived(storage, app_name, verstr, archived=True):
     return bool(storage.update_metadata(app_name, verstr, update))
 
 
-def tag_run(storage, app_name, verstr, tags=None, remove=None):
-    """Set *tags* and drop the *remove* keys on *verstr*; False when there is
-    no such record. ValueError for an empty change or a bad key.
+def tag_run(storage, app_name, verstr, tags=None, remove=None, *, writer):
+    """Set *tags* and drop the *remove* keys on *verstr*, as *writer*; False
+    when there is no such record. ValueError for an empty change or a bad key.
 
     A one-shot call: no run supervisor or SDK heartbeat is around to flush
     this to the remote later, so it is flushed right here.
@@ -36,7 +36,8 @@ def tag_run(storage, app_name, verstr, tags=None, remove=None):
     entry = create_tags_entry(tags, remove)
     if not storage.exists(app_name, verstr):
         return False
-    if storage.append_log_entry(app_name, verstr, own_stream(storage, app_name, verstr), entry) is False:
+    stream = own_stream(storage, app_name, verstr, writer)
+    if storage.append_log_entry(app_name, verstr, stream, entry) is False:
         return False
-    flush_log(storage, app_name, verstr)
+    flush_log(storage, app_name, verstr, writer)
     return True

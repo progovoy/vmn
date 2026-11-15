@@ -182,9 +182,9 @@ def test_refresh_with_a_checkout_adds_changes_to_features_without_them(
     assert import_run(storage, APP, run) == "created"
     changes = CommitChanges(str(path))
 
-    assert import_run(storage, APP, run, refresh_features=True,
+    assert import_run(storage, APP, run, refresh_features=True, writer="refresher",
                       commit_changes=changes) == "refreshed"
-    assert import_run(storage, APP, run, refresh_features=True,
+    assert import_run(storage, APP, run, refresh_features=True, writer="refresher",
                       commit_changes=changes) == "skipped"
 
     by_writer = host_logs(storage, APP, run_verstr(RUN_ID))

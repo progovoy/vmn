@@ -231,7 +231,7 @@ def _timestamp(row):
 
 
 def similar_runs_multi(scopes, target, *, top=10, rows_filter=None, weights=None,
-                       deadline=None):
+                       deadline=None, monotonic=None):
     """The *top* runs most similar to *target* over *scopes* — each a
     :class:`Scope` or ``(app, snapshot, schema)``, *schema* that app's conf
     metrics schema (the runs' declared goals are merged in); *rows_filter(app,
@@ -239,11 +239,13 @@ def similar_runs_multi(scopes, target, *, top=10, rows_filter=None, weights=None
 
     Items: ``{"app", "verstr", "score", "reasons", "signals", "group_size",
     "goal": {"metric", "goal", "value"} | None, "row"}`` (``row`` a copy).
+    *deadline* is read off the *monotonic* clock (see
+    :func:`~vmn_exp.core.similar_match.deadline`).
     """
     query = _Query(target, weights)
     found, searches = [], []
     for scope in scopes:
-        with scope.lock, deadline_guard(scope.conn, deadline):
+        with scope.lock, deadline_guard(scope.conn, deadline, monotonic):
             search = _Search(scope, query, rows_filter)
             found += search.groups(top)
             searches.append(search)
@@ -252,7 +254,7 @@ def similar_runs_multi(scopes, target, *, top=10, rows_filter=None, weights=None
     for search in searches:
         mine = [i for i in items if i["scope"] is search]
         if mine:
-            with search.scope.lock, deadline_guard(search.scope.conn, deadline):
+            with search.scope.lock, deadline_guard(search.scope.conn, deadline, monotonic):
                 search.explain(mine)
     return [{"app": i["app"], "verstr": i["verstr"],
              "score": round(i["raw"] / best, 4) if best else 0.0,

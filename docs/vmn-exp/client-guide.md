@@ -6,8 +6,9 @@ reproduce the good one, recover from the bad ones, and ship a model. Each step
 is a short snippet with a link to the reference ([experiments.md](experiments.md),
 [sdk.md](sdk.md), [sweeps.md](sweeps.md), [ui.md](ui.md), [models.md](models.md)).
 
-- [The five ideas you need](#the-five-ideas-you-need)
 - [1. Install](#1-install)
+- [Your first run](#your-first-run)
+- [The five ideas you need](#the-five-ideas-you-need)
 - [2. Choose where runs live](#2-choose-where-runs-live)
 - [3. Submit: an outer run with inner jobs](#3-submit-an-outer-run-with-inner-jobs)
 - [4. Inside the job: the SDK](#4-inside-the-job-the-sdk)
@@ -17,25 +18,7 @@ is a short snippet with a link to the reference ([experiments.md](experiments.md
 - [8. Resume, rewind, fork](#8-resume-rewind-fork)
 - [9. Models](#9-models)
 - [10. Clean up](#10-clean-up)
-
----
-
-## The five ideas you need
-
-1. **A run is code state plus a log.** Every run snapshots the working tree
-   (base commit, uncommitted diff, untracked files) and gets a verstr such as
-   `1.6.0-dev.a1b2c3d.e4f5g6h`. Metrics, params, notes, artifacts and tags are
-   appended to its log. Nothing in the log is ever rewritten.
-2. **Code is stored once per code identity.** Twenty trials of an unchanged
-   tree share one stored code object, so the extra runs cost almost nothing.
-3. **Status is derived, never stored.** `created`, `running`, `stuck`,
-   `succeeded`, `failed` come from the run's heartbeat and exit code. A job
-   whose node vanished shows up as `stuck`; nobody has to mark it.
-4. **Nesting is automatic.** A run created while `VMN_EXPERIMENT_ID` is set
-   (which `vmn-exp run` and an open `start_run()` export) becomes an inner job
-   of that run. A sweep is one outer run with its trials under it.
-5. **A ref names a run**: a full verstr, a unique prefix, `@N` (the `[N]`
-   `vmn-exp list` prints) or `latest`. Most commands take `-v <ref>`.
+- [Terms](#terms)
 
 ---
 
@@ -58,11 +41,69 @@ pip install pynvml                 # optional: GPU sys_* metrics
 
 No `init` step is needed. The first run in a repo sets up vmn tracking and
 stamps a `0.0.0` baseline, so it needs a git identity (`user.name`,
-`user.email`) to commit.
+`user.email`) to commit. That is up to two commits (vmn's tracking files, then
+the app) and the tag `<app>_0.0.0`, and the first `vmn-exp run`/`create` names
+them as it makes them. With a git remote, `vmn-exp` pushes them; without one
+they stay local and the run goes on. `start_run()` never pushes. In a shared
+repo one person pushes the baseline (`git push --follow-tags`).
+
+---
+
+## Your first run
+
+The [quickstart](README.md#quickstart) records one run in under a minute.
+Inside a git repo with one commit, save this as `train.py`:
+
+```python
+from vmn_exp.sdk import start_run
+
+with start_run("my_app") as run:
+    for step in range(5):
+        run.log_metric("loss", 1.0 / (step + 1), step=step)
+    print(run.id)
+```
+
+```sh
+python train.py                    # prints the run's id
+vmn-exp show my_app --latest       # its code state, status and metrics
+```
+
+The ideas below explain what you just saw.
+
+---
+
+## The five ideas you need
+
+1. **A run is code state plus a log.** The id `train.py` printed is a
+   verstr, such as `1.6.0-dev.a1b2c3d.e4f5g6h`: every run snapshots the
+   working tree (base commit, uncommitted diff, untracked files such as
+   `train.py` itself) and is named after it. The `loss` values were appended
+   to its log, as are params, notes, artifacts and tags. Nothing in the log is
+   ever rewritten.
+2. **Code is stored once per code identity.** Run `train.py` again without
+   editing anything and the new run shares the first one's stored code (its
+   id gets a `.r2`), so twenty trials of an unchanged tree cost almost nothing.
+3. **Status is derived, never stored.** The status `show` printed comes from
+   the run's heartbeat and exit code: `created`, `running`, `stuck`,
+   `succeeded`, `failed`. A job whose node vanished shows up as `stuck`;
+   nobody has to mark it.
+4. **Nesting is automatic.** A run created while `VMN_EXPERIMENT_ID` is set
+   (which `vmn-exp run` and an open `start_run()` export) becomes an inner job
+   of that run. A sweep is one outer run with its trials under it. The one
+   exception: a `start_run()` in the script `vmn-exp run` launched records
+   into that run, so `vmn-exp run my_app -- python train.py` is one run
+   (`--no-adopt` keeps two).
+5. **A ref names a run**: `--latest` in the `show` above is one; so are a
+   full verstr, a unique prefix and `@N` (the `[N]` `vmn-exp list` prints).
+   Most commands take `-v <ref>`.
 
 ---
 
 ## 2. Choose where runs live
+
+The default needs no action: your first run is already in this checkout's
+`.vmn/store/`. Choose another place only when other machines or people must
+see the runs.
 
 | Where | Set | Good for |
 |---|---|---|
@@ -198,11 +239,38 @@ containers:
       - {name: VMN_EXPERIMENT_ID, value: "<outer verstr>"}
       - {name: VMN_EXPERIMENT_STORE, value: "file:///mnt/fsx"}   # a shared volume, mounted below
       # - {name: VMN_EXPERIMENT_STORE, value: "s3://team-experiments/ml"}  # or a bucket + AWS creds
+      - {name: VMN_EXP_CACHE_DIR, value: /var/vmn-exp}               # log buffers, on a volume
     volumeMounts:
       - {name: shared, mountPath: /mnt/fsx}
+      - {name: vmn-state, mountPath: /var/vmn-exp}
 volumes:
   - name: shared
     persistentVolumeClaim: {claimName: fsx-experiments}
+  - name: vmn-state
+    persistentVolumeClaim: {claimName: vmn-exp-state}   # ReadWriteOnce, or a hostPath
+```
+
+With a bucket store a pod appends its logs to a local buffer under
+`VMN_EXP_CACHE_DIR` and ships it to the bucket. Put that dir on a volume that
+outlives the pod (a ReadWriteOnce PersistentVolumeClaim or a hostPath, not an
+`emptyDir`): a buffer kept after a store outage or a kill is then still on
+disk for another pod to ship. To ship it, run `vmn-exp buffers ship --store
+s3://bucket` from a pod that mounts the same volume at the same
+`VMN_EXP_CACHE_DIR`; it ships only buffers whose owning process is gone
+(`vmn-exp buffers list` shows them; see
+[Kept log buffers](experiments.md#kept-log-buffers)).
+
+Many runs of one code version: each new pod lists that code version's run
+names once to pick its `.rN`, so a fleet or sweep of thousands of pods does
+quadratic listing work in all. Give each pod its own writer id and it lists
+only its own names, or have the launcher name the runs
+(`create_run(run_id=...)`, no listing) and each pod open its run with
+`start_run(run_id=...)`
+([Many runs of one code version](experiments.md#many-runs-of-one-code-version)):
+
+```yaml
+      - name: VMN_WRITER_ID                                          # runs named <code>.<pod name>
+        valueFrom: {fieldRef: {fieldPath: metadata.name}}
 ```
 
 `--from-snapshot <path>` is the flag form of `VMN_SNAPSHOT_METADATA`. A job
@@ -281,7 +349,9 @@ What you get without asking:
 Opt-outs (`system_metrics=False`, `capture_env=False`, `VMN_MODE=disabled`)
 and opt-ins (`capture_output=True`, `autolog()` for sklearn, xgboost, Keras,
 Lightning and transformers) are in [sdk.md](sdk.md#starting-a-run) and
-[Autologging](sdk.md#autologging).
+[Autologging](sdk.md#autologging). In a Jupyter notebook, see
+[notebooks.md](notebooks.md): one run across cells, re-run cells and kernel
+restarts.
 
 **Consuming another run's output** links the two runs (lineage):
 
@@ -347,7 +417,7 @@ from vmn_exp.sdk.reader import get_metric_history, param_importance, runs_datafr
 
 df = runs_dataframe("my_app", query='status = "succeeded"')    # needs vmn-exp-sdk[pandas]
 df.sort_values("metrics.val_loss").head()
-curve = get_metric_history("val_loss", "my_app", ref="@9")      # step, timestamp, value
+curve = get_metric_history("val_loss", app_name="my_app", ref="@9")  # step, timestamp, value
 param_importance("my_app", "val_loss")[:3]
 ```
 
@@ -464,8 +534,8 @@ with start_run("my_app", run_id=prior, on_sigterm="release",
 
 The preempted attempt was released on SIGTERM (`released`, no exit code), so
 the resumed attempt can reopen and rewind it at once. If the old process died without
-finalizing (a SIGKILL), it reads `running` until its heartbeat goes stale
-(`max(3 x heartbeat interval, 60s)`); until then the rewind raises
+finalizing (a SIGKILL), it reads `running` until its heartbeat is past its
+[stuck window](experiments.md#run-status-did-my-job-die); until then the rewind raises
 `RuntimeError`, so requeue with a delay.
 
 ### Example: a divergent loss, rewound to step 800
@@ -557,3 +627,17 @@ a bucket lifecycle rule expires it); `-v` never does, and with a full
 verstr it touches only that run, however large the store. Outside a git
 checkout, name the store with `--store` or `VMN_EXPERIMENT_STORE`. See
 [`prune`](experiments.md#prune).
+
+---
+
+## Terms
+
+| Term | Means |
+|---|---|
+| verstr | a run's id, named after its code state: `<base version>-dev.<commit>.<diff hash>` ([Mental model](experiments.md#mental-model)) |
+| ref | how a command names a run: a verstr, a unique prefix, `@N` or `latest` ([Addressing experiments](experiments.md#addressing-experiments)) |
+| outer, inner, single run | a run's `kind`: it has children, it has a parent, or neither ([Outer & inner jobs](experiments.md#outer--inner-jobs-sweeps)) |
+| store | where run records live: this checkout's `.vmn/store/`, a shared directory or a bucket ([Storage](experiments.md#storage-local-s3-gcs-azure-plugins)) |
+| writer id | the name of the process that appends to a run's log stream, the host name by default ([How records are stored](experiments.md#how-records-are-stored)) |
+| git mode, git-free (snapshot) mode | a run recorded from a git checkout, or from an exported tree that carries `vmn_metadata.yml` ([Git-free mode](experiments.md#git-free-mode), [Runs without a git checkout](sdk.md#runs-without-a-git-checkout-containers)) |
+| tree_status | an outer run's status rolled up over its subtree, `failed > stuck > running > created > succeeded` ([Outer & inner jobs](experiments.md#outer--inner-jobs-sweeps)) |

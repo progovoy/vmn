@@ -7,7 +7,6 @@ import os
 import re
 
 import yaml
-from filelock import FileLock
 
 # The same logger the vmn CLI configures, so both sides share its handlers.
 VMN_LOGGER = logging.getLogger("vmn")
@@ -130,11 +129,16 @@ def _is_root(path):
     )
 
 
-def resolve_root_path():
-    """The nearest directory at or above the working dir holding .git or .vmn."""
-    path = os.path.realpath(
+def working_dir():
+    """``$VMN_WORKING_DIR``, else the cwd: where the checkout is looked for."""
+    return os.path.realpath(
         os.path.expanduser(os.environ.get("VMN_WORKING_DIR", os.getcwd()))
     )
+
+
+def resolve_root_path():
+    """The nearest directory at or above the working dir holding .git or .vmn."""
+    path = working_dir()
     while not _is_root(path):
         parent = os.path.realpath(os.path.join(path, ".."))
         if parent == path:
@@ -146,6 +150,8 @@ def resolve_root_path():
 def get_repo_lock(vmn_root_path):
     """The per-repo FileLock every vmn command takes; ``$VMN_LOCK_FILE_PATH``
     overrides its path for the whole process."""
+    from filelock import FileLock  # imports asyncio and sqlite3
+
     return FileLock(
         os.environ.get("VMN_LOCK_FILE_PATH")
         or os.path.join(vmn_root_path, ".vmn", "vmn.lock")

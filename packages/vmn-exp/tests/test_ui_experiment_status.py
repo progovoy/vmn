@@ -8,6 +8,7 @@ import yaml
 
 fastapi = pytest.importorskip("fastapi")
 from fastapi.testclient import TestClient  # noqa: E402
+from vmn_exp.core.real_io import RealClock, real_io
 
 API = "/api/v1/workspaces/main/apps"
 
@@ -109,25 +110,28 @@ def _client(app_layout, use_index=True):
 
     manager = WorkspaceManager(os.path.join(app_layout.base_dir, "ui_data"))
     manager.attach_path("main", app_layout.repo_path)
-    return TestClient(create_app(manager, use_index=use_index))
+    return TestClient(create_app(manager, io=real_io(), use_index=use_index))
 
 
 def _index(app_layout):
     from vmn_exp.ui.index import WorkspaceIndex
 
     return WorkspaceIndex(
-        app_layout.repo_path, db_dir=os.path.join(app_layout.base_dir, "ui_index")
+        app_layout.repo_path, db_dir=os.path.join(app_layout.base_dir, "ui_index"),
+        processes=real_io().processes, clock=RealClock(), env=os.environ,
     )
 
 
-def _indexed_list(idx, app_layout):
-    """The leaderboard over the workspace index's current snapshot."""
+def _indexed_list(idx, app_layout, now=None):
+    """The leaderboard over the workspace index's current snapshot, its
+    statuses derived at *now* (the real time when None)."""
     from vmn_exp.ui.readers import experiments as exp_reader
 
     snap = idx.snapshot(app_layout.app_name)
     rows = [dict(row) for row in snap.rows]  # status is written onto the rows
     return exp_reader.leaderboard(
-        rows, snap.run_states, {}, observed_at=snap.run_state_observed_at
+        rows, snap.run_states, {}, observed_at=snap.run_state_observed_at,
+        now=now or datetime.datetime.now(datetime.timezone.utc),
     )
 
 
@@ -314,7 +318,6 @@ def test_last_metric_at_tracks_newest_metrics_entry(app_layout):
 def test_status_is_recomputed_on_a_cache_hit(app_layout, monkeypatch):
     """A cached row must not freeze `running`: status is derived per request."""
     import vmn_exp.core.index as index_mod
-    import vmn_exp.core.status as status_mod
 
     _write_experiment(app_layout, "0.0.1", run_state=_running_state())
     idx = _index(app_layout)
@@ -325,11 +328,10 @@ def test_status_is_recomputed_on_a_cache_hit(app_layout, monkeypatch):
 
     later = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(hours=1)
     monkeypatch.setattr(index_mod, "direct_rows", _boom)
-    monkeypatch.setattr(status_mod, "_now", lambda now=None: now or later)
 
     # Same files, same fingerprint, cache still warm — an hour later the run's
     # heartbeat is stale, so the served status must be stuck.
-    assert _indexed_list(idx, app_layout)[0]["status"] == "stuck"
+    assert _indexed_list(idx, app_layout, later)[0]["status"] == "stuck"
 
 
 def test_appending_to_a_writer_log_invalidates_the_cache(app_layout):
@@ -482,7 +484,7 @@ def test_indexed_and_direct_rows_agree(app_layout):
     manager = WorkspaceManager(os.path.join(app_layout.base_dir, "ui_data"))
     manager.attach_path("main", app_layout.repo_path)
     url = f"{API}/{app_layout.app_name}/experiments"
-    direct = TestClient(create_app(manager, use_index=False)).get(url).json()
-    indexed = TestClient(create_app(manager)).get(url).json()
+    direct = TestClient(create_app(manager, io=real_io(), use_index=False)).get(url).json()
+    indexed = TestClient(create_app(manager, io=real_io())).get(url).json()
     assert [r["status"] for r in indexed] == [r["status"] for r in direct]
     assert [r["verstr"] for r in indexed] == [r["verstr"] for r in direct]

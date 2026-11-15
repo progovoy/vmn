@@ -99,6 +99,47 @@ def test_each_suite_writes_its_own_reports(mod):
     assert "--junitxml=reports/tests_exp.xml" in exp
 
 
+# ---- tests_webui ---------------------------------------------------------
+# The web client's vitest suite and ESLint, blocking.
+
+
+def test_the_pipeline_runs_the_webui_unit_tests(mod):
+    assert "tests_webui" in {s.name for s in mod.pipeline.topological_order()}
+    ctx = FakeCtx()
+    mod.tests_webui(ctx)
+    assert [cmd for cmd, _ in ctx.calls][:2] == [["make", "_build_ui"], ["make", "_test_ui"]]
+
+
+class FailingOn(FakeCtx):
+    def __init__(self, target):
+        super().__init__()
+        self.target = target
+
+    def run(self, cmd, *, check=True, **kwargs):
+        self.calls.append((cmd, kwargs))
+        if cmd == ["make", self.target] and check:
+            raise RuntimeError(f"{self.target} failed")
+        return types.SimpleNamespace(returncode=0)
+
+
+def test_the_webui_stage_fails_on_a_test_failure(mod):
+    with pytest.raises(RuntimeError):
+        mod.tests_webui(FailingOn("_test_ui"))
+
+
+def test_the_webui_stage_runs_lint_after_the_tests(mod):
+    ctx = FakeCtx()
+    mod.tests_webui(ctx)
+    assert [cmd for cmd, _ in ctx.calls] == [
+        ["make", "_build_ui"], ["make", "_test_ui"], ["make", "_lint_ui"],
+    ]
+
+
+def test_the_webui_stage_fails_on_a_lint_error(mod):
+    with pytest.raises(RuntimeError):
+        mod.tests_webui(FailingOn("_lint_ui"))
+
+
 # ---- lint --------------------------------------------------------------
 
 
@@ -234,6 +275,7 @@ def test_build_is_independent_of_stamp(mod):
     # packages plus the core suite's helpers in tests/.
     ("tests_core", {"packages/vmn", "tests", "pyproject.toml"}),
     ("tests_exp", {"packages", "tests", "pyproject.toml"}),
+    ("tests_webui", {"packages/vmn-exp/webui"}),
 ])
 def test_test_stages_are_cached_on_the_sources_they_read(mod, name, inputs):
     # The daily run re-ran the whole suite even when nothing changed. Declaring
@@ -250,10 +292,11 @@ def test_test_stages_are_cached_on_the_sources_they_read(mod, name, inputs):
 
 def test_release_stages_run_after_tests_in_order(mod):
     order = [s.name for s in mod.pipeline.topological_order()]
-    for name in ("tests_core", "tests_exp", "stamp", "build", "upload"):
+    for name in ("tests_core", "tests_exp", "tests_webui", "stamp", "build", "upload"):
         assert name in order, f"{name} missing from pipeline"
     assert order.index("tests_core") < order.index("stamp")
     assert order.index("tests_exp") < order.index("stamp")
+    assert order.index("tests_webui") < order.index("stamp")
     assert order.index("stamp") < order.index("build")
     assert order.index("build") < order.index("upload")
 
@@ -262,6 +305,12 @@ def test_the_suites_run_one_after_the_other(mod):
     # Each suite runs 29 xdist workers; running both at once would put 58 on
     # the host, twice the load of the single suite this pipeline used to run.
     assert "tests_core" in mod.pipeline.get_stage("tests_exp").after
+
+
+def test_the_webui_stage_never_builds_the_ui_beside_tests_exp(mod):
+    # Both run `make _build_ui` (npm install + vite build into the same dirs);
+    # two at once would race on node_modules and the bundle.
+    assert "tests_webui" in mod.pipeline.get_stage("tests_exp").after
 
 
 def test_release_stages_are_not_cached(mod):
@@ -281,3 +330,46 @@ def test_pipeline_declares_release_params(mod):
     assert not spec["stamp"].required  # unset = skip
     assert spec["build"].type == "bool"
     assert spec["upload"].type == "bool"
+
+
+# ---- tests_storage_emulators -------------------------------------------
+# The storage conformance kit against fake-gcs-server and Azurite (plan 41
+# D15 stage 2): Docker tests under the `emulator` marker, in their own stage.
+
+
+def test_the_pipeline_runs_the_storage_emulator_stage(mod):
+    assert "tests_storage_emulators" in {s.name for s in mod.pipeline.topological_order()}
+    ctx = FakeCtx()
+    mod.tests_storage_emulators(ctx)
+    cmd = ctx.calls[0][0]
+    assert cmd[:2] == ["pytest", "packages/vmn-exp/tests"]
+    assert cmd[cmd.index("-m") + 1] == "emulator"
+    assert "--junitxml=reports/tests_storage_emulators.xml" in cmd
+    spec = mod.pipeline.get_stage("tests_storage_emulators")
+    assert spec.deterministic is True and spec.outputs
+
+    exp = FakeCtx()
+    mod.tests_exp(exp)
+    markers = [cmd[cmd.index("-m") + 1] for cmd, _ in exp.calls if "-m" in cmd]
+    assert markers == ["not serial and not emulator", "serial"]
+    assert "tests_storage_emulators" in mod.pipeline.get_stage("stamp").after
+
+
+# ---- tests_exp_unit ----------------------------------------------------
+# The vmn-exp unit lane (plan 44 G3): packages/vmn-exp/tests/unit, fakes only,
+# no Docker. It runs first; the full exp suite waits for it.
+
+
+def test_exp_unit_stage_exists_and_tests_exp_runs_after_it(mod):
+    order = [s.name for s in mod.pipeline.topological_order()]
+    assert order.index("tests_exp_unit") < order.index("tests_exp")
+    assert "tests_exp_unit" in mod.pipeline.get_stage("tests_exp").after
+    ctx = FakeCtx()
+    mod.tests_exp_unit(ctx)
+    cmd = ctx.calls[0][0]
+    assert cmd[:2] == ["pytest", "packages/vmn-exp/tests/unit"]
+    assert "--junitxml=reports/tests_exp_unit.xml" in cmd
+    spec = mod.pipeline.get_stage("tests_exp_unit")
+    assert spec.deterministic is True and spec.outputs
+    # The unit conftest reuses the parent exp conftest and tests/'s fixtures.
+    assert set(spec.inputs) == {"packages", "tests", "pyproject.toml"}

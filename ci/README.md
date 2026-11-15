@@ -45,16 +45,25 @@ Instead of waiting for the 2am daily run:
 graph LR
     lint["lint<br/><i>ruff check</i>"]
     tests_core["tests_core<br/><i>pytest tests -n 29</i>"]
+    tests_exp_unit["tests_exp_unit<br/><i>pytest packages/vmn-exp/tests/unit</i>"]
     tests_exp["tests_exp<br/><i>pytest packages/vmn-exp/tests -n 29</i>"]
+    tests_webui["tests_webui<br/><i>make _test_ui _lint_ui</i>"]
+    tests_storage_emulators["tests_storage_emulators<br/><i>pytest -m emulator</i>"]
     typecheck["typecheck<br/><i>mypy</i>"]
     tests_core --> tests_exp
+    tests_webui --> tests_exp
+    tests_exp_unit --> tests_exp
     tests_exp --> stamp["stamp<br/><i>make _&lt;mode&gt;</i>"]
+    tests_storage_emulators --> stamp
     stamp --> build["build<br/><i>make _build</i>"]
     build --> upload["upload<br/><i>make upload</i>"]
 
     style lint fill:#264653,stroke:#1d3557,color:#fff
     style tests_core fill:#264653,stroke:#1d3557,color:#fff
+    style tests_exp_unit fill:#264653,stroke:#1d3557,color:#fff
     style tests_exp fill:#264653,stroke:#1d3557,color:#fff
+    style tests_webui fill:#264653,stroke:#1d3557,color:#fff
+    style tests_storage_emulators fill:#264653,stroke:#1d3557,color:#fff
     style typecheck fill:#264653,stroke:#1d3557,color:#fff
     style stamp fill:#2a9d8f,stroke:#1d3557,color:#fff
     style build fill:#2a9d8f,stroke:#1d3557,color:#fff
@@ -65,7 +74,10 @@ graph LR
 |-------|-------------|---------|
 | `lint` | Runs `ruff check` on `version_stamp/` | No |
 | `tests_core` | Runs the core vmn suite, `pytest tests -n 29` (parallel, 29 workers; `vmn_exp` is unimportable in it), produces JUnit XML + HTML report | Yes, on `packages/vmn`, `tests`, `pyproject.toml` |
-| `tests_exp` | Builds the git-ignored web UI bundle (`make _build_ui`), then runs the vmn-exp suite, `pytest packages/vmn-exp/tests -n 29 -m "not serial"`, then the `serial`-marked timing benchmarks alone (`tests_exp_serial` reports), produces JUnit XML + HTML reports | Yes, on `packages`, `tests`, `pyproject.toml` |
+| `tests_exp_unit` | Runs the vmn-exp unit lane, `pytest packages/vmn-exp/tests/unit` in one process (fakes only: its guard fails a test that sleeps, spawns a process or asks for Docker), produces JUnit XML + HTML report; its count and wall time track the IO-behind-interfaces migration | Yes, on `packages`, `tests`, `pyproject.toml` |
+| `tests_exp` | Builds the git-ignored web UI bundle (`make _build_ui`), then runs the vmn-exp suite, `pytest packages/vmn-exp/tests -n 29 -m "not serial and not emulator"`, then the `serial`-marked timing benchmarks alone (`tests_exp_serial` reports), produces JUnit XML + HTML reports | Yes, on `packages`, `tests`, `pyproject.toml` |
+| `tests_webui` | Builds the web UI (`make _build_ui`: `npm install`, `tsc -b`, `vite build`), then runs its vitest suite (`make _test_ui`, JUnit report `reports/tests_webui.xml`) and ESLint with `react-hooks/rules-of-hooks` and `react-hooks/exhaustive-deps` as errors (`make _lint_ui`). Blocking | Yes, on `packages/vmn-exp/webui` |
+| `tests_storage_emulators` | Runs the storage conformance kit against fake-gcs-server and Azurite containers through the real GCS and Azure SDKs, `pytest packages/vmn-exp/tests -m emulator` (one process; needs Docker), produces JUnit XML + HTML reports | Yes, on `packages`, `tests`, `pyproject.toml` |
 | `typecheck` | Runs `mypy` on `version_stamp/` | No |
 | `stamp` | **Optional.** `make _<mode>` (`vmn stamp`) when `--param stamp=<mode>` is set | No |
 | `build` | **Optional.** `make _build` (wheel) when `--param build=1` is set | No |
@@ -76,8 +88,8 @@ graph LR
 `stamp`, `build`, and `upload` are **opt-in**: each records a `skipped` status
 (via `ctx.skip`, not a fake `succeeded`) unless its run param is set, so the
 daily/manual test run stays test-only and reads honestly in the UI. When set,
-they reuse the repo's `Makefile` targets and run after both test stages (the
-DAG is `tests_core + tests_exp → stamp → build → upload`), so a release never
+they reuse the repo's `Makefile` targets and run after the test stages (the
+DAG is `tests_core + tests_webui + tests_exp_unit → tests_exp + tests_storage_emulators → stamp → build → upload`), so a release never
 ships on a crashed test run. A skipped stage still satisfies its dependents, so the chain proceeds.
 Being side-effecting, they are never cached.
 
@@ -108,12 +120,16 @@ $MUSTER run ci/pipeline.py --cache-dir .mtd/cache --param build=1
 | `upload` | `1` / `true` / `yes` / `on` | `make upload` |
 
 muster rejects an unknown `stamp` value against the declared choices before any
-stage runs, so a typo fails fast rather than silently skipping. `tests_exp` and `build`
+stage runs, so a typo fails fast rather than silently skipping. `tests_webui`, `tests_exp` and `build`
 need `npm` (UI build) and `upload` needs `twine` on `PATH` — `ctx.run` keeps
 the system `PATH`, so tools installed outside the venv still resolve. `make _build`
 builds at the version `vmn show <app>` reports for HEAD (`build_dist.sh`), so
 after `stamp=rc` the wheel embeds `0.10.2-rc.N`, and after a `vmn release` it
 embeds `0.10.2`; it refuses a HEAD that is not a stamped version.
+
+The lane does not regenerate vmn-exp's changelog yet (`release_exp.sh` does,
+after its upload); after a vmn_exp release from here, run
+`make _changelog NAME=vmn_exp`.
 
 You can also set these on a schedule via its `params` object, e.g. a weekly
 release schedule with `{"stamp": "patch", "build": "1", "upload": "1"}`.
@@ -124,9 +140,11 @@ workspace against the pipeline file). That means a run tests the checked-out
 repo in place whether it's launched from the CLI, the UI **Trigger** button, or
 the daily schedule — muster doesn't drop it in an empty per-run scratch dir.
 
-`lint`, `typecheck` and `tests_core` have no dependencies, so they run in
-parallel; `tests_exp` waits for `tests_core` so only one 29-worker suite loads
-the host at a time.
+`lint`, `typecheck`, `tests_core`, `tests_webui` and `tests_exp_unit` have no
+dependencies, so they run in parallel; `tests_exp` waits for `tests_core` so only one 29-worker
+suite loads the host at a time, for `tests_webui` so two `make _build_ui`
+runs never share the web UI's `node_modules`, and for `tests_exp_unit` so a
+broken unit lane fails before the long pass starts.
 Every stage declares `requires` (`tests/requirements.txt` +
 `tests/test_requirements.txt` + `packages/vmn-exp/tests/test_requirements.txt` +
 the three packages installed editable). muster builds that venv once, content-addressed by the
@@ -143,7 +161,7 @@ in the run UI. `tests_core`/`tests_exp` additionally write
 as downloadable artifacts.
 
 Lint and typecheck are report-only — they don't fail the pipeline on warnings.
-Each test stage fails (red) on any nonzero pytest exit — test failures
+Each test stage fails (red) on any nonzero pytest or vitest exit — test failures
 (exit 1) as well as a pytest crash (exit >1); it never shows green over a broken
 suite. The JUnit/HTML report and the stage card are written before the failure,
 so a red run still carries the full output.

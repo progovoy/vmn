@@ -219,3 +219,22 @@ def test_the_sdk_alone_has_no_platform_and_loads_no_git(sdk_venv, tmp_path):
         cwd=str(tmp_path),
     )
     assert proc.returncode == 0, proc.stdout + proc.stderr
+
+
+def _wheel_version(wheel):
+    return wheel.name.split("-")[1]
+
+
+def test_upgrading_the_pair_keeps_the_moved_modules(tmp_path_factory, wheelhouse, tmp_path):
+    # reports/ and the push engine moved from vmn-exp-sdk to vmn-exp (plan 41
+    # D3): upgrading must not let the old SDK's uninstall delete them.
+    below = _wheel_version(wheelhouse["vmn-exp"])
+    python = _venv(tmp_path_factory, "upgrade",
+                   f"vmn-exp-sdk<{below}", f"vmn-exp<{below}")
+    proc = _pip("install", *(str(wheelhouse[d]) for d in DISTS), python=python)
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    proc = _in_venv(
+        python, "import vmn_exp.reports.store\nimport vmn_exp.cli.pushing.push_run\n",
+        cwd=str(tmp_path),
+    )
+    assert proc.returncode == 0, proc.stdout + proc.stderr

@@ -6,6 +6,7 @@ finishes its open runs with ``128 + 15`` and then lets the signal do what it
 would have done anyway — the process still dies of SIGTERM, and a handler the
 workload installed itself still runs.
 """
+from datetime import datetime, timezone
 import os
 import signal
 import subprocess
@@ -16,6 +17,7 @@ import pytest
 from exp_helpers import _SRC_PATH, _PY, _bootstrap, _storage
 
 from vmn_exp.core.status import derive_status, load_run_state
+from vmn_exp.sdk import signals
 
 JOIN_TIMEOUT = 120
 
@@ -178,7 +180,7 @@ def _assert_killed_by_sigterm(app_layout, verstr):
     assert state["exit_code"] == 128 + signal.SIGTERM, state
     assert state["received_signal"] == "SIGTERM"
     assert state["state"] == "finished"
-    assert derive_status(state) == "failed"
+    assert derive_status(state, now=datetime.now(timezone.utc)) == "failed"
 
 
 def test_a_run_opened_off_the_main_thread_is_finalized_on_sigterm(app_layout):
@@ -244,3 +246,19 @@ def test_sigterm_records_the_signal_that_ended_the_run(app_layout):
 
     state = load_run_state(_storage(app_layout), app_layout.app_name, verstr)
     assert state["signal"] == "SIGTERM", state
+
+
+def test_sigterm_with_no_work_chains_without_a_finalizer_thread(monkeypatch):
+    # The handler stays installed from import on, so a process that never
+    # opens a run must not pay a finalizer thread (and its join) per SIGTERM.
+    finalized, chained = [], []
+    monkeypatch.setattr(signals, "_STATE", {
+        "previous": lambda signum, frame: chained.append(signum),
+        "finalize": finalized.append, "timeout": lambda: 5, "raises": lambda: False,
+        "has_work": lambda: False, "finalizing": False,
+    })
+
+    signals._handle(signal.SIGTERM, None)
+
+    assert chained == [signal.SIGTERM]
+    assert finalized == []

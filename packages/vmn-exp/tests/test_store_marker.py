@@ -13,6 +13,7 @@ from vmn_exp.storage.store_marker import StoreLayoutError
 from vmn_exp.storage.uri import s3_uri
 
 from vmn_exp.storage import store_marker
+from vmn_exp.core.real_io import RealClock
 
 
 @pytest.fixture(autouse=True)
@@ -53,7 +54,7 @@ def _race(fn, n=8):
 
 def _open_checked(root, writer):
     """Open as a writer, or as a reader that then reads (checks lazily)."""
-    storage = open_storage(None, root, area="runs", writer=writer)
+    storage = open_storage(None, root, area="runs", writer=writer, clock=RealClock(), env=os.environ)
     if not writer:
         store_marker.require_store(storage)
     return storage
@@ -63,12 +64,12 @@ def test_reader_checks_lazily(tmp_path):
     root = tmp_path / "store"
     root.mkdir()
     (root / "store.yml").write_text("layout: 7\n")
-    open_storage(None, str(root), area="runs", writer=False)
+    open_storage(None, str(root), area="runs", writer=False, clock=RealClock(), env=os.environ)
 
 
 def test_writer_creates_local_marker(tmp_path):
     root = str(tmp_path / "store")
-    open_storage(None, root, area="runs")
+    open_storage(None, root, area="runs", clock=RealClock(), env=os.environ)
     marker = _read_local(root)
     assert marker["layout"] == 2
     assert marker["journal"] == {"partition": "minute"}
@@ -77,7 +78,7 @@ def test_writer_creates_local_marker(tmp_path):
 
 def test_local_marker_is_readable_by_other_users(tmp_path):
     root = str(tmp_path / "store")
-    open_storage(None, root, area="runs")
+    open_storage(None, root, area="runs", clock=RealClock(), env=os.environ)
     mode = os.stat(os.path.join(root, "store.yml")).st_mode & 0o777
     assert mode & 0o044 == 0o044
 
@@ -88,7 +89,7 @@ def test_local_marker_created_once_under_race(tmp_path):
 
     def open_one():
         store_marker.forget_checked()
-        open_storage(None, root, area="runs")
+        open_storage(None, root, area="runs", clock=RealClock(), env=os.environ)
         seen.append(_read_local(root)["created_at"])
 
     _race(open_one)
@@ -101,7 +102,7 @@ def test_s3_marker_created_once_under_race(monkeypatch):
 
         def open_one():
             store_marker.forget_checked()
-            open_storage(s3_uri(BUCKET, PREFIX), area="runs")
+            open_storage(s3_uri(BUCKET, PREFIX), area="runs", clock=RealClock(), env=os.environ)
             seen.append(_read_s3()["created_at"])
 
         _race(open_one)
@@ -111,7 +112,7 @@ def test_s3_marker_created_once_under_race(monkeypatch):
 
 def test_reader_does_not_create_marker(tmp_path):
     root = str(tmp_path / "store")
-    open_storage(None, root, area="runs", writer=False)
+    open_storage(None, root, area="runs", writer=False, clock=RealClock(), env=os.environ)
     assert not os.path.exists(os.path.join(root, "store.yml"))
 
 
@@ -140,13 +141,13 @@ def test_v1_s3_store_refused(monkeypatch):
             Bucket=BUCKET, Key=f"{PREFIX}/my_app/v1/metadata.yml", Body=b"x"
         )
         with pytest.raises(StoreLayoutError, match="vmn-exp migrate"):
-            open_storage(s3_uri(BUCKET, PREFIX), area="runs")
+            open_storage(s3_uri(BUCKET, PREFIX), area="runs", clock=RealClock(), env=os.environ)
 
 
 def test_v2_areas_without_marker_are_adopted(tmp_path):
     root = tmp_path / "store"
     (root / "snapshots" / "app").mkdir(parents=True)
-    open_storage(None, str(root), area="runs")
+    open_storage(None, str(root), area="runs", clock=RealClock(), env=os.environ)
     assert _read_local(str(root))["layout"] == 2
 
 
@@ -155,7 +156,7 @@ def test_migrating_refuses_writers_not_readers(tmp_path):
     root.mkdir()
     (root / "store.yml").write_text("layout: 2\nmigrating: true\n")
     with pytest.raises(StoreLayoutError, match="migrat"):
-        open_storage(None, str(root), area="runs")
+        open_storage(None, str(root), area="runs", clock=RealClock(), env=os.environ)
     store_marker.forget_checked()
     _open_checked(str(root), writer=False)
 
@@ -163,12 +164,12 @@ def test_migrating_refuses_writers_not_readers(tmp_path):
 def test_missing_store_message(tmp_path, monkeypatch):
     with mocked_bucket(monkeypatch):
         uri = s3_uri(BUCKET, PREFIX)
-        storage = open_storage(uri, area="runs", writer=False)
+        storage = open_storage(uri, area="runs", writer=False, clock=RealClock(), env=os.environ)
         with pytest.raises(store_marker.MissingStoreError) as exc:
             store_marker.require_store(storage, uri)
         assert str(exc.value) == f"no vmn store at {uri}"
-        open_storage(uri, area="runs")
-        store_marker.require_store(open_storage(uri, area="runs", writer=False), uri)
+        open_storage(uri, area="runs", clock=RealClock(), env=os.environ)
+        store_marker.require_store(open_storage(uri, area="runs", writer=False, clock=RealClock(), env=os.environ), uri)
 
 
 def _no_hard_links(monkeypatch, err):
@@ -182,7 +183,7 @@ def _no_hard_links(monkeypatch, err):
 def test_local_marker_without_hard_links(tmp_path, monkeypatch, err):
     _no_hard_links(monkeypatch, err)
     root = str(tmp_path / "store")
-    open_storage(None, root, area="runs")
+    open_storage(None, root, area="runs", clock=RealClock(), env=os.environ)
     assert _read_local(root)["layout"] == 2
     assert os.stat(os.path.join(root, "store.yml")).st_mode & 0o044 == 0o044
     assert os.listdir(root) == ["store.yml"]
@@ -195,7 +196,7 @@ def test_local_marker_without_hard_links_created_once_under_race(tmp_path, monke
 
     def open_one():
         store_marker.forget_checked()
-        open_storage(None, root, area="runs")
+        open_storage(None, root, area="runs", clock=RealClock(), env=os.environ)
         seen.append(_read_local(root)["created_at"])
 
     _race(open_one)
@@ -216,7 +217,7 @@ def test_slow_creator_without_hard_links_never_exposes_an_empty_marker(tmp_path,
 
     def open_one():
         store_marker.forget_checked()
-        open_storage(None, root, area="runs")
+        open_storage(None, root, area="runs", clock=RealClock(), env=os.environ)
         seen.append(_read_local(root)["created_at"])
 
     first = threading.Thread(target=open_one)

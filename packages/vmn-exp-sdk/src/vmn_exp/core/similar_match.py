@@ -17,7 +17,6 @@ with the app, never faster. :func:`rank` pages the matches by
 import contextlib
 import re
 import sqlite3
-import time
 
 from vmn_exp.core import similar_fts
 from vmn_exp.core.similar_doc import COLUMNS, STRUCTURED, word
@@ -30,7 +29,6 @@ POSTINGS_BUDGET = 40_000
 POSTINGS_PER_DOC = 1
 PROGRESS_OPS = 2000  # SQLite VM steps between two looks at a deadline
 _WORD = re.compile(r"[^\W_]+")
-_clock = time.monotonic
 
 
 class SimilarDeadlineExceeded(Exception):
@@ -38,15 +36,20 @@ class SimilarDeadlineExceeded(Exception):
 
 
 @contextlib.contextmanager
-def deadline(conn, at):
-    """Interrupt *conn*'s statements once :func:`time.monotonic` passes *at*
-    (none when None), raising :class:`SimilarDeadlineExceeded`."""
+def deadline(conn, at, clock):
+    """Interrupt *conn*'s statements once the monotonic *clock* (the one
+    that computed *at*) passes *at* (none when None), raising
+    :class:`SimilarDeadlineExceeded`."""
     if at is None:
         yield
         return
-    conn.set_progress_handler(lambda: 1 if _clock() >= at else 0, PROGRESS_OPS)
+
+    def passed():
+        return clock() >= at
+
+    conn.set_progress_handler(lambda: 1 if passed() else 0, PROGRESS_OPS)
     try:
-        if _clock() >= at:
+        if passed():
             raise SimilarDeadlineExceeded
         yield
     except sqlite3.OperationalError as exc:

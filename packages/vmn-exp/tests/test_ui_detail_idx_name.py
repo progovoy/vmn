@@ -9,6 +9,7 @@ from fastapi.testclient import TestClient  # noqa: E402
 
 from vmn_exp.storage.areas import RUNS  # noqa: E402
 from vmn_exp.storage.open import open_storage  # noqa: E402
+from vmn_exp.core.real_io import RealClock, real_io
 
 APP = "my_app"
 BASE = f"/api/v1/workspaces/ws/apps/{APP}/experiments"
@@ -25,7 +26,7 @@ def client(tmp_path):
     from vmn_exp.ui.workspaces import WorkspaceManager
 
     uri = f"file://{tmp_path}/store"
-    storage = open_storage(uri, area=RUNS)
+    storage = open_storage(uri, area=RUNS, clock=RealClock(), env=os.environ)
     for i, (v, name) in enumerate(RUNS_):
         meta = {"verstr": v, "timestamp": f"2026-01-01T00:00:0{i}Z"}
         if name:
@@ -33,7 +34,7 @@ def client(tmp_path):
         storage.save(APP, v, meta, {})
     manager = WorkspaceManager(os.path.join(tmp_path, "ui_data"))
     manager.add_store("ws", uri)
-    return TestClient(create_app(manager))
+    return TestClient(create_app(manager, io=real_io()))
 
 
 def _detail(client, ref):
@@ -82,9 +83,9 @@ def test_latest_ref(client):
 def test_without_a_child_row_reader_idx_is_null(tmp_path):
     from vmn_exp.ui.readers.experiment_detail import experiment_detail
 
-    storage = open_storage(f"file://{tmp_path}/store", area=RUNS)
+    storage = open_storage(f"file://{tmp_path}/store", area=RUNS, clock=RealClock(), env=os.environ)
     storage.save(APP, RUNS_[0][0], {"verstr": RUNS_[0][0], "name": "first"}, {})
-    detail, err = experiment_detail(storage, APP, RUNS_[0][0], include_series=False)
+    detail, err = experiment_detail(storage, APP, RUNS_[0][0], include_series=False, now=RealClock().now())
     assert err is None
     assert detail["idx"] is None
     assert detail["name"] == "first"

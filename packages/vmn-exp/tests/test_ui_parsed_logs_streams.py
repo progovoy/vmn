@@ -1,5 +1,6 @@
 """The run-detail log cache reads metric streams too (plan 12 §5.5): a grown
 stream costs its new blocks, and the result equals a full parse."""
+import os
 import pytest
 
 from vmn_exp.core.log import load_log, metric_series
@@ -7,6 +8,9 @@ from vmn_exp.core.metric_stream import MetricWriter
 from vmn_exp.snapshot import open_storage
 from vmn_exp.ui.readers import parsed_logs
 from vmn_exp.ui.readers.parsed_logs import ParsedLogs
+from vmn_exp.core.real_io import RealClock
+import time
+from writer_args import process_writer
 
 APP = "app"
 V = "1.0.0-dev.a"
@@ -16,7 +20,7 @@ T0 = 1_767_225_600_000_001
 @pytest.fixture
 def storage(tmp_path):
     (tmp_path / ".git").mkdir()
-    s = open_storage(root=str(tmp_path), area="runs")
+    s = open_storage(root=str(tmp_path), area="runs", clock=RealClock(), env=os.environ)
     s.save(APP, V, {"verstr": V, "timestamp": "2026-01-01T00:00:00Z"}, {})
     s.append_log_entry(APP, V, "w", {"timestamp": "2026-01-01T00:00:00.000001Z",
                                      "type": "create", "params": {"lr": 0.1}})
@@ -24,7 +28,7 @@ def storage(tmp_path):
 
 
 def _log(storage, writer, start, stop):
-    w = MetricWriter(storage, APP, V, writer)
+    w = MetricWriter(storage, APP, V, writer, clock=time.time)
     for step in range(start, stop):
         w.add("loss", step / 7, step=step, ts_us=T0 + 10 * step)
     w.flush()
@@ -62,10 +66,10 @@ def test_a_seal_reparses_even_when_the_next_stream_outgrew_the_sealed_one(storag
     from vmn_exp.core.writer import own_stream
 
     cache = ParsedLogs()
-    _log(storage, own_stream(storage, APP, V), 0, 3)
+    _log(storage, own_stream(storage, APP, V, writer=process_writer()), 0, 3)
     cache.get(storage, APP, V, load_log)
-    seal_writer(storage, APP, V, own_stream(storage, APP, V))
-    _log(storage, own_stream(storage, APP, V), 3, 20)
+    seal_writer(storage, APP, V, own_stream(storage, APP, V, writer=process_writer()))
+    _log(storage, own_stream(storage, APP, V, writer=process_writer()), 3, 20)
     snap = cache.get(storage, APP, V, load_log)
     assert [p["step"] for p in snap.series()["loss"]] == list(range(20))
     _assert_full(snap, storage)
@@ -75,9 +79,9 @@ def test_run_detail_reports_whether_the_metrics_are_compacted(storage):
     from vmn_exp.core.metric_compact import compact_record
     from vmn_exp.ui.readers.experiment_detail import experiment_detail
 
-    detail, _ = experiment_detail(storage, APP, V, edges=lambda s, a: {})
+    detail, _ = experiment_detail(storage, APP, V, edges=lambda s, a: {}, now=RealClock().now())
     assert detail["compacted"] is None
     _log(storage, "w", 0, 5)
-    assert experiment_detail(storage, APP, V, edges=lambda s, a: {})[0]["compacted"] is False
+    assert experiment_detail(storage, APP, V, edges=lambda s, a: {}, now=RealClock().now())[0]["compacted"] is False
     compact_record(storage, APP, V)
-    assert experiment_detail(storage, APP, V, edges=lambda s, a: {})[0]["compacted"] is True
+    assert experiment_detail(storage, APP, V, edges=lambda s, a: {}, now=RealClock().now())[0]["compacted"] is True

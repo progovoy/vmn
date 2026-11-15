@@ -36,7 +36,7 @@ from vmn_exp.core.tables import MAX_TABLE_ROWS, table_document
 from vmn_exp.core.writer import create_log_entry
 from vmn_exp.sdk.context import owner_only
 from vmn_exp.sdk.media_uploads import staging_dir
-from vmn_exp.sdk.run_artifacts import checked_stored_path
+from vmn_exp.sdk.run_artifacts import checked_stored_path, require_str
 from vmn_exp.storage.files import OUTPUTS_DIR
 
 _LOGGER = logging.getLogger("vmn_exp.sdk")
@@ -151,6 +151,7 @@ class RunMedia:
         self._media_uploads.submit(tmp, written, stored, lambda: self._append(entry))
 
     def log_table(self, name, data, columns=None, step=None):
+        require_str(name, "name", "log_table(name, data)")
         doc, total = table_document(data, columns=columns)
         step = self._media_step("table", name, step)
         path = checked_stored_path(f"{OUTPUTS_DIR}/tables/{name}/{step}.json")
@@ -171,6 +172,7 @@ class RunMedia:
         )
 
     def log_image(self, name, image, step=None, caption=None):
+        require_str(name, "name", "log_image(name, image)")
         step = self._media_step("image", name, step)
         path = checked_stored_path(f"{OUTPUTS_DIR}/media/{name}/{step}.png")
         self._store(
@@ -178,6 +180,7 @@ class RunMedia:
         )
 
     def log_histogram(self, name, values, step=None, bins=64):
+        require_str(name, "name", "log_histogram(name, values)")
         binned = precomputed(values) if isinstance(values, Mapping) else histogram(values, bins)
         if binned is None:
             _LOGGER.warning("Histogram %r has no finite values: not logged", name)

@@ -16,6 +16,7 @@ import threading
 
 import vmn_exp.core.index as experiment_index
 from vmn_exp.core.index_store import SqliteStore
+from vmn_exp.core.status import MIN_STALE_SEC
 from vmn_exp.ui.readers import experiments as exp_reader
 from vmn_exp.ui.readers import versions as ver_reader
 from vmn_exp.ui.refresher import InlineRefresher
@@ -26,7 +27,8 @@ _INLINE = InlineRefresher()
 
 
 def app_snapshot(storage, app_name, cache_path, refresher=_INLINE, schema=None,
-                 journal=None, reconcile_sec=None):
+                 journal=None, reconcile_sec=None, *, index_clock=None,
+                 min_stale_sec=MIN_STALE_SEC):
     """The app's :class:`IndexSnapshot`, from the shared index at *cache_path*.
 
     A :class:`~vmn_exp.ui.refresher.Refresher` keeps the index fresh in
@@ -35,9 +37,12 @@ def app_snapshot(storage, app_name, cache_path, refresher=_INLINE, schema=None,
     so a request sees every write before it. Falls back to a direct read when
     the index fails. Rows follow the metrics *schema* passed (see
     :meth:`~vmn_exp.core.index_snapshot.IndexSnapshot.summarized`).
+    *index_clock*, *min_stale_sec*: a new shared index's (see
+    :func:`~vmn_exp.core.index.shared_index`).
     """
     return _snapshot_of(
-        lambda: experiment_index.shared_index(storage, app_name, cache_path),
+        lambda: experiment_index.shared_index(storage, app_name, cache_path, clock=index_clock,
+                                              min_stale_sec=min_stale_sec),
         storage,
         app_name,
         refresher,
@@ -47,9 +52,10 @@ def app_snapshot(storage, app_name, cache_path, refresher=_INLINE, schema=None,
     )
 
 
-def refresh_app(storage, app_name, cache_path):
+def refresh_app(storage, app_name, cache_path, *, index_clock=None, min_stale_sec=MIN_STALE_SEC):
     """Refresh the shared index now, so a server edit shows at once."""
-    experiment_index.shared_index(storage, app_name, cache_path).refresh()
+    experiment_index.shared_index(storage, app_name, cache_path, clock=index_clock,
+                                  min_stale_sec=min_stale_sec).refresh()
 
 
 def snapshot_of_index(index, storage, app_name, refresher=_INLINE, schema=None,
@@ -89,18 +95,24 @@ class WorkspaceIndex:
 
     Without *db_dir* (``--no-index``) nothing is persisted: the experiment
     indexes and the versions cache live in this object's memory only.
+    *index_clock* is the indexes' and the cache's (see
+    :class:`~vmn_exp.core.index.ExperimentIndex`; None: their modules' own),
+    *min_stale_sec* the indexes' stuck floor.
     """
 
-    def __init__(self, root_path, db_dir=None):
+    def __init__(self, root_path, db_dir=None, *, processes, clock, env, index_clock=None,
+                 min_stale_sec=MIN_STALE_SEC):
+        self._index_clock, self._min_stale_sec = index_clock, min_stale_sec
         self.root_path = root_path
+        self._processes = processes  # lists the app's tags (the versions cache key)
         self._db_path = None
         if db_dir is not None:
             os.makedirs(db_dir, exist_ok=True)
             self._db_path = _db_path(db_dir, os.path.abspath(root_path))
         self._lock = threading.Lock()
         self._in_memory = {}  # app name -> unpersisted ExperimentIndex
-        self._cache = SqliteStore(self._db_path or ":memory:")
-        self._storage = exp_reader.experiment_storage(root_path)
+        self._cache = SqliteStore(self._db_path or ":memory:", clock=index_clock)
+        self._storage = exp_reader.experiment_storage(root_path, clock, env)
 
     @property
     def db_path(self):
@@ -109,13 +121,15 @@ class WorkspaceIndex:
     def index_of(self, app_name):
         """The index :meth:`snapshot` serves *app_name* from."""
         if self._db_path:
-            return experiment_index.shared_index(self._storage, app_name, self._db_path)
+            return experiment_index.shared_index(self._storage, app_name, self._db_path,
+                                                 clock=self._index_clock,
+                                                 min_stale_sec=self._min_stale_sec)
         return self._in_memory_index(app_name)
 
     def reopen(self):
         """Reconnect the versions cache (a rebuild swapped the file)."""
         with self._lock:
-            self._cache = SqliteStore(self._db_path or ":memory:")
+            self._cache = SqliteStore(self._db_path or ":memory:", clock=self._index_clock)
 
     @property
     def storage(self):
@@ -125,7 +139,9 @@ class WorkspaceIndex:
     def snapshot(self, app_name, refresher=_INLINE, schema=None):
         """The app's current :class:`IndexSnapshot` (see :func:`app_snapshot`)."""
         if self._db_path:
-            return app_snapshot(self._storage, app_name, self._db_path, refresher, schema)
+            return app_snapshot(self._storage, app_name, self._db_path, refresher, schema,
+                                index_clock=self._index_clock,
+                                min_stale_sec=self._min_stale_sec)
         return _snapshot_of(
             lambda: self._in_memory_index(app_name),
             self._storage, app_name, refresher, schema,
@@ -135,12 +151,13 @@ class WorkspaceIndex:
         with self._lock:
             if app_name not in self._in_memory:
                 self._in_memory[app_name] = experiment_index.ExperimentIndex(
-                    self._storage, app_name
+                    self._storage, app_name, clock=self._index_clock,
+                    min_stale_sec=self._min_stale_sec,
                 )
             return self._in_memory[app_name]
 
     def list_versions(self, app_name):
-        fp = versions_fingerprint(self.root_path, app_name)
+        fp = versions_fingerprint(self.root_path, app_name, self._processes)
         with self._lock:
             rows = self._cache.kv_get(f"ver:{app_name}", fp)
         if rows is None:

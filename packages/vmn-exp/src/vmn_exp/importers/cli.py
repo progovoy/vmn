@@ -16,6 +16,8 @@ import os
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any, Iterator
 
+from vmn_exp.core.writer import get_writer_id
+
 _LOG = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
@@ -23,7 +25,7 @@ _LOG = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 
-def _get_storage(args):
+def _get_storage(args, clock, env):
     """Resolve experiment storage from args / environment variables."""
     from vmn_exp.core.storage_resolve import resolve_experiment_storage
 
@@ -33,6 +35,8 @@ def _get_storage(args):
         bucket=getattr(args, "bucket", None),
         prefix=getattr(args, "prefix", None),
         endpoint_url=getattr(args, "endpoint_url", None),
+        clock=clock,
+        env=env,
     )
 
 
@@ -76,6 +80,7 @@ def _import_one(
     skip_artifacts: bool,
     refresh_features: bool = False,
     commit_changes=None,
+    writer=None,
 ) -> tuple[str, str]:
     """Import a single run; return (outcome, run_id).
 
@@ -88,7 +93,7 @@ def _import_one(
     try:
         outcome = import_run(storage, app_name, run, skip_artifacts=skip_artifacts,
                              refresh_features=refresh_features,
-                             commit_changes=commit_changes)
+                             commit_changes=commit_changes, writer=writer)
         return outcome, run_id
     except Exception:
         _LOG.exception("import-mlflow: failed to import run %s", run_id)
@@ -100,7 +105,7 @@ def _import_one(
 # ---------------------------------------------------------------------------
 
 
-def import_mlflow_run_without_repo(args) -> int | None:
+def import_mlflow_run_without_repo(args, io) -> int | None:
     """Handler for ``vmn-exp import-mlflow``.
 
     Called via ``run_without_repo`` so the repo lock is never acquired.
@@ -149,7 +154,7 @@ def import_mlflow_run_without_repo(args) -> int | None:
         return 0
 
     try:
-        storage = _get_storage(args)
+        storage = _get_storage(args, io.clock, io.env)
     except (OSError, ValueError) as e:
         print(f"error: cannot open the experiment store: {e}")
         return 1
@@ -164,7 +169,8 @@ def import_mlflow_run_without_repo(args) -> int | None:
         # objects as futures complete.
         futures: dict[Any, str] = {
             pool.submit(_import_one, storage, app_name, run, skip_artifacts,
-                        refresh_features, commit_changes): run.get("run_id", "unknown")
+                        refresh_features, commit_changes,
+                        get_writer_id(io.env, io.host)): run.get("run_id", "unknown")
             for run in runs
         }
         for future in as_completed(futures):

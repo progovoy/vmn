@@ -69,9 +69,7 @@ def start_study_run(
     try:
         import optuna  # noqa: F401 – verify it is available
     except ImportError as exc:
-        raise ImportError(
-            "optuna is required: pip install optuna"
-        ) from exc
+        raise ImportError("optuna is required: pip install optuna") from exc
 
     from vmn_exp.sdk import start_run
 
@@ -80,10 +78,12 @@ def start_study_run(
             raise ValueError(
                 f"outer= attaches to an existing run; drop {sorted(start_run_kwargs)}"
             )
+        from vmn_exp.core.real_io import real_io
         from vmn_exp.sdk import resume
 
         # Resolved once: trials then pass an exact verstr, not a ref to re-list.
-        app_name, _, outer_id, _, _ = resume.locate(app_name, outer, None, action="attach to")
+        app_name, _, outer_id, _, _ = resume.locate(app_name, outer, None, action="attach to",
+                                                    env=real_io().env)
         return StudyTracker(app_name, outer_id, study, export_env=export_env)
     params = _study_params(study)
     name = start_run_kwargs.pop("name", study.study_name or "optuna-study")

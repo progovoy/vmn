@@ -9,6 +9,7 @@ from vmn_exp.core.index_snapshot import IndexSnapshot
 from vmn_exp.ui.live_events import StreamSlots, event_stream, snapshot_change
 
 from vmn_exp.ui import live_events
+from vmn_exp.core.real_io import RealClock
 
 
 def _row(verstr, parent=None):
@@ -107,7 +108,7 @@ def _collect(timeline, clock, scope=None, max_sec=60):
     async def run():
         out = []
         async for chunk in event_stream(read, scope=scope, clock=clock, sleep=clock.sleep,
-                                        max_sec=max_sec):
+                                        status_now=RealClock().now, max_sec=max_sec):
             out.append((clock.now,) + _parse(chunk))
         return out
 

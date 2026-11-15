@@ -14,6 +14,7 @@ from vmn_exp.core import index_store as experiment_index_store, index_workers as
 from version_stamp.core import logging as vmn_logging
 from vmn_exp.core.index import ExperimentIndex, direct_rows
 from vmn_exp.storage.areas import local_store_root
+from vmn_exp.core.real_io import RealClock
 
 APP = "app"
 TS = "2026-01-01T00:00:{:02d}Z"
@@ -29,7 +30,7 @@ def _logger():
 
 
 def _storage(root):
-    return open_storage(root=local_store_root(str(root)), area="runs")
+    return open_storage(root=local_store_root(str(root)), area="runs", clock=RealClock(), env=os.environ)
 
 
 def _dir(root, verstr):

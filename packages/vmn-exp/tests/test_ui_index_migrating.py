@@ -21,6 +21,7 @@ from vmn_exp.storage.open import open_storage  # noqa: E402
 from vmn_exp.ui import index as ui_index  # noqa: E402
 from vmn_exp.ui.cache_health import SqliteHealth  # noqa: E402
 from vmn_exp.ui.cache_resync import WorkspaceCache  # noqa: E402
+from vmn_exp.core.real_io import RealClock, real_io
 
 APP = "my_app"
 API = "/api/v1/workspaces/ws"
@@ -31,7 +32,7 @@ FINISHED = "state: finished\nexit_code: 0\n"
 
 def _seed(tmp_path, n=3):
     uri = f"file://{tmp_path}/store"
-    st = open_storage(uri, area=RUNS)
+    st = open_storage(uri, area=RUNS, clock=RealClock(), env=os.environ)
     for i in range(n):
         v = f"0.0.1-dev.0000abcd.{i}"
         st.save(APP, v, {"verstr": v, "timestamp": f"2026-01-01T00:00:0{i}Z"}, {})
@@ -104,7 +105,7 @@ def test_apps_and_status_answer_while_the_index_rederives(tmp_path, held_derive,
     ExperimentIndex(st, APP, db).refresh()
     _older_derived(db)
 
-    app = create_app(manager, background_refresh=True)
+    app = create_app(manager, io=real_io(), background_refresh=True)
     client = TestClient(app)
     try:
         body = _until(lambda: _get_in_time(client, STATUS),
@@ -129,7 +130,7 @@ def test_the_health_check_rederives_an_older_derived_version_in_place(tmp_path):
     db = str(tmp_path / "cache.sqlite")
     ExperimentIndex(st, APP, db).refresh()
     _older_derived(db)
-    cache = WorkspaceCache("ws", db, SqliteHealth(db), check_sec=0)
+    cache = WorkspaceCache("ws", db, SqliteHealth(db), check_sec=0, clock=time.monotonic)
     cache.note(APP, st, lambda: None)
 
     assert cache.tick() == "derived"

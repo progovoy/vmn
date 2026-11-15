@@ -54,7 +54,7 @@ From a checkout (development): see "Repository layout" below, or run `uv sync`.
 | Install | Import packages | Commands | Depends on |
 |---|---|---|---|
 | `vmn` | `version_stamp` | `vmn` | GitPython, PyYAML, Jinja2, git-cliff, …; extra `s3` (boto3, for `vmn snapshot --store s3://`) |
-| `vmn-exp` | `vmn_exp.cli`, `.ui`, `.snapshot`, `.importers`, `.gitmode` | `vmn-exp` | `vmn<1`, `vmn-exp-sdk==<same version>`; extras `ui`, `s3`, `gcs`, `azure`, `mlflow`, `postgres`, `parquet` |
+| `vmn-exp` | `vmn_exp.cli`, `.ui`, `.snapshot`, `.importers`, `.gitmode`, `.reports` | `vmn-exp` | `vmn<1`, `vmn-exp-sdk==<same version>`; extras `ui`, `s3`, `gcs`, `azure`, `mlflow`, `postgres`, `parquet` |
 | `vmn-exp-sdk` | `vmn_exp.sdk`, `.storage`, `.core`, `.registry`, `.integrations`, `._base` | none | PyYAML, filelock, psutil, `vmn>0.11.2,<1` (for `version_stamp.store`); extras `s3` (boto3, the same package `vmn[s3]` adds), `gcs`, `azure`, `pandas` |
 
 `vmn_exp` is a PEP 420 namespace package: it has no `__init__.py`, and each
@@ -110,6 +110,11 @@ subpackage belongs to exactly one distribution.
   when needed.
 - Its subpackages reach `version_stamp` only through `version_stamp.api`; the
   store layer (`version_stamp.store`) comes in through the SDK.
+- Command-line code lives here, not in the SDK: the `vmn-exp model` handlers
+  and parser (`cli/model_cmd.py`, `cli/model_parser.py`, store flags in
+  `cli/storage_flags.py`), the engine of `vmn-exp push` and `vmn-exp buffers
+  ship` (`cli/pushing/`) and `vmn_exp.reports`. The registry functions and
+  storage they call stay in the SDK.
 
 ### vmn-exp-sdk
 
@@ -124,7 +129,7 @@ subpackage belongs to exactly one distribution.
   `sha256_file`, `resolve_root_path`, the repo lock); packages/vmn-exp/tests/test_exp_base.py
   keeps each copy behaving like the original. They were copied, not shared, when the SDK had no dependency on
   `vmn`; it now depends on vmn for `version_stamp.store` only, and the copies
-  stay until they are folded into it (plan 37 P6). `parse_record_metadata` moves here, since the record format belongs to
+  stay until they are folded into it (plan 45 P6). `parse_record_metadata` moves here, since the record format belongs to
   experiments.
 
 ## Import rules (enforced by tests)
@@ -151,7 +156,7 @@ pyproject.toml   workspace root (uv workspace, mypy config); not a package
 packages/
   vmn/          pyproject.toml  src/version_stamp/
   vmn-exp-sdk/  pyproject.toml  src/vmn_exp/{sdk,storage,core,registry,integrations,_base}
-  vmn-exp/      pyproject.toml  src/vmn_exp/{cli,ui,snapshot,importers,gitmode}  webui/
+  vmn-exp/      pyproject.toml  src/vmn_exp/{cli,ui,snapshot,importers,gitmode,reports}  webui/
   vmn-exp/tests/  the vmn-exp suite (all three packages)
 tests/           the core vmn suite (vmn alone)
 ```
@@ -180,8 +185,8 @@ the PyPI release.
 ## Versioning and release
 
 - Two vmn apps: `vmn` (for the `vmn` distribution) and `vmn_exp` (a shared
-  version for `vmn-exp` and `vmn-exp-sdk`, so the dashboard and the job writer
-  always agree on the record format).
+  version for `vmn-exp` and `vmn-exp-sdk`, which pin each other exactly; see
+  [Compatibility](#compatibility) for what holds across machines).
 - Each app's `version_backends` (`generic_selectors` in
   `.vmn/vmn/conf.yml` and `.vmn/vmn_exp/conf.yml`) writes the new version into
   `project.version`, into `version_stamp/version.py` (vmn), and into vmn-exp's
@@ -193,8 +198,16 @@ the PyPI release.
   prints it plain.
 - `./release_exp.sh` releases vmn-exp and vmn-exp-sdk with a patch bump (a minor
   bump the very first time, past the 0.0.1 placeholders). It refuses a dirty
-  tree. vmn is released on its own (`vmn stamp vmn`, `make _build`,
-  `make upload`).
+  tree. The release is always a patch, so behaviour changes, removals and
+  format changes are announced in
+  [vmn-exp/upgrading.md](vmn-exp/upgrading.md), not by the version number.
+  After the upload it runs `make _changelog NAME=vmn_exp`, which rebuilds
+  [packages/vmn-exp/CHANGELOG.md](../packages/vmn-exp/CHANGELOG.md) with
+  git-cliff (`packages/vmn-exp/cliff.toml`) from the `vmn_exp_` tags, scoped to
+  the two exp packages, then commits it as `docs(exp): changelog` and pushes.
+  The file is never edited by hand; a rerun is a no-op and repairs a failed
+  push. So a release tag holds the changelog up to the previous release.
+  vmn is released on its own (`vmn stamp vmn`, `make _build`, `make upload`).
 - `make upload` sends each file to its project's `~/.pypirc` section
   (`[pypi]` for vmn, `[vmn-exp]`, `[vmn-exp-sdk]`), so per-project tokens
   work; a missing section falls back to `[pypi]`, for one account-wide token.
@@ -209,13 +222,17 @@ the PyPI release.
 
 ### PyPI
 
-- `vmn` is on PyPI (0.10.1 is the last release before the split). `vmn-exp`
-  and `vmn-exp-sdk` are claimed by placeholder `0.0.1` releases (uploaded
-  2026-09-28), which contain nothing usable.
-- Release order for the split: first a vmn newer than 0.10.2rc9 (the last
-  version with its own `vmn exp`), since vmn-exp requires `vmn>0.10.2rc9,<1`;
-  then vmn-exp and vmn-exp-sdk together (`make minor NAME=vmn_exp`, giving
-  0.1.0 — 0.0.1 is taken by the placeholder).
+State checked on 2026-11-11:
+
+- `vmn` is on PyPI up to 0.11.2 (`requires-python >=3.8`); 0.10.1 is the last
+  release before the split, and every release from 0.10.2 on leaves `vmn exp`
+  to vmn-exp.
+- `vmn-exp` and `vmn-exp-sdk` are released together at one version, from
+  0.1.0 up to 0.1.37 (a few patch numbers were never uploaded). Releases up to
+  0.1.37 declare `requires-python >=3.8`; later ones `>=3.10`, so pip on 3.8
+  or 3.9 stops at 0.1.37 ([vmn-exp/upgrading.md](vmn-exp/upgrading.md)).
+  Both projects were first claimed by an empty `0.0.1` placeholder
+  (2026-09-28), which is why the first real release was 0.1.0.
 - Release vmn first whenever the exp packages need something new from it:
   vmn-exp-sdk requires `vmn>0.11.2,<1` (0.11.2 is the last vmn without
   `version_stamp.store`), so vmn 0.11.3 or later must be on PyPI before the
@@ -223,6 +240,33 @@ the PyPI release.
   a `.devN` version above the pin, so editable installs satisfy it.
 - A project is created by its first upload, which needs an account-wide token.
   After that, switch to per-project tokens.
+
+## Compatibility
+
+**In one environment**, vmn-exp and vmn-exp-sdk are always the same version:
+vmn-exp pins `vmn-exp-sdk==` its own version, and the pin stays exact. vmn-exp
+imports many of the SDK distribution's modules (`vmn_exp.core`, `storage`,
+`sdk`, `registry`, `_base`), some by private name, and both share the
+`vmn_exp` namespace, so a mismatched pair can fail at import. The pin binds
+only an environment where vmn-exp is installed: a job image with the SDK
+alone is free to stay on an older release.
+
+**Across machines** the contract is the store, versioned by its store layout
+(`store.yml`) and each record's record format (`format_version` in
+`metadata.yml`). Today that is store layout 2 and record format 2. The
+promise: a server or CLI reads the records written by any older SDK of the
+same store layout and record format. A record of a newer format is skipped
+with a warning to upgrade vmn-exp; a store of an unknown layout is refused.
+So upgrade the server and CLI first, and job images at leisure. Nothing is
+promised the other way round beyond this: a log entry of a type the reader
+does not know adds nothing of its own to the run (only the `params` a `create`
+or `params` entry carries are folded).
+
+Each record format the reader accepts keeps one golden record, frozen as the
+SDK that wrote it laid it out, under `packages/vmn-exp/tests/golden/` and
+checked by `packages/vmn-exp/tests/test_record_compat.py`; a format bump adds
+the next one and keeps the older ones green. Format changes follow the rules
+in [vmn-exp/upgrading.md](vmn-exp/upgrading.md#rules).
 
 ## Migration
 

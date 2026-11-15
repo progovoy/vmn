@@ -6,6 +6,7 @@ import os
 import sqlite3
 import subprocess
 import sys
+import time
 
 from vmn_exp.core import sqlite_files
 from vmn_exp.core.index_point import shared_store
@@ -110,7 +111,7 @@ def test_a_file_another_process_holds_is_never_deleted(tmp_path):
         _rebuild(path)
         live = SqliteStore(path)
         assert set(live.load(APP)) == {"new"}
-        cache = WorkspaceCache("ws", path, check_sec=0)
+        cache = WorkspaceCache("ws", path, check_sec=0, clock=time.monotonic)
         cache.tick()
         cache.tidy.wait(10)
         sqlite_files.sweep(path)

@@ -1,6 +1,9 @@
 -r ../../../tests/test_requirements.txt
 boto3
-moto[s3,server]
+# 5.2.4's Request.from_primitives drops a user:pass@ netloc, so the mock is bypassed
+moto[s3,server]<5.2.4
+google-cloud-storage
+azure-storage-blob
 fastapi
 httpx
 uvicorn
@@ -8,6 +11,8 @@ orjson
 psutil
 scikit-learn
 xgboost
+lightgbm
+catboost
 torch
 lightning
 pytorch-lightning

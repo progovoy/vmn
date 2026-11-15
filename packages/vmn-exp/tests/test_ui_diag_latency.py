@@ -8,6 +8,7 @@ import pytest
 
 from vmn_exp.ui import diag
 from vmn_exp.ui.diag import latency, registry
+from vmn_exp.core.real_io import real_io
 
 
 @pytest.fixture(autouse=True)
@@ -84,7 +85,7 @@ def test_the_server_runs_the_loop_probe_and_reports_both_probes(tmp_path):
     from vmn_exp.ui.server import create_app
     from vmn_exp.ui.workspaces import WorkspaceManager
 
-    app = create_app(WorkspaceManager(str(tmp_path / "data")))
+    app = create_app(WorkspaceManager(str(tmp_path / "data")), io=real_io())
     with TestClient(app) as client:
         assert client.get("/api/v1/workspaces").status_code == 200
         deadline = time.monotonic() + 5

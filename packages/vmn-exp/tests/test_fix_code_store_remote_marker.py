@@ -16,6 +16,7 @@ from vmn_exp.sdk import start_run
 from vmn_exp.storage.areas import local_store_root
 from vmn_exp.storage.open import open_storage
 from vmn_exp.storage.s3 import S3SnapshotStorage
+from vmn_exp.core.real_io import RealClock
 
 BUCKET = "vmn-code-marker"
 URI = f"s3://{BUCKET}/exp"
@@ -46,7 +47,7 @@ def _dirty(app_layout):
 
 
 def _online(app_layout):
-    return open_storage(URI, local_store_root(app_layout.repo_path), area="runs")
+    return open_storage(URI, local_store_root(app_layout.repo_path), area="runs", clock=RealClock(), env=os.environ)
 
 
 def _run(app_layout, storage):
@@ -55,7 +56,7 @@ def _run(app_layout, storage):
 
 
 def _remote_code_is_complete(app_layout, verstr):
-    reader = open_storage(URI, None, area="runs")
+    reader = open_storage(URI, None, area="runs", clock=RealClock(), env=os.environ)
     meta, patches = reader.load(app_layout.app_name, verstr)
     return "code_missing" not in meta and bool(patches.get("untracked_files"))
 

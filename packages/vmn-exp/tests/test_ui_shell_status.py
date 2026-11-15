@@ -7,34 +7,28 @@ import pytest
 import yaml
 
 pytest.importorskip("fastapi")
+from fakes.clock import FakeClock  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402
+from unit_deps import fake_deps  # noqa: E402
 
-import vmn_exp.core.status as status_mod  # noqa: E402
 from vmn_exp.storage.areas import RUNS  # noqa: E402
 from vmn_exp.storage.open import open_storage  # noqa: E402
 from vmn_exp.ui.status_summary import status_summary  # noqa: E402
+from vmn_exp.core.real_io import RealClock
 
 APP = "my_app"
 BASE = f"/api/v1/workspaces/ws/apps/{APP}"
 STATUSES = ("created", "running", "stuck", "succeeded", "failed")
 
 
-class _Clock:
-    def __init__(self):
-        self.now = datetime.datetime.now(datetime.timezone.utc)
-
+class _Clock(FakeClock):
     def iso(self, sec_ago=0):
-        return (self.now - datetime.timedelta(seconds=sec_ago)).isoformat()
-
-    def advance(self, sec):
-        self.now += datetime.timedelta(seconds=sec)
+        return (self.now() - datetime.timedelta(seconds=sec_ago)).isoformat()
 
 
 @pytest.fixture
-def clock(monkeypatch):
-    c = _Clock()
-    monkeypatch.setattr(status_mod, "_now", lambda now=None: now or c.now)
-    return c
+def clock():
+    return _Clock(datetime.datetime.now(datetime.timezone.utc))
 
 
 def _finished(clock, code, sec_ago):
@@ -47,13 +41,13 @@ def _running(clock):
             "heartbeat_interval_sec": 5}
 
 
-def _setup(tmp_path, runs):
+def _setup(tmp_path, runs, clock):
     """*runs*: ``[(run_state or None, archived)]``, oldest first."""
-    from vmn_exp.ui.server import create_app
+    from vmn_exp.ui.server import build_app
     from vmn_exp.ui.workspaces import WorkspaceManager
 
     uri = f"file://{tmp_path}/store"
-    storage = open_storage(uri, area=RUNS)
+    storage = open_storage(uri, area=RUNS, clock=RealClock(), env=os.environ)
     for i, (state, archived) in enumerate(runs):
         v = f"0.0.1-dev.{i:04d}abcd.{i}"
         meta = {"verstr": v, "timestamp": f"2026-01-01T00:00:{i:02d}Z", "archived": archived}
@@ -62,7 +56,7 @@ def _setup(tmp_path, runs):
             storage.save_file(APP, v, "run_state.yml", yaml.dump(state))
     manager = WorkspaceManager(os.path.join(tmp_path, "ui_data"))
     manager.add_store("ws", uri)
-    return TestClient(create_app(manager))
+    return TestClient(build_app(manager, fake_deps(clock)))
 
 
 def _status(client, app=APP):
@@ -84,7 +78,7 @@ def _fleet(clock):
 
 
 def test_counts_over_non_archived_rows(tmp_path, clock):
-    body = _status(_setup(tmp_path, _fleet(clock)))
+    body = _status(_setup(tmp_path, _fleet(clock), clock))
     assert body == {
         "total": 6,
         "counts": {"created": 1, "running": 1, "stuck": 0, "succeeded": 2, "failed": 2},
@@ -93,7 +87,7 @@ def test_counts_over_non_archived_rows(tmp_path, clock):
 
 
 def test_counts_match_the_leaderboard_status_filter(tmp_path, clock):
-    client = _setup(tmp_path, _fleet(clock))
+    client = _setup(tmp_path, _fleet(clock), clock)
     counts = _status(client)["counts"]
     for s in ("running", "stuck", "failed"):
         page = client.get(f"{BASE}/experiments", params={"status": s, "limit": 1}).json()
@@ -101,7 +95,7 @@ def test_counts_match_the_leaderboard_status_filter(tmp_path, clock):
 
 
 def test_failed_recent_ages_out_on_the_hour(tmp_path, clock):
-    client = _setup(tmp_path, [(_finished(clock, 1, 86400 - 1800), False)])
+    client = _setup(tmp_path, [(_finished(clock, 1, 86400 - 1800), False)], clock)
     assert _status(client)["failed_recent"] == 1
     clock.advance(3600)
     body = _status(client)
@@ -111,7 +105,7 @@ def test_failed_recent_ages_out_on_the_hour(tmp_path, clock):
 
 
 def test_a_live_run_turns_stuck_across_buckets(tmp_path, clock):
-    client = _setup(tmp_path, [(_running(clock), False)])
+    client = _setup(tmp_path, [(_running(clock), False)], clock)
     assert _status(client)["rollup"] == "running"
     clock.advance(600)
     body = _status(client)
@@ -120,7 +114,7 @@ def test_a_live_run_turns_stuck_across_buckets(tmp_path, clock):
 
 
 def test_etag_and_304(tmp_path, clock):
-    client = _setup(tmp_path, _fleet(clock))
+    client = _setup(tmp_path, _fleet(clock), clock)
     r = client.get(f"{BASE}/experiments-status")
     etag = r.headers["ETag"]
     again = client.get(f"{BASE}/experiments-status", headers={"If-None-Match": etag})
@@ -128,7 +122,7 @@ def test_etag_and_304(tmp_path, clock):
 
 
 def test_unknown_app_is_404_app_not_found(tmp_path, clock):
-    client = _setup(tmp_path, _fleet(clock))
+    client = _setup(tmp_path, _fleet(clock), clock)
     r = client.get("/api/v1/workspaces/ws/apps/nope/experiments-status")
     assert r.status_code == 404, r.text
     assert r.json()["code"] == "app_not_found"
@@ -142,11 +136,11 @@ def test_counting_never_sorts(tmp_path, clock, monkeypatch):
         raise AssertionError("status counts must not sort the rows")
 
     monkeypatch.setattr(LeaderboardCache, "ordered", no_sorting)
-    assert _status(_setup(tmp_path, _fleet(clock)))["total"] == 6
+    assert _status(_setup(tmp_path, _fleet(clock), clock))["total"] == 6
 
 
 def test_invalid_tag_is_400(tmp_path, clock):
-    client = _setup(tmp_path, [])
+    client = _setup(tmp_path, [], clock)
     assert client.get("/api/v1/workspaces/ws/apps/x-../experiments-status").status_code == 400
 
 

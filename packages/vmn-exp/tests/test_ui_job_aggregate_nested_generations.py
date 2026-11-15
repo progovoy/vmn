@@ -5,10 +5,11 @@ snapshot answers after random deltas (re-dated runs, re-links, removals)."""
 import datetime
 
 import pytest
+from fakes.clock import FakeClock
 from job_rollup_reference import annotated
 from job_rollup_reference import rolled as reference
 from leaderboard_fleet import T0
-from test_ui_job_aggregate_generations import SCHEMA, DateFleet, _at, _top
+from test_ui_job_aggregate_generations import SCHEMA, DateFleet, _move, _top
 from vmn_exp.ui.job_aggregate import JobAgg
 from vmn_exp.ui.leaderboard_cache import LeaderboardCache
 
@@ -30,7 +31,7 @@ def _nest(fleet, count):
 def _check(cache, snap):
     """Every top-level job's ``rolled`` against the walk; how many nested
     carriers were skipped in all."""
-    rows, skipped = annotated(snap), 0
+    rows, skipped = annotated(snap, cache.now()), 0
     for agg in AGGS:
         got = cache.job_aggregates.rolled(snap, SCHEMA, agg)
         for job in _top(rows):
@@ -52,12 +53,13 @@ def test_nested_units_match_a_brute_force_walk_across_generations(monkeypatch, s
     for root in fleet.rng.sample([s["verstr"] for s in fleet.specs], 12):
         fleet.append(parent=root, state=fleet.ended(T0))
     _nest(fleet, 8)
-    cache, now = LeaderboardCache(), T0
-    _at(monkeypatch, now)
+    clock = FakeClock(T0)
+    cache, now = LeaderboardCache(now=clock.now), T0
+    _move(clock, now)
     assert _check(cache, fleet.snapshot()) > 0
     for _ in range(10):
         now += datetime.timedelta(seconds=fleet.rng.choice([0, 1, 45, 70]))
         fleet.mutate(now, fleet.rng.choice([1, 4, 12]))
         fleet.redate(fleet.rng.choice([0, 1, 3]))
-        _at(monkeypatch, now)
+        _move(clock, now)
         _check(cache, fleet.snapshot())

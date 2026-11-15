@@ -1,6 +1,7 @@
 """Control plane, search, election and LISTEN survive a killed backend
 (plan 25 F4); pooled stores serve concurrent requests concurrently."""
 import threading
+import time
 
 import pytest
 
@@ -34,7 +35,7 @@ def search(pg_dsn):
 
 
 def _search_hits(search):
-    return [row for (_, _, row) in search.search(["ws"], "", 10)]
+    return [row for (_, _, row) in search.search(["ws"], "", 10, False, None)]
 
 
 def test_control_plane_request_killed_mid_flight_raises_and_the_next_succeeds(
@@ -131,7 +132,7 @@ class _CountingIndex:
 
 
 def test_refresher_wake_all_refreshes_every_watch_at_once():
-    refresher = Refresher(interval_sec=60)
+    refresher = Refresher(interval_sec=60, clock=time.monotonic)
     indexes = [_CountingIndex(), _CountingIndex()]
     try:
         for index in indexes:

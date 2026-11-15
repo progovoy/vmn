@@ -13,6 +13,7 @@ from vmn_exp.storage.areas import local_store_root
 from vmn_exp.sdk import start_run
 from vmn_exp.storage.files import METADATA_FILE, PATCH_FILES
 from vmn_exp.storage.open import open_storage
+from vmn_exp.core.real_io import RealClock
 
 BUCKET = "vmn-code-store"
 PATCH_NAMES = {filename for _, filename, _ in PATCH_FILES}
@@ -126,7 +127,7 @@ def test_runs_synced_to_s3_share_one_remote_code_object(app_layout, s3, tarballs
 def test_runs_straight_to_s3_without_a_local_dir(app_layout, s3, tarballs):
     _bootstrap(app_layout)
     _dirty(app_layout, untracked="remote only")
-    storage = open_storage(f"s3://{BUCKET}/exp", None, area="runs", buffer_logs=True)
+    storage = open_storage(f"s3://{BUCKET}/exp", None, area="runs", buffer_logs=True, clock=RealClock(), env=os.environ)
 
     ids = []
     for _ in range(2):
@@ -135,7 +136,7 @@ def test_runs_straight_to_s3_without_a_local_dir(app_layout, s3, tarballs):
 
     assert len(tarballs) == 1
     assert len(_code_objects(s3, app_layout.app_name)) == 1
-    reader = open_storage(f"s3://{BUCKET}/exp", None, area="runs")
+    reader = open_storage(f"s3://{BUCKET}/exp", None, area="runs", clock=RealClock(), env=os.environ)
     for verstr in ids:
         meta, patches = reader.load(app_layout.app_name, verstr)
         assert meta["code"]
@@ -147,7 +148,7 @@ def test_an_incomplete_s3_code_object_is_rewritten_and_flagged_meanwhile(
 ):
     _bootstrap(app_layout)
     _dirty(app_layout)
-    storage = open_storage(f"s3://{BUCKET}/exp", None, area="runs")
+    storage = open_storage(f"s3://{BUCKET}/exp", None, area="runs", clock=RealClock(), env=os.environ)
     with start_run(app_layout.app_name, storage=storage) as run:
         pass
     marker = next(k for k in _keys(s3) if "/code/" in k and k.endswith(METADATA_FILE))

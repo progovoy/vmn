@@ -17,6 +17,7 @@ from vmn_exp.storage.journal import JournaledStorage, prune_journal
 from vmn_exp.storage.journal_sinks import journal_list_fn, sink_for
 from vmn_exp.storage.local import LocalSnapshotStorage
 from vmn_exp.storage.open import open_storage
+from vmn_exp.core.real_io import RealClock
 
 APP = "trainer"
 V1 = "1.2.0-dev.abc1234.0000001"
@@ -91,7 +92,7 @@ def test_local_entries_live_under_the_root_journal_dir(tmp_path):
 
 
 def test_open_storage_journals_the_repo_local_root(tmp_path):
-    storage = open_storage(None, str(tmp_path), area="runs")
+    storage = open_storage(None, str(tmp_path), area="runs", clock=RealClock(), env=os.environ)
     storage.create_exclusive(APP, V1, {"verstr": V1}, {})
     prefix = f"journal/{partition_of(int(time.time() * 1000))}/"
     listed = list(journal_list_fn(storage)(prefix, None))
@@ -99,7 +100,7 @@ def test_open_storage_journals_the_repo_local_root(tmp_path):
 
 
 def test_open_storage_journals_a_file_store(tmp_path):
-    storage = open_storage(f"file://{tmp_path}", None, area="runs")
+    storage = open_storage(f"file://{tmp_path}", None, area="runs", clock=RealClock(), env=os.environ)
     storage.create_exclusive(APP, V1, {"verstr": V1}, {})
     assert os.listdir(tmp_path / "journal")
 
@@ -110,7 +111,7 @@ def test_open_storage_journals_the_remote_not_the_cache(tmp_path, monkeypatch):
         monkeypatch.setenv(k, v)
     with mock_aws():
         boto3.client("s3").create_bucket(Bucket="bkt")
-        storage = open_storage("s3://bkt/root", str(tmp_path), area="runs")
+        storage = open_storage("s3://bkt/root", str(tmp_path), area="runs", clock=RealClock(), env=os.environ)
         assert isinstance(storage._remote, JournaledStorage)
         assert not isinstance(storage._local, JournaledStorage)
         storage.create_exclusive(APP, V1, {"verstr": V1}, {})
@@ -125,7 +126,7 @@ def test_cached_log_sync_journals_the_segment(tmp_path, monkeypatch):
         monkeypatch.setenv(k, v)
     with mock_aws():
         boto3.client("s3").create_bucket(Bucket="bkt")
-        storage = open_storage("s3://bkt/root", str(tmp_path), area="runs")
+        storage = open_storage("s3://bkt/root", str(tmp_path), area="runs", clock=RealClock(), env=os.environ)
         storage.create_exclusive(APP, V1, {"verstr": V1}, {})
         storage.append_log_entries(APP, V1, "w", [{"type": "metric"}])
         storage.sync_log_to_remote(APP, V1, "w")
@@ -138,9 +139,9 @@ def test_vmn_exp_prune_trims_old_journal_partitions(tmp_path):
 
     from vmn_exp.cli.prune import experiment_prune
 
-    storage = open_storage(None, str(tmp_path), area="runs")
+    storage = open_storage(None, str(tmp_path), area="runs", clock=RealClock(), env=os.environ)
     old = _key(int(time.time() * 1000) - 3 * DAY_MS)
     sink_for(LocalSnapshotStorage(str(tmp_path), "runs")).put(old)
     args = SimpleNamespace(keep=0, older_than=None, force=False)
-    assert experiment_prune(None, {}, storage, args, APP) == 0
+    assert experiment_prune(None, {}, storage, args, APP, clock=RealClock()) == 0
     assert not (tmp_path / old.rpartition("/")[0]).exists()

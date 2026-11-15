@@ -3,12 +3,14 @@
 weights, and git-free (``VMN_SNAPSHOT_METADATA``)."""
 import io
 import json
+import os
 
 import pytest
 import yaml
 from exp_helpers import _bootstrap, _exp, _init_app, _run_vmn_init, _stamp_app, _storage
 from similar_seed import TRAIN_STEP, features, seed, verstr
 from vmn_exp.cli.main import vmn_exp_run
+from vmn_exp.core.real_io import RealClock, real_io
 from vmn_exp.snapshot import open_storage
 
 
@@ -169,7 +171,7 @@ def container(tmp_path, monkeypatch):
 
 def _git_free(store, capfd, *argv):
     capfd.readouterr()
-    code = vmn_exp_run(["exp", *argv, "--experiment-dir", str(store)])[0]
+    code = vmn_exp_run(["exp", *argv, "--experiment-dir", str(store)], real_io())[0]
     return code, capfd.readouterr()
 
 
@@ -177,7 +179,7 @@ def test_git_free_similar_takes_a_ref(container, capfd):
     code, out = _git_free(container, capfd, "create", "trainer", "--intent", "label smoothing")
     assert code == 0, out.err
     created = out.out.strip().splitlines()[-1]
-    other = seed(open_storage(root=str(container), area="runs"), "trainer", verstr(1),
+    other = seed(open_storage(root=str(container), area="runs", clock=RealClock(), env=os.environ), "trainer", verstr(1),
                  intent={"text": "label smoothing again"})
 
     code, out = _git_free(container, capfd, "similar", "trainer", "-v", created, "--json")

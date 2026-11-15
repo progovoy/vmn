@@ -16,6 +16,7 @@ from vmn_exp.core import index as experiment_index
 from vmn_exp.snapshot import LocalSnapshotStorage
 from vmn_exp.ui import leaderboard_cache
 from vmn_exp.ui.readers import experiments as exp_reader
+from vmn_exp.core.real_io import RealClock, real_io
 
 APP = "app"
 BASE = f"/api/v1/workspaces/ws/apps/{APP}"
@@ -28,14 +29,14 @@ def _ts(i):
 def _app(tmp_path, **opts):
     root = tmp_path / "repo"
     (root / ".git").mkdir(parents=True, exist_ok=True)
-    storage = open_storage(root=local_store_root(str(root)), area="runs")
+    storage = open_storage(root=local_store_root(str(root)), area="runs", clock=RealClock(), env=os.environ)
 
     from vmn_exp.ui.server import create_app
     from vmn_exp.ui.workspaces import WorkspaceManager
 
     manager = WorkspaceManager(str(tmp_path / "data"))
     manager.attach_path("ws", str(root))
-    return create_app(manager, **opts), storage
+    return create_app(manager, io=real_io(), **opts), storage
 
 
 @pytest.fixture
@@ -140,9 +141,9 @@ def test_the_app_list_is_cached_per_workspace(served, monkeypatch):
     calls = []
     real = exp_reader.list_apps
 
-    def counted(root_path):
+    def counted(root_path, clock, env):
         calls.append(root_path)
-        return real(root_path)
+        return real(root_path, clock, env)
 
     monkeypatch.setattr(exp_reader, "list_apps", counted)
     first = client.get("/api/v1/workspaces/ws/apps").json()
@@ -208,7 +209,7 @@ def s3_workspace(tmp_path, monkeypatch):
         data_dir = str(tmp_path / "data")
         manager = WorkspaceManager(data_dir)
         manager.add_store("ws", "s3://vmn-bucket/persisted")
-        yield (lambda: TestClient(create_app(manager))), S3SnapshotStorage(
+        yield (lambda: TestClient(create_app(manager, io=real_io()))), S3SnapshotStorage(
             "vmn-bucket", prefix="persisted/runs"
         ), data_dir
 
@@ -277,7 +278,7 @@ def test_latest_is_found_once_per_snapshot(tmp_path, monkeypatch):
         return real(self, kind)
 
     monkeypatch.setattr(IndexSnapshot, "_latest", counted)
-    source = ExperimentSource(str(tmp_path))
+    source = ExperimentSource(str(tmp_path), clock=real_io().clock, processes=real_io().processes, env=os.environ)
     ws = Workspace(name="ws", path=str(tmp_path))
 
     for _ in range(3):

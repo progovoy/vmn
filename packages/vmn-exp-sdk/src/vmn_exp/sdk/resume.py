@@ -10,9 +10,6 @@ run (``run.release()``) is reopened the same way. A finished run is reopened
 only on request (``reopen=True`` / ``VMN_RESUME_REOPEN=1``): reopening clears
 its exit code, so a resubmitted job must not do it by accident.
 """
-import datetime
-import os
-
 from vmn_exp.core.fork import resolve_run
 from vmn_exp.core.app_conf import experiment_conf
 from vmn_exp.core.run_finish import FINISHED, RunRefusedError
@@ -22,6 +19,7 @@ from vmn_exp.sdk import _resolve_app_name
 from vmn_exp.sdk.create import (
     SNAPSHOT_METADATA_ENV,
     gitmode,
+    require_checkout_here,
     snapshot_app_names,
     snapshot_mode_storage,
 )
@@ -31,17 +29,19 @@ RESUME_ENV = "VMN_RESUME_RUN_ID"
 REOPEN_ENV = "VMN_RESUME_REOPEN"
 
 
-def requested_run_id(run_id, reopen=False):
-    """``(ref, reopen)``: *run_id* with *reopen*, else ``VMN_RESUME_RUN_ID``
-    with ``VMN_RESUME_REOPEN``.
+def requested_run_id(run_id, reopen, env, consume):
+    """``(ref, reopen)``: *run_id* with *reopen*, else *env*'s
+    ``VMN_RESUME_RUN_ID`` with ``VMN_RESUME_REOPEN``.
 
-    The env values are consumed: left in place, every run this process opens
-    next — and every vmn subprocess it launches — would resume the same run again.
+    The env values are consumed (``consume(names)``): left in place, every run
+    this process opens next — and every vmn subprocess it launches — would
+    resume the same run again.
     """
     if run_id:
         return run_id, reopen
-    ref = os.environ.pop(RESUME_ENV, None) or None
-    return ref, is_true(os.environ.pop(REOPEN_ENV, None))
+    ref, reopen = env.get(RESUME_ENV) or None, is_true(env.get(REOPEN_ENV))
+    consume((RESUME_ENV, REOPEN_ENV))
+    return ref, reopen
 
 
 class ReopenRefusedError(RunRefusedError):
@@ -49,9 +49,9 @@ class ReopenRefusedError(RunRefusedError):
     ``exit_code`` its result) without ``reopen=True``."""
 
 
-def check_reopenable(app_name, verstr, prior_state, reopen, from_env):
+def check_reopenable(app_name, verstr, prior_state, reopen, from_env, now):
     """:class:`ReopenRefusedError` when *verstr* has finished and reopening it
-    was not asked for."""
+    was not asked for (its status derived at *now*)."""
     if reopen or prior_state.get("state") != "finished":
         return
     how = f"{REOPEN_ENV}=1" if from_env else "start_run(..., reopen=True)"
@@ -60,27 +60,49 @@ def check_reopenable(app_name, verstr, prior_state, reopen, from_env):
         f"Run '{verstr}' of '{app_name}' has finished (exit code "
         f"{exit_code}); reopening it clears that result. "
         f"Pass {how} to reopen it anyway.",
-        FINISHED, derive_status(prior_state), exit_code, verstr,
+        FINISHED, derive_status(prior_state, now=now), exit_code, verstr,
     )
 
 
-def locate(app_name, ref, storage, action="resume"):
+_UNKNOWN_ARG_HINT = (
+    "start_run(run_id=...) reopens an existing run; to create a run with this "
+    "exact id call create_run(run_id=...) first, or pass name= for a display name"
+)
+_UNKNOWN_ENV_HINT = f"{RESUME_ENV} names a run that does not exist in this store"
+
+
+def existing_run(storage, app_name, ref, from_env):
+    """The verstr of the run *ref* names; ValueError saying ``run_id=`` (or
+    ``VMN_RESUME_RUN_ID`` when *from_env*) reopens and does not create."""
+    try:
+        return resolve_run(storage, app_name, ref, "resume")
+    except ValueError as exc:
+        hint = _UNKNOWN_ENV_HINT if from_env else _UNKNOWN_ARG_HINT
+        raise ValueError(f"{exc}. {hint}.") from None
+
+
+def locate(app_name, ref, storage, action="resume", from_env=False, *, env):
     """``(app_name, storage, verstr, prior_state, exp_conf)``; ValueError if not
-    found."""
-    meta_path = os.environ.get(SNAPSHOT_METADATA_ENV)
+    found (for ``action="resume"``, with the hint of :func:`existing_run`).
+    The Env *env* says whether this is an exported snapshot and names the app."""
+    meta_path = env.get(SNAPSHOT_METADATA_ENV)
     exp_conf = {}
     if meta_path:
-        app_name = _resolve_app_name(app_name, lambda: snapshot_app_names(meta_path))
+        app_name = _resolve_app_name(app_name, lambda: snapshot_app_names(meta_path), env)
         storage = storage or snapshot_mode_storage()
     else:
+        require_checkout_here()
         checkout = gitmode()
-        app_name = _resolve_app_name(app_name, checkout.stamped_apps)
+        app_name = _resolve_app_name(app_name, checkout.stamped_apps, env)
         vcs = checkout.build_vcs(app_name)
         exp_conf = experiment_conf(vcs)
         if storage is None:
             storage = checkout.build_storage(vcs)
 
-    verstr = resolve_run(storage, app_name, ref, action)
+    if action == "resume":
+        verstr = existing_run(storage, app_name, ref, from_env)
+    else:
+        verstr = resolve_run(storage, app_name, ref, action)
     prior_state = load_run_state(storage, app_name, verstr) or {}
     return app_name, storage, verstr, prior_state, exp_conf
 
@@ -98,10 +120,9 @@ def resumed_state(prior, fresh):
     return state
 
 
-def elapsed_before(state):
-    """Seconds between the run's first start and now (0 when unknown)."""
+def elapsed_before(state, now):
+    """Seconds between the run's first start and *now* (0 when unknown)."""
     started = parse_iso(state.get("started_at"))
     if started is None:
         return 0.0
-    now = datetime.datetime.now(datetime.timezone.utc)
     return max(0.0, (now - started).total_seconds())

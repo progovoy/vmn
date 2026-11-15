@@ -71,6 +71,7 @@ _LAZY_REGISTRY: dict[str, str] = {
     "_complete_apps":              "version_stamp.cli.completion:_complete_apps",
     # --- plugin hooks and the CLI runner, for vmn-exp's commands ------------
     "CommandSpec":                 "version_stamp.cli.plugin_api:CommandSpec",
+    "Frontend":                    "version_stamp.cli.plugin_api:Frontend",
     "register_command":            "version_stamp.cli.plugin_api:register",
     "find_command":                "version_stamp.cli.plugin_api:find",
     "register_dev_version_loader": "version_stamp.cli.plugin_api:register_dev_version_loader",

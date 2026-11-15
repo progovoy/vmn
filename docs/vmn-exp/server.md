@@ -69,6 +69,8 @@ auth:
     client_id: vmn-exp
     client_secret_env: VMN_OIDC_SECRET  # env var holding the client secret
     groups_claim: groups                # default "groups"
+    session_ttl_hours: 12               # browser session lifetime (default 12)
+    login_token_ttl_days: 90            # `vmn-exp login` token lifetime (default 90)
   role_mappings:
     - {group: ml-admins, workspace: "*", role: admin}
     - {group: ml-team,   workspace: ml-team, role: editor}
@@ -109,8 +111,14 @@ with the server's own read access. The bucket then needs CORS for the
 dashboard's origin (see [byo-bucket.md](byo-bucket.md#cors-for-redirect-downloads)).
 `stream` (the default) passes the bytes through the server.
 
-The server refuses to bind beyond localhost without a token unless
-`--read-only` is given. This is the same rule as standalone mode.
+The server refuses to bind beyond localhost without authentication: a static
+token or `auth.oidc`. `--read-only` lets it start without either, with a
+warning, since reads are then open to anyone who can reach the port. A control
+plane alone does not count: API tokens cannot be minted without a first admin.
+
+The static token acts as `admin` in every workspace, so it is optional once
+`auth.oidc` is configured. An OIDC-only server needs at least one
+`role_mappings` entry granting `admin` on `"*"`, or nobody can administer it.
 
 ## The cache
 
@@ -140,6 +148,9 @@ series, artifacts, media and code are not cached. Run pages read them from
 storage on demand. `--no-index` keeps the cache in memory only.
 
 ### Upgrades
+
+Which release changed which cache or store format, and what that upgrade
+costs, is listed in [upgrading.md](upgrading.md#formats).
 
 An upgrade of `vmn-exp ui` never empties the cache it can keep, and never holds
 a write lock on it for longer than a chunk of 500 runs. The cache has two
@@ -206,6 +217,11 @@ the per-workspace SQLite files, so several replicas can share one cache:
   reconciles fully first).
 - A save sends `NOTIFY vmn_gen`; followers `LISTEN` and refresh at once,
   falling back to their once-a-second tick.
+- A job (what `POST .../actions/{action}` starts) lives in the memory of the
+  replica that started it. Several replicas need sticky routing (session
+  affinity) for `POST .../actions/{action}` and `GET /api/v1/jobs/{id}`, or
+  one replica that takes every mutation. Without it a poll can answer 404 for
+  a job that is running; a restart forgets its jobs the same way.
 - Every Postgres store (cache, control plane, search) uses a connection pool per
   DSN with these defaults:
   - 1 to 10 connections, checked when taken from the pool;
@@ -236,7 +252,7 @@ the per-workspace SQLite files, so several replicas can share one cache:
   Postgres-backed server, filed from the same index refreshes), never from the
   synced rows (they carry no features or intent); items name their
   `workspace`. Parameters, limits and the item shape are in
-  [ui.md](ui.md#similar-runs).
+  [ui-api.md](ui-api.md#similar-runs).
 - Git workspaces keep their SQLite cache under `<data_dir>/index/`, per replica.
 
 Server-side edits (rewind, notes) write log segments under the writer id
@@ -336,8 +352,9 @@ journal partitions older than 2 days (not `prune -v`, nor with
 
 ## Prometheus metrics
 
-`GET /metrics` (viewer; with a token, scrape with `Authorization: Bearer`)
-serves Prometheus text (0.0.4), so Grafana can alert on a fleet with nobody
+`GET /metrics` (viewer; with a token, scrape with `Authorization: Bearer`;
+without one, scrape by a name the [Host allowlist](ui.md#remote-deployment) accepts,
+e.g. `--allowed-host <pod-ip>`, or get 403) serves Prometheus text (0.0.4), so Grafana can alert on a fleet with nobody
 watching the UI. Besides `vmn_cache_drift_total` (counter, per `workspace`),
 every app carries these gauges, labelled `workspace` and `app`:
 
@@ -399,6 +416,10 @@ You can also trigger it by hand:
 | CLI | `vmn-exp ui cache resync [--workspace <name>]` | `vmn-exp ui cache rebuild [--workspace <name>]` |
 | UI | **Resync** button on the workspace dashboard | **Rebuild** button |
 
+The CLI asks the server at `--host`/`--port` (or `--config`'s); those two
+flags go before the verb: `vmn-exp ui --port 9000 cache rebuild`. `--config`,
+`--db`, `--token` and `--data-dir` go before or after it.
+
 Both POSTs answer `202` and need the `admin` role. The UI buttons only appear
 for admins and show a progress line (`rebuilding: 41,000 / 100,000 records`).
 
@@ -423,7 +444,7 @@ is the standalone behaviour.
 | Method | For | Notes |
 |---|---|---|
 | Static token (`--token`, or the env var named by `auth.static_token_env`) | standalone, scripts | `Authorization: Bearer <token>`; acts as `admin` in every workspace |
-| OIDC (`auth.oidc`) | browsers | authorization-code flow against the issuer's discovery document. Routes: `/auth/login`, `/auth/callback` (the redirect URI is `<public_url>/auth/callback`), `POST /auth/logout`. The session cookie `vmn_session` is `HttpOnly`, `Secure`, `SameSite=Lax` and lasts 12 h |
+| OIDC (`auth.oidc`) | browsers | authorization-code flow against the issuer's discovery document. Routes: `/auth/login`, `/auth/callback` (the redirect URI is `<public_url>/auth/callback`), `POST /auth/logout`. The session cookie `vmn_session` is `HttpOnly`, `Secure`, `SameSite=Lax` and lasts `auth.oidc.session_ttl_hours` (default 12 h) |
 | API tokens | scripts and CLI calls to the server API | `vmnx_<id>_<secret>` bearer tokens. Needs a control plane (`--config` or `--db`) |
 
 An unauthenticated `/api` request gets a 401 with `WWW-Authenticate: Bearer`
@@ -437,6 +458,30 @@ sign-in page reads:
 `login_url` is `null` without OIDC. `GET /api/v1/meta` carries the same hints
 under `auth`.
 
+The ID token's signature is checked against the keys the IdP publishes at its
+discovery document's `jwks_uri`, before its issuer, audience, expiry and
+nonce. Only **RS256** is accepted, with keys of at least 2048 bits. An IdP that
+signs ID tokens with another algorithm (ES256, PS256, ...) or not at all, or
+whose discovery document has no `jwks_uri`, cannot log anyone in: the browser
+login answers 400 `Login failed: id_token alg 'ES256' is not supported: only
+RS256 is accepted` (or `... has no jwks_uri`), and `vmn-exp login` fails with
+`invalid_grant`. Configure the IdP's client to sign ID tokens with RS256 (the
+OIDC default). The key set is cached; a token whose `kid` is not in it
+re-fetches the set at most once a minute, so a key rotation is picked up.
+
+OIDC runs over TLS only:
+
+- `auth.oidc.issuer` and, with OIDC, `server.public_url` must be `https://`
+  URLs. Otherwise the server does not start, and the error names the key.
+- The discovery document's `authorization_endpoint`, `token_endpoint`,
+  `device_authorization_endpoint` and `jwks_uri` must be `https://` too, or
+  login answers 502.
+- A redirected answer from discovery or the token endpoint is refused.
+- Plain `http://` is accepted only on a loopback host (`localhost`,
+  `127.0.0.0/8`, `::1`), for a local IdP in development. There is no flag
+  to allow anything else. Behind a TLS-terminating proxy, set `public_url`
+  to the `https://` URL browsers use.
+
 Only an HMAC-SHA256 of each API token's secret is stored. Its key is generated
 once per control plane and kept in it. Secrets are 256-bit random, so a slow
 password hash would add cost and no safety. Expired sessions and login states
@@ -444,15 +489,23 @@ are deleted at startup, hourly and on every login. Admins manage tokens through
 the API:
 
 ```
-GET    /api/v1/tokens                       list (no secrets)
+GET    /api/v1/tokens[?offset=&limit=]      list (no secrets); a page carries
+                                            the total in X-Total-Count
 POST   /api/v1/tokens  {"name", "roles": {"<ws>|*": "<role>"}, "ttl_sec"?}
                                             -> {"token", "record"}; the secret is shown once
 DELETE /api/v1/tokens/{id}                  revoke
+DELETE /api/v1/tokens?owner=<principal id>  revoke every token of that owner and close
+                                            their browser sessions
+                                            -> {"tokens": n, "sessions": m}
 ```
+
+The owner of a `vmn-exp login` token and the id of a browser session is
+`oidc:<sub>` (the `owner` field of a listed token), so one call cuts a user
+off on every channel.
 
 `vmn-exp login --server <url>` runs the OIDC device flow through the server
 (`/auth/device/start`, `/auth/device/token`) and stores the API token it gets
-(valid 90 days) in `~/.config/vmn-exp/credentials`, mode 0600 (honours
+(valid `auth.oidc.login_token_ttl_days`, default 90 days) in `~/.config/vmn-exp/credentials`, mode 0600 (honours
 `$XDG_CONFIG_HOME`). Jobs never need it.
 
 None of these grant storage access.
@@ -470,6 +523,19 @@ There are three roles per workspace, `viewer < editor < admin`:
 A principal's role in a workspace is the strongest of its own entry for that
 workspace, its `*` entry, and every `role_mappings` entry whose `group` is in
 its OIDC groups claim. With authentication off, everything is allowed.
+A job (`GET /api/v1/jobs/{id}`) belongs to the workspace and org it was
+started in: a principal without a role there gets `404 Job not found`, the
+answer for an unknown id, so a job id is never confirmed.
+
+OIDC browser sessions and `vmn-exp login` tokens store the user's groups,
+never roles: the role is derived from the groups and the current
+`role_mappings` on every request, so a mapping removed from `server.yml` takes
+effect at the next restart. Group membership itself is read from the IdP at
+login, so a user removed from an IdP group keeps it until their session or
+login token expires (`auth.oidc.session_ttl_hours`,
+`auth.oidc.login_token_ttl_days`). For an urgent removal, call
+`DELETE /api/v1/tokens?owner=oidc:<sub>`. Admin-created API tokens carry the
+explicit roles they were created with.
 
 The audit log records mutations and logins. Admins page it with
 `GET /api/v1/audit?offset=&limit=` (one indexed page per request), or stream it
@@ -521,7 +587,7 @@ ui:
   `ui.tree_columns` maps a `tags.kind` value to the show keys
   (`m:`/`p:`/`t:`/`c:<name>`) the [tree](ui.md#the-tree) shows for runs of
   that kind. `ui.attention` lists at most 8
-  attention queries `{key, label, query, level}` ([ui.md](ui.md#status-counts-and-rollup)):
+  attention queries `{key, label, query, level}` ([ui-api.md](ui-api.md#status-counts-and-rollup)):
   `key` letters, digits, `_`, `-` (unique, not the built-in
   `stuck`/`failed`/`running`/`outlived`),
   `label` defaulting to the key, `level` `warn` (default) or `error`. Saving
@@ -530,7 +596,7 @@ ui:
   vmn's back is reported on its part (`error`). A checkout's conf.yml `experiment.ui.attention` beats
   it as a whole (a bad list there reads as none).
   `ui.baseline` is how an outer run finds the one it is
-  [compared with](ui.md#baseline-compare): `match` (at most 8 distinct
+  [compared with](ui-api.md#baseline-compare): `match` (at most 8 distinct
   `params.<k>`/`tags.<k>` fields the baseline must share; none: any),
   `differ` (at most 8 such fields, none also in `match`, on which the
   baseline must hold another value; a run or peer missing one is no pair) and
@@ -581,3 +647,7 @@ for `read`, and a create-if-absent write of a probe key under
 `<root>/server/probe/` for `edit`. The result is saved with the workspace.
 Without `edit`, edit requests get `403`. Git workspaces keep running their
 actions as `vmn` subprocesses in the checkout.
+
+Each edit is a job bounded by the job timeout, and an edit whose upload
+failed is retried before the next action on the workspace; see
+[ui.md](ui.md#actions).

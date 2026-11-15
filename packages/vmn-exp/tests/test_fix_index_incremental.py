@@ -2,7 +2,10 @@
 new and live records' files; a periodic full sweep is the safety net."""
 import os
 
+from datetime import datetime, timezone
+
 import pytest
+from fakes.clock import FakeClock
 
 from vmn_exp.snapshot import LocalSnapshotStorage
 from vmn_exp.core import index as experiment_index
@@ -12,19 +15,9 @@ APP = "app"
 FINISHED = "state: finished\nexit_code: 0\n"
 
 
-class Clock:
-    def __init__(self):
-        self.now = 1000.0
-
-    def __call__(self):
-        return self.now
-
-
 @pytest.fixture
-def clock(monkeypatch):
-    c = Clock()
-    monkeypatch.setattr(experiment_index, "_monotonic", c)
-    return c
+def clock():
+    return FakeClock(start=datetime.now(timezone.utc), monotonic=1000.0)
 
 
 @pytest.fixture
@@ -97,11 +90,11 @@ def test_a_no_change_refresh_lists_only_live_records(st, listed, clock):
     # A created record with no run_state.yml settles like a finished one: it
     # is not going to grow one on its own, so it is not "live" either.
     never_run = _make(st, 6)
-    index = ExperimentIndex(st, APP, full_sweep_sec=300)
+    index = ExperimentIndex(st, APP, full_sweep_sec=300, clock=clock)
     index.refresh()
     assert listed == [None]  # the first refresh is a full sweep
 
-    clock.now += 1
+    clock.advance(1)
     index.refresh()
     assert listed[1:] == [{live}]
     assert len(index.rows()) == 5
@@ -110,12 +103,12 @@ def test_a_no_change_refresh_lists_only_live_records(st, listed, clock):
 
 def test_new_and_removed_records_are_seen_without_a_full_sweep(st, listed, clock):
     old = [_make(st, i, FINISHED) for i in range(2)]
-    index = ExperimentIndex(st, APP, full_sweep_sec=300)
+    index = ExperimentIndex(st, APP, full_sweep_sec=300, clock=clock)
     index.refresh()
 
     new = _make(st, 7, FINISHED)
     st.delete(APP, old[0])
-    clock.now += 1
+    clock.advance(1)
     index.refresh()
 
     assert listed[1:] == [{new}]
@@ -125,47 +118,47 @@ def test_new_and_removed_records_are_seen_without_a_full_sweep(st, listed, clock
 
 def test_a_live_run_is_followed_until_it_finishes_and_a_while_after(st, clock):
     verstr = _make(st, 1, "state: running\n")
-    index = ExperimentIndex(st, APP, full_sweep_sec=300)
+    index = ExperimentIndex(st, APP, full_sweep_sec=300, clock=clock)
     index.refresh()
 
     st.save_file(APP, verstr, "run_state.yml", FINISHED)
-    clock.now += 1
+    clock.advance(1)
     index.refresh()
     assert index.run_states()[verstr]["exit_code"] == 0
 
     # Its last metrics may land just after the exit code.
     st.append_log_entry(APP, verstr, "w", {"timestamp": "u", "type": "metrics",
                                             "values": {"loss": 0.5}})
-    clock.now += 1
+    clock.advance(1)
     index.refresh()
     assert index.rows()[0]["metrics"]["loss"] == 0.5
 
 
 def test_a_finished_run_goes_quiet_after_the_sweep_window(st, listed, clock):
     verstr = _make(st, 1, "state: running\n")
-    index = ExperimentIndex(st, APP, full_sweep_sec=300)
+    index = ExperimentIndex(st, APP, full_sweep_sec=300, clock=clock)
     index.refresh()
     st.save_file(APP, verstr, "run_state.yml", FINISHED)
-    clock.now += 1
+    clock.advance(1)
     index.refresh()
 
-    clock.now += 298
+    clock.advance(298)
     del listed[:]
     index.refresh()  # changed 298s ago: still listed
-    clock.now += 1
+    clock.advance(1)
     index.refresh()  # a full sweep is due: 300s since the first one
-    clock.now += 2
+    clock.advance(2)
     index.refresh()  # quiet since the window closed: nothing to list
     assert listed == [{verstr}, None]
 
 
 def test_a_note_on_a_finished_run_shows_up_at_the_next_full_sweep(st, clock):
     verstr = _make(st, 1, FINISHED)
-    index = ExperimentIndex(st, APP, full_sweep_sec=300)
+    index = ExperimentIndex(st, APP, full_sweep_sec=300, clock=clock)
     index.refresh()
 
     st.update_note(APP, verstr, "renamed")
-    clock.now += 301
+    clock.advance(301)
     index.refresh()
     assert index.rows()[0]["note"] == "renamed"
 
@@ -188,9 +181,9 @@ def test_a_storage_without_names_listing_always_lists_everything(st, clock):
 
     _make(st, 1, FINISHED)
     plain = Plain(st)
-    index = ExperimentIndex(plain, APP)
+    index = ExperimentIndex(plain, APP, clock=clock)
     index.refresh()
-    clock.now += 1
+    clock.advance(1)
     index.refresh()
     assert plain.calls == 2
     assert len(index.rows()) == 1
@@ -198,11 +191,11 @@ def test_a_storage_without_names_listing_always_lists_everything(st, clock):
 
 def test_a_note_on_a_finished_run_shows_up_at_the_next_refresh(st, listed, clock):
     done, other = _make(st, 1, FINISHED), _make(st, 2, FINISHED)
-    index = ExperimentIndex(st, APP, full_sweep_sec=300)
+    index = ExperimentIndex(st, APP, full_sweep_sec=300, clock=clock)
     index.refresh()
 
     st.update_note(APP, done, "renamed")
-    clock.now += 1
+    clock.advance(1)
     index.refresh()
 
     assert listed[1:] == [{done}]
@@ -212,11 +205,11 @@ def test_a_note_on_a_finished_run_shows_up_at_the_next_refresh(st, listed, clock
 
 def test_an_exit_code_rewrite_on_a_finished_run_shows_up_at_the_next_refresh(st, clock):
     verstr = _make(st, 1, FINISHED)
-    index = ExperimentIndex(st, APP, full_sweep_sec=300)
+    index = ExperimentIndex(st, APP, full_sweep_sec=300, clock=clock)
     index.refresh()
 
     st.save_file(APP, verstr, "run_state.yml", "state: finished\nexit_code: 9\n")
-    clock.now += 1
+    clock.advance(1)
     index.refresh()
     assert index.run_states()[verstr]["exit_code"] == 9
 
@@ -228,24 +221,24 @@ def test_names_without_signatures_wait_for_the_full_sweep(st, clock):
 
     names_only = NamesOnly(st.root, area="runs")
     verstr = _make(names_only, 1, FINISHED)
-    index = ExperimentIndex(names_only, APP, full_sweep_sec=300)
+    index = ExperimentIndex(names_only, APP, full_sweep_sec=300, clock=clock)
     index.refresh()
 
     names_only.update_note(APP, verstr, "renamed")
-    clock.now += 1
+    clock.advance(1)
     index.refresh()
     assert index.rows()[0]["note"] is None
-    clock.now += 300
+    clock.advance(300)
     index.refresh()
     assert index.rows()[0]["note"] == "renamed"
 
 
 def test_a_backend_that_cannot_list_names_gets_a_full_listing(st, listed, clock):
     _make(st, 1, FINISHED)
-    index = ExperimentIndex(st, APP, full_sweep_sec=300)
+    index = ExperimentIndex(st, APP, full_sweep_sec=300, clock=clock)
     index.refresh()
     st.list_record_names = lambda app_name: None
-    clock.now += 1
+    clock.advance(1)
     index.refresh()
     assert listed == [None, None]
 
@@ -256,19 +249,19 @@ def test_a_backend_that_cannot_list_names_gets_a_full_listing(st, listed, clock)
 def test_by_default_a_full_listing_runs_every_300_seconds(st, listed, clock):
     # Plan 25 F2: no longer every refresh (that was the default before).
     _make(st, 1, FINISHED)
-    index = ExperimentIndex(st, APP)
+    index = ExperimentIndex(st, APP, clock=clock)
     assert index.full_sweep_sec == 300
     index.refresh()
-    clock.now += 299
+    clock.advance(299)
     index.refresh()
-    clock.now += 1
+    clock.advance(1)
     index.refresh()
     assert listed == [None, None]
 
 
 def test_full_sweep_sec_0_makes_every_refresh_a_full_listing(st, listed, clock):
     verstr = _make(st, 1, FINISHED)
-    index = ExperimentIndex(st, APP, full_sweep_sec=0)
+    index = ExperimentIndex(st, APP, full_sweep_sec=0, clock=clock)
     index.refresh()
     folder = st._snapshot_dir(APP, verstr)
     os.makedirs(os.path.dirname(os.path.join(folder, "log/w.jsonl")), exist_ok=True)
@@ -281,10 +274,10 @@ def test_full_sweep_sec_0_makes_every_refresh_a_full_listing(st, listed, clock):
 
 def test_the_fast_tier_can_be_switched_on_later(st, listed, clock):
     _make(st, 1, FINISHED)
-    index = ExperimentIndex(st, APP, full_sweep_sec=0)
+    index = ExperimentIndex(st, APP, full_sweep_sec=0, clock=clock)
     index.refresh()
     index.full_sweep_sec = 300
-    clock.now += 1
+    clock.advance(1)
     index.refresh()
     assert listed == [None]
 
@@ -306,11 +299,11 @@ def test_an_append_through_the_storage_bumps_the_record_signature(st):
 
 def test_an_append_to_a_finished_run_shows_up_in_the_fast_tier(st, listed, clock):
     verstr = _make(st, 1, FINISHED)
-    index = ExperimentIndex(st, APP, full_sweep_sec=300)
+    index = ExperimentIndex(st, APP, full_sweep_sec=300, clock=clock)
     index.refresh()
     st.append_log_entry(APP, verstr, "w", {"timestamp": "u", "type": "metrics",
                                             "values": {"loss": 0.25}})
-    clock.now += 1
+    clock.advance(1)
     index.refresh()
     assert listed[1:] == [{verstr}]
     assert index.rows()[0]["metrics"]["loss"] == 0.25

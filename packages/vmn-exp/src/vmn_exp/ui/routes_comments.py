@@ -9,6 +9,7 @@ from fastapi import HTTPException, Request
 from vmn_exp.reports import comments
 from vmn_exp.ui.auth.authz import require
 from vmn_exp.ui.auth.principal import EDITOR, VIEWER
+from vmn_exp.ui.body_checks import comment_links
 from vmn_exp.ui.request_author import author_of, require_author_or_admin
 from vmn_exp.ui.routes_reports import RID_RE, check_bools
 from vmn_exp.ui.security import safe_app_name, safe_segment
@@ -16,7 +17,9 @@ from vmn_exp.ui.security import safe_app_name, safe_segment
 
 def parse_target(raw):
     """``("run", app, verstr)`` / ``("report", rid)`` of *raw*, or a 400."""
-    kind, _, rest = (raw or "").partition(":")
+    if not isinstance(raw, str):
+        raise HTTPException(400, f"Invalid comment target {raw!r}")
+    kind, _, rest = raw.partition(":")
     if kind == "report" and RID_RE.match(rest):
         return ("report", rest)
     if kind == "run":
@@ -27,8 +30,10 @@ def parse_target(raw):
     raise HTTPException(400, f"Invalid comment target {raw!r}")
 
 
-def register(app, api_prefix, any_exp_storage):
-    """*any_exp_storage(ws_name)* returns the workspace's experiment storage."""
+def register(app, api_prefix, any_exp_storage, io):
+    """*any_exp_storage(ws_name)* returns the workspace's experiment storage;
+    *io*'s random draws new comment ids; the server's writes are the writer's
+    of its env and host."""
     base = f"{api_prefix}/workspaces/{{ws_name}}/comments"
 
     def _require_rw():
@@ -52,9 +57,11 @@ def register(app, api_prefix, any_exp_storage):
         target, text = parse_target(body.get("target")), body.get("text")
         if not isinstance(text, str) or not text.strip():
             raise HTTPException(400, "text must be a non-empty string")
+        reply_to, anchor = comment_links(body)
         comment_id = comments.add(any_exp_storage(ws_name), target, text,
-                                  reply_to=body.get("reply_to"), anchor=body.get("anchor"),
-                                  author=author_of(request))
+                                  reply_to=reply_to, anchor=anchor,
+                                  author=author_of(request, io.env, io.host), random=io.random,
+                                  env=io.env, host=io.host)
         return {"id": comment_id}
 
     @app.patch(f"{base}/{{target:path}}/{{comment_id}}", dependencies=[require(EDITOR)])
@@ -66,9 +73,9 @@ def register(app, api_prefix, any_exp_storage):
         storage = any_exp_storage(ws_name)
         require_author_or_admin(request, ws_name, _existing(storage, parsed, comment_id)["author"])
         if isinstance(body.get("text"), str):
-            comments.edit(storage, parsed, comment_id, body["text"])
+            comments.edit(storage, parsed, comment_id, body["text"], env=io.env, host=io.host)
         if "resolved" in body:
-            comments.resolve(storage, parsed, comment_id, body["resolved"])
+            comments.resolve(storage, parsed, comment_id, body["resolved"], env=io.env, host=io.host)
         return {}
 
     @app.delete(f"{base}/{{target:path}}/{{comment_id}}", dependencies=[require(EDITOR)])
@@ -76,5 +83,5 @@ def register(app, api_prefix, any_exp_storage):
         _require_rw()
         parsed, storage = parse_target(target), any_exp_storage(ws_name)
         require_author_or_admin(request, ws_name, _existing(storage, parsed, comment_id)["author"])
-        comments.delete(storage, parsed, comment_id)
+        comments.delete(storage, parsed, comment_id, env=io.env, host=io.host)
         return {}

@@ -25,6 +25,7 @@ import pytest
 from vmn_exp.storage.local import LocalSnapshotStorage
 from vmn_exp.registry.store import ensure_model, register_version
 from vmn_exp.registry.log import set_alias
+from vmn_exp.core.real_io import real_io
 
 
 # ---------------------------------------------------------------------------
@@ -85,7 +86,7 @@ def _make_args(**kwargs):
 
 def _invoke(tmp_path, args_kwargs, env=None):
     """Call model_run_without_repo(args) with VMN_EXPERIMENT_DIR set to tmp_path."""
-    from vmn_exp.registry.cli import model_run_without_repo
+    from vmn_exp.cli.model_cmd import model_run_without_repo
 
     args = _make_args(dir=str(tmp_path), **args_kwargs)
     old_env = {}
@@ -97,7 +98,7 @@ def _invoke(tmp_path, args_kwargs, env=None):
             else:
                 os.environ[k] = v
     try:
-        return model_run_without_repo(args)
+        return model_run_without_repo(args, real_io())
     finally:
         for k, v in old_env.items():
             if v is None:
@@ -319,7 +320,7 @@ def test_delete_with_alias_refused(tmp_path, capsys):
 
 def test_git_free_via_experiment_dir(tmp_path, monkeypatch, capsys):
     """model_run_without_repo works when VMN_EXPERIMENT_DIR is set (no --dir)."""
-    from vmn_exp.registry.cli import model_run_without_repo
+    from vmn_exp.cli.model_cmd import model_run_without_repo
 
     monkeypatch.setenv("VMN_EXPERIMENT_DIR", str(tmp_path))
 
@@ -334,12 +335,12 @@ def test_git_free_via_experiment_dir(tmp_path, monkeypatch, capsys):
         app="myapp",
         dir=None,  # no explicit dir
     )
-    rc = model_run_without_repo(args)
+    rc = model_run_without_repo(args, real_io())
     assert rc == 0
 
     # list works too
     args_list = _make_args(action="list", dir=None)
-    rc = model_run_without_repo(args_list)
+    rc = model_run_without_repo(args_list, real_io())
     assert rc == 0
     out = capsys.readouterr().out
     assert "gpt2" in out

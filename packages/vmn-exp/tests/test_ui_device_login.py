@@ -1,21 +1,24 @@
 """``vmn-exp login``: OIDC device flow through the server, a 0600 credentials file."""
+import dataclasses
 import json
 import os
 import stat
+import time
 
 import pytest
 
 fastapi = pytest.importorskip("fastapi")
 from fastapi.testclient import TestClient
-
-from test_ui_auth_oidc import ISSUER, _jwt
-
+from oidc_test_keys import JWKS_URI, jwks
+from test_ui_auth_oidc import ISSUER, _jwt, _unsigned
 from vmn_exp.cli import login as login_cli
 from vmn_exp.ui.audit import AuditLog
 from vmn_exp.ui.auth import AuthenticatorChain
+from vmn_exp.ui.auth.jwks import JwksVerifier
 from vmn_exp.ui.auth.oidc import OIDCAuthenticator, OIDCConfig
 from vmn_exp.ui.auth.principal import EDITOR
 from vmn_exp.ui.control_plane import SQLiteControlPlane
+from vmn_exp.core.real_io import RealRandom, real_io
 
 DEVICE_GRANT = "urn:ietf:params:oauth:grant-type:device_code"
 SERVER = "https://vmn.example"
@@ -30,10 +33,13 @@ class FakeDeviceIdP:
         self.approved = False
 
     def get_json(self, url):
+        if url == JWKS_URI:
+            return jwks()
         assert url == f"{ISSUER}/.well-known/openid-configuration"
         return {"issuer": ISSUER, "authorization_endpoint": f"{ISSUER}/authorize",
                 "token_endpoint": f"{ISSUER}/token",
-                "device_authorization_endpoint": f"{ISSUER}/device"}
+                "device_authorization_endpoint": f"{ISSUER}/device",
+                "jwks_uri": JWKS_URI}
 
     def post_form(self, url, data):
         if url == f"{ISSUER}/device":
@@ -50,18 +56,20 @@ class FakeDeviceIdP:
         return {"access_token": "at", "id_token": _jwt(claims)}
 
 
-def _server(tmp_path, idp):
+ML_TEAM_EDITOR = [{"group": "ml-team", "workspace": "ml", "role": EDITOR}]
+
+
+def _server(tmp_path, idp, **oidc_kw):
     from vmn_exp.ui.server import create_app
     from vmn_exp.ui.workspaces import WorkspaceManager
 
     cp = SQLiteControlPlane(str(tmp_path / "cp.sqlite3"))
     config = OIDCConfig(issuer=ISSUER, client_id="vmn-exp",
-                        redirect_uri=f"{SERVER}/auth/callback",
-                        role_mappings=[{"group": "ml-team", "workspace": "ml",
-                                        "role": EDITOR}])
-    oidc = OIDCAuthenticator(config, cp, http=idp)
-    app = create_app(WorkspaceManager(str(tmp_path / "ui")),
-                     auth=AuthenticatorChain([oidc]), control_plane=cp)
+                        redirect_uri=f"{SERVER}/auth/callback")
+    oidc = OIDCAuthenticator(config, cp, JwksVerifier(idp, lambda: 0.0), http=idp, clock=time.time, **oidc_kw, random=RealRandom())
+    app = create_app(WorkspaceManager(str(tmp_path / "ui")), io=real_io(),
+                     auth=AuthenticatorChain([oidc]), control_plane=cp,
+                     role_mappings=ML_TEAM_EDITOR)
     return TestClient(app, base_url=SERVER), cp
 
 
@@ -80,7 +88,7 @@ def test_login_writes_a_0600_credentials_file_with_a_working_token(tmp_path, mon
     client, cp = _server(tmp_path, FakeDeviceIdP(pending_polls=2))
     prompts = []
     code = login_cli.login(SERVER, post_json=_transport(client),
-                           sleep=lambda s: None, say=prompts.append)
+                           sleep=lambda s: None, say=prompts.append, env=real_io().env)
     assert code == 0
     assert any("ABCD-EFGH" in p and "/activate" in p for p in prompts)
     path = tmp_path / "home" / ".config" / "vmn-exp" / "credentials"
@@ -89,22 +97,58 @@ def test_login_writes_a_0600_credentials_file_with_a_working_token(tmp_path, mon
     assert token.startswith("vmnx_")
     r = client.get("/api/v1/workspaces", headers={"Authorization": f"Bearer {token}"})
     assert r.status_code == 200
-    assert login_cli.load_token(SERVER) == token
-    logins = [e for e in AuditLog(cp).entries() if e["action"] == "login"]
+    assert login_cli.load_token(SERVER, real_io().env) == token
+    logins = [e for e in AuditLog(cp, time.time, random=RealRandom()).entries() if e["action"] == "login"]
     assert logins and logins[-1]["actor"] == "oidc:u1"
 
 
-def test_token_carries_the_mapped_roles(tmp_path, monkeypatch):
+def test_login_token_carries_groups_not_roles(tmp_path, monkeypatch):
     monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "xdg"))
     client, cp = _server(tmp_path, FakeDeviceIdP(pending_polls=0))
     assert login_cli.login(SERVER, post_json=_transport(client),
-                           sleep=lambda s: None, say=lambda m: None) == 0
+                           sleep=lambda s: None, say=lambda m: None, env=real_io().env) == 0
+    from vmn_exp.ui.auth.authz import effective_role
     from vmn_exp.ui.auth.tokens import TokenService
 
-    token = login_cli.load_token(SERVER)
-    principal = TokenService(cp).verify(token)
-    assert principal.roles == {"ml": EDITOR} and principal.id.startswith("token:")
+    token = login_cli.load_token(SERVER, real_io().env)
+    principal = TokenService(cp, time.time, random=RealRandom()).verify(token)
+    assert principal.roles == {} and principal.groups == ("ml-team",)
+    assert principal.id.startswith("token:")
+    assert effective_role(principal, "ml", ML_TEAM_EDITOR) == EDITOR
     assert (tmp_path / "xdg" / "vmn-exp" / "credentials").exists()
+
+
+def test_login_token_ttl_from_config(tmp_path, monkeypatch):
+    import argparse
+
+    from vmn_exp.ui.auth.tokens import TokenService
+    from vmn_exp.ui.cli import build_server, server_app
+
+    path = tmp_path / "server.yml"
+    path.write_text(f"""
+data_dir: {tmp_path / 'data'}
+server: {{public_url: "{SERVER}"}}
+auth:
+  oidc: {{issuer: "{ISSUER}", client_id: vmn-exp, session_ttl_hours: 2,
+          login_token_ttl_days: 7}}
+""")
+    args = argparse.Namespace(host="127.0.0.1", port=8265, token=None, data_dir=None,
+                              db=None, config=str(path), repo=None, store=None,
+                              read_only=False, no_index=True, allowed_host=None)
+    manager, cfg, cp = build_server(args, env={})
+    app = server_app(manager, cfg, cp, args, io=dataclasses.replace(real_io(), env={}))
+    oidc = next(a for a in app.state.auth_chain.authenticators
+                if isinstance(a, OIDCAuthenticator))
+    assert oidc.sessions.ttl_sec == 2 * 3600
+    assert oidc.login_token_ttl_sec == 7 * 24 * 3600
+
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "xdg"))
+    client, cp = _server(tmp_path, FakeDeviceIdP(pending_polls=0),
+                         login_token_ttl_sec=oidc.login_token_ttl_sec)
+    assert login_cli.login(SERVER, post_json=_transport(client),
+                           sleep=lambda s: None, say=lambda m: None, env=real_io().env) == 0
+    (record,) = TokenService(cp, time.time, random=RealRandom()).list()
+    assert record.expires_at - record.created_at == 7 * 24 * 3600
 
 
 def test_unknown_device_code_is_refused(tmp_path):
@@ -126,19 +170,19 @@ def test_login_fails_cleanly_when_the_idp_denies(tmp_path, monkeypatch):
     client, _ = _server(tmp_path, Denying())
     msgs = []
     code = login_cli.login(SERVER, post_json=_transport(client),
-                           sleep=lambda s: None, say=msgs.append)
+                           sleep=lambda s: None, say=msgs.append, env=real_io().env)
     assert code == 1 and any("access_denied" in m for m in msgs)
     assert not (tmp_path / "home" / ".config" / "vmn-exp" / "credentials").exists()
 
 
 def test_login_keeps_other_servers_tokens(tmp_path, monkeypatch):
     monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path))
-    login_cli.save_token("https://other", "vmnx_a_b")
+    login_cli.save_token("https://other", "vmnx_a_b", env=real_io().env)
     client, _ = _server(tmp_path, FakeDeviceIdP(pending_polls=0))
     login_cli.login(SERVER, post_json=_transport(client), sleep=lambda s: None,
-                    say=lambda m: None)
-    assert login_cli.load_token("https://other") == "vmnx_a_b"
-    assert login_cli.load_token(SERVER).startswith("vmnx_")
+                    say=lambda m: None, env=real_io().env)
+    assert login_cli.load_token("https://other", real_io().env) == "vmnx_a_b"
+    assert login_cli.load_token(SERVER, real_io().env).startswith("vmnx_")
 
 
 def test_vmn_exp_login_dispatches_to_the_login_command(monkeypatch):
@@ -173,5 +217,33 @@ def test_server_app_wires_the_control_plane(tmp_path):
 
     args = argparse.Namespace(host="127.0.0.1", read_only=False, no_index=False)
     cp = SQLiteControlPlane(str(tmp_path / "cp.sqlite3"))
-    app = server_app(WorkspaceManager(str(tmp_path / "ui")), None, cp, args)
+    app = server_app(WorkspaceManager(str(tmp_path / "ui")), None, cp, args, io=real_io())
     assert app.state.control_plane is cp and app.state.audit is not None
+
+
+def test_device_start_refuses_http_device_endpoint(tmp_path):
+    class HttpDeviceIdP(FakeDeviceIdP):
+        def get_json(self, url):
+            return {**super().get_json(url),
+                    "device_authorization_endpoint": "http://idp.example/device"}
+
+    client, _ = _server(tmp_path, HttpDeviceIdP())
+    r = client.post("/auth/device/start", json={})
+    assert r.status_code == 502 and "device_authorization_endpoint" in r.json()["detail"]
+
+
+def test_device_poll_refuses_unsigned_id_token(tmp_path):
+    class Unsigned(FakeDeviceIdP):
+        def post_form(self, url, data):
+            reply = super().post_form(url, data)
+            if "id_token" in reply:
+                reply = {**reply, "id_token": _unsigned(reply["id_token"])}
+            return reply
+
+    client, cp = _server(tmp_path, Unsigned(pending_polls=0))
+    handle = client.post("/auth/device/start", json={}).json()["device_code"]
+    r = client.post("/auth/device/token", json={"device_code": handle})
+    assert r.status_code == 400 and r.json()["error"] == "invalid_grant"
+    from vmn_exp.ui.auth.tokens import TokenService
+
+    assert TokenService(cp, time.time, random=RealRandom()).list() == []

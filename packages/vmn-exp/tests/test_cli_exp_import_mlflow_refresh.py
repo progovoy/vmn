@@ -5,6 +5,7 @@ remote store like any one-shot append.
 """
 from __future__ import annotations
 
+import os
 import subprocess
 import sys
 import types
@@ -13,6 +14,7 @@ from pathlib import Path
 import boto3
 import pytest
 from moto import mock_aws
+from vmn_exp.core.real_io import RealClock, real_io
 
 sys.path.insert(0, str(Path(__file__).parent))
 
@@ -48,7 +50,7 @@ def _args(mlruns, **overrides):
 
 def _call(args):
     from vmn_exp.importers.cli import import_mlflow_run_without_repo
-    return import_mlflow_run_without_repo(args)
+    return import_mlflow_run_without_repo(args, real_io())
 
 
 def _mlruns(tmp_path, tags_a=None, tags_b=None):
@@ -152,7 +154,7 @@ def _legacy_import(store, root, mlruns):
     from vmn_exp.core.writer import claim_record, sync_to_remote
     from vmn_exp.importers.mlflow_filestore import iter_runs
 
-    storage = resolve_experiment_storage(store=store, dir=root, repo_root=False)
+    storage = resolve_experiment_storage(store=store, dir=root, repo_root=False, clock=RealClock(), env=os.environ)
     for run in iter_runs(mlruns):
         verstr = run_verstr(run["run_id"])
         claim_record(storage, APP, verstr, {
@@ -175,7 +177,7 @@ def test_a_refresh_writes_through_the_remote_store(tmp_path, s3, capsys, fresh_r
 
     assert rc == 0
     assert "refreshed 2" in _summary(capsys)
-    remote = resolve_experiment_storage(store=s3, repo_root=False)
+    remote = resolve_experiment_storage(store=s3, repo_root=False, clock=RealClock(), env=os.environ)
     by_writer = host_logs(remote, APP, run_verstr(RUN_A))
     assert [e["type"] for e in by_writer[IMPORT_WRITER]] == ["create"]
     [entry] = [e for e in by_writer["refresher"] if e["type"] == "features"]

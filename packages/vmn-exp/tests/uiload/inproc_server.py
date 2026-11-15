@@ -4,6 +4,7 @@ import threading
 import time
 
 from uiload.ui_server import free_port
+from vmn_exp.core.real_io import real_io
 
 START_TIMEOUT_SEC = 20
 
@@ -17,7 +18,7 @@ def serve_root(root, data_dir, ws):
 
     manager = WorkspaceManager(str(data_dir))
     workspace = manager.attach_path(ws, str(root))
-    app = create_app(manager, background_refresh=True)
+    app = create_app(manager, io=real_io(), background_refresh=True)
     port = free_port()
     srv = uvicorn.Server(uvicorn.Config(app, host="127.0.0.1", port=port, log_level="warning"))
     thread = threading.Thread(target=srv.run, daemon=True)

@@ -12,6 +12,7 @@ from vmn_exp.ui.leaderboard_warm import BoardWarmer
 from vmn_exp.ui.refresher import Refresher
 from vmn_exp.ui.report_index import ReportIndexes
 from vmn_exp.ui.store_upkeep import StoreUpkeep
+from vmn_exp.core.real_io import RealClock
 
 
 def _unique(prefix):
@@ -58,7 +59,7 @@ class _Index:
 
 def test_an_index_refresh_records_its_failure():
     app = _unique("app")
-    refresher = Refresher(interval_sec=0.01)
+    refresher = Refresher(interval_sec=0.01, clock=time.monotonic)
     try:
         refresher.snapshot(_Index(app, RuntimeError("bucket gone")))
         found = _wait_for("index refresh", app)
@@ -87,7 +88,7 @@ def test_a_journal_tick_is_recorded_per_journal():
             ticked.set()
 
     journal = Journal()
-    refresher = Refresher(interval_sec=0.01)
+    refresher = Refresher(interval_sec=0.01, clock=time.monotonic)
     try:
         refresher.snapshot(_Index(_unique("app")), journal)
         assert ticked.wait(5)
@@ -99,7 +100,7 @@ def test_a_journal_tick_is_recorded_per_journal():
 
 def test_a_report_index_refresh_is_recorded_per_workspace(monkeypatch):
     ws = types.SimpleNamespace(name=_unique("ws"))
-    indexes = ReportIndexes(background=True)
+    indexes = ReportIndexes(background=True, clock=time.time)
     monkeypatch.setattr(indexes, "_new", lambda ws, storage: _Index("reports"))
     monkeypatch.setattr(report_index, "FOLLOW_INTERVAL_SEC", 0)
     indexes.get(ws, None)
@@ -109,7 +110,7 @@ def test_a_report_index_refresh_is_recorded_per_workspace(monkeypatch):
 def test_a_store_upkeep_pass_is_recorded_per_app():
     app = _unique("app")
     index = _Index(app)
-    upkeep = StoreUpkeep(interval_sec=0)
+    upkeep = StoreUpkeep(interval_sec=0, clock=time.monotonic, now=RealClock().now)
     upkeep.note(index, None, app)
     upkeep._apps[index] = types.SimpleNamespace(
         run=lambda snapshot, budget: {"marked": 0, "compacted": 0, "failed": 0})

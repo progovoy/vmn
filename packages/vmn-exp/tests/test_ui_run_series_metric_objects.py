@@ -21,6 +21,7 @@ from vmn_exp.core.metric_time import us_to_iso
 from vmn_exp.storage.local import LocalSnapshotStorage
 from vmn_exp.ui.readers import experiment_detail
 from vmn_exp.ui.readers.parsed_logs import ParsedLogs
+import time
 
 APP, V = "app", "1.0.0-dev.a"
 T0 = 1_700_000_000_000_000
@@ -39,7 +40,7 @@ def _streamed(storage, rng, stamps):
             values["loss"] = float("nan")
         entries.append({"timestamp": us_to_iso(ts), "type": "metrics", "step": i,
                         "values": values})
-    w = MetricWriter(storage, APP, V, "w")
+    w = MetricWriter(storage, APP, V, "w", clock=time.time)
     for i in range(0, len(entries), 7):
         assert record_metric_entries(w, entries[i:i + 7])
 

@@ -9,6 +9,7 @@
 * an older entry's ``changed``/``commits`` survive when the code is gone.
 """
 import pytest
+from fakes.clock import FakeClock
 from backfill_helpers import (
     CODE,
     CREATOR,
@@ -25,6 +26,7 @@ from vmn_exp.cli import similar_backfill
 from vmn_exp.core.code_store import code_storage
 from vmn_exp.core.features import FEATURES_VERSION
 from vmn_exp.core.status import RUN_STATE_FILE
+from writer_args import process_writer
 
 V1 = CODE
 V2 = CODE + ".r2"
@@ -45,7 +47,8 @@ def _cli_backfill(app_layout, capfd):
 
 def _backfill(store, app):
     return {verstr: (status, detail)
-            for verstr, status, detail in similar_backfill.backfill_app(store, app)}
+            for verstr, status, detail
+            in similar_backfill.backfill_app(store, app, clock=FakeClock(), writer=process_writer())}
 
 
 def _flaky_code_reads(store, failing, monkeypatch, fail=lambda name: None):

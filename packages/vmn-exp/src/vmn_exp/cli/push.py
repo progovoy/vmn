@@ -4,7 +4,7 @@ root's runs (e.g. recorded under ``VMN_EXP_OFFLINE``) to the remote store.
 The target is the store the flags, ``VMN_STORE`` (or the legacy
 ``VMN_EXPERIMENT_STORE``) or conf ``store:`` name;
 ``VMN_EXP_OFFLINE`` never hides it here. Each run goes through
-:func:`vmn_exp.core.push_rename.push_or_rename`, parents before children.
+:func:`vmn_exp.cli.pushing.push_rename.push_or_rename`, parents before children.
 ``--dry-run`` reads the ledger and one remote metadata object per run that
 is not up to date, and writes nothing. ``--adopt`` first makes this checkout
 the owner of the streams each run inherited (:mod:`vmn_exp.core.adopt`).
@@ -14,13 +14,11 @@ from collections import Counter
 from dataclasses import asdict
 
 from vmn_exp._base import VMN_LOGGER
-from vmn_exp.core.adopt import adopt_streams
-from vmn_exp.core.fork import resolve_run
-from vmn_exp.core.push_code import CodePusher
-from vmn_exp.core.push_ledger import PushLedger
-from vmn_exp.core.push_plan import parents_first, plan_push
-from vmn_exp.core.push_rename import SKIPPED, push_or_rename
-from vmn_exp.core.push_run import (
+from vmn_exp.cli.pushing.push_code import CodePusher
+from vmn_exp.cli.pushing.push_ledger import PushLedger
+from vmn_exp.cli.pushing.push_plan import parents_first, plan_push
+from vmn_exp.cli.pushing.push_rename import SKIPPED, push_or_rename
+from vmn_exp.cli.pushing.push_run import (
     COLLISION,
     FAILED,
     NEW,
@@ -29,6 +27,8 @@ from vmn_exp.core.push_run import (
     Outcome,
     require_push_target,
 )
+from vmn_exp.core.adopt import adopt_streams
+from vmn_exp.core.fork import resolve_run
 from vmn_exp.core.storage_resolve import experiment_dir, store_uri
 from vmn_exp.registry.view import registered_runs
 from vmn_exp.storage.areas import RUNS
@@ -41,14 +41,14 @@ _NO_REMOTE = (
 )
 
 
-def experiment_push(vcs, params, app_name, args):
+def experiment_push(vcs, params, app_name, args, clock, env):
     try:
-        local, target = _stores(vcs, params)
+        local, target = _stores(vcs, params, env)
         verstrs = _select(local, app_name, getattr(args, "version", None))
     except ValueError as exc:
         VMN_LOGGER.error(str(exc))
         return 1
-    ledger = PushLedger.for_target(local, app_name, target)
+    ledger = PushLedger.for_target(local, app_name, target, env)
     adopt_failed = 0
     if args.dry_run:
         outcomes = [Outcome(v, plan_push(local, target, app_name, v, ledger))
@@ -58,7 +58,8 @@ def experiment_push(vcs, params, app_name, args):
             adopt_failed = _adopt(local, target, app_name, verstrs, ledger)
         code = CodePusher(local, target, app_name)
         registered = registered_runs(local)
-        outcomes = [push_or_rename(local, target, app_name, v, ledger, code, registered)
+        outcomes = [push_or_rename(local, target, app_name, v, ledger, code, registered,
+                                   now=clock.now(), env=env)
                     for v in verstrs]
     failed = _report(outcomes, args.json, args.dry_run)
     return 1 if failed or adopt_failed else 0
@@ -81,14 +82,14 @@ def _adopt(local, target, app_name, verstrs, ledger):
     return failed
 
 
-def _stores(vcs, params):
+def _stores(vcs, params, env):
     uri = store_uri(params)
-    root = experiment_dir(vcs, params)
+    root = experiment_dir(vcs, params, env)
     if not uri or not root:
         raise ValueError(_NO_REMOTE if root else "exp push needs a local experiment dir")
-    target = open_store(uri, area=RUNS)
+    target = open_store(uri, area=RUNS, env=env)
     require_push_target(target)
-    return LocalSnapshotStorage(root, RUNS), target
+    return LocalSnapshotStorage(root, RUNS, env=env), target
 
 
 def _select(local, app_name, refs):

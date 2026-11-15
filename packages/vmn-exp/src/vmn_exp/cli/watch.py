@@ -12,19 +12,20 @@ from vmn_exp.cli.compact import DEAD, compact_runs, runs_with_status
 from vmn_exp.cli.prune import _parse_duration
 from vmn_exp.core.alerts import Alerter, load_alert_config, watch_app
 from vmn_exp.core.app_conf import experiment_conf
+from vmn_exp.core.status import min_stale_sec
 from version_stamp.api import VMN_LOGGER
 
 DEFAULT_WITHIN = "1d"
 
 
-def experiment_watch(vcs, storage, app_name, args):
+def experiment_watch(vcs, storage, app_name, args, clock, env):
     try:
         within_sec = _parse_duration(args.within or DEFAULT_WITHIN).total_seconds()
     except ValueError as exc:
         VMN_LOGGER.error(str(exc))
         return 1
-    alerter = Alerter(load_alert_config(app_name, experiment_conf(vcs)))
-    compact = getattr(args, "compact", False)
+    alerter = Alerter(load_alert_config(app_name, experiment_conf(vcs), env=env), clock=clock.monotonic)
+    compact, stale_sec = getattr(args, "compact", False), min_stale_sec(env)
     if not compact and not alerter.wants("failed") and not alerter.wants("stuck"):
         VMN_LOGGER.error(
             "No alert sink is configured for 'failed' or 'stuck': set "
@@ -32,10 +33,12 @@ def experiment_watch(vcs, storage, app_name, args):
         )
         return 1
     while True:
-        for verstr, status in watch_app(storage, app_name, alerter, within_sec):
+        for verstr, status in watch_app(storage, app_name, alerter, within_sec, clock=clock,
+                                        min_stale_sec=stale_sec):
             print(f"{verstr} {status}")
         if compact:
-            compact_runs(storage, app_name, runs_with_status(storage, app_name, DEAD))
+            dead = runs_with_status(storage, app_name, DEAD, clock, stale_sec)
+            compact_runs(storage, app_name, dead)
         if not args.interval:
             return 0
         time.sleep(args.interval)

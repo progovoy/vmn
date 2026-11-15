@@ -10,6 +10,7 @@ Nothing is created when the run can't be rerun faithfully. Like ``run``, the
 repo lock is held only until the record is claimed.
 """
 import os
+import threading
 from dataclasses import dataclass
 from typing import Optional
 
@@ -17,6 +18,7 @@ from vmn_exp.cli import rerun_report as report
 from vmn_exp.cli.rerun_workdir import exit_on_termination, plan_workdir, prepare_workdir
 from vmn_exp.cli.rewind import _ref
 from vmn_exp.cli.run import _Supervision, _detect_python_exe
+from vmn_exp.cli.supervised_env import adopt_requested
 from vmn_exp.core import rerun as core
 from vmn_exp.core.app_conf import experiment_conf
 from vmn_exp.core.code_store import (
@@ -24,9 +26,9 @@ from vmn_exp.core.code_store import (
 )
 from vmn_exp.core.env import capture_env_safe, should_capture
 from vmn_exp.core.fork import resolve_run
-from vmn_exp.core.status import load_run_state
+from vmn_exp.core.status import load_run_state, min_stale_sec
 from vmn_exp.core.storage_resolve import experiment_dir
-from vmn_exp.core.writer import create_run
+from vmn_exp.core.writer import create_run, get_writer_id, new_run_ids
 from vmn_exp.gitmode.features import rerun_features
 from version_stamp.api import VMN_LOGGER, now_iso
 
@@ -51,7 +53,7 @@ class Source:
         return core.code_verstr_of(self.metadata)
 
 
-def experiment_rerun(vcs, params, storage, args, repo_lock=None):
+def experiment_rerun(vcs, params, storage, args, repo_lock=None, *, io):
     source, err = load_source(storage, vcs.name, args)
     if err:
         VMN_LOGGER.error(err)
@@ -60,8 +62,8 @@ def experiment_rerun(vcs, params, storage, args, repo_lock=None):
         report.print_recipe(source, args.json)
         return 0
     if args.dry_run:
-        return _dry_run(vcs, storage, source, args)
-    return _execute(vcs, params, storage, args, source, repo_lock)
+        return _dry_run(vcs, storage, source, args, io)
+    return _execute(vcs, params, storage, args, source, repo_lock, io)
 
 
 def load_source(storage, app_name, args):
@@ -120,26 +122,26 @@ def _code_of(storage, app_name, metadata, patches):
     return resolve_code(storage, app_name, dict(metadata, **summary, code=key), patches)
 
 
-def _capture_env(vcs, storage, args, source):
-    """Capture the env the rerun will record, warning about everything that
-    makes the rerun differ from the original."""
-    env = None
-    if should_capture(args.capture_env, experiment_conf(vcs)):
-        env = capture_env_safe(_detect_python_exe(source.invocation.command))
-    report.warn(storage, source, env)
-    return env
+def _capture_env(vcs, storage, args, source, io):
+    """Capture the env the rerun will record (its opt-out read from *io*'s
+    env), warning about everything that makes the rerun differ from the original."""
+    captured = None
+    if should_capture(args.capture_env, experiment_conf(vcs), env=io.env):
+        captured = capture_env_safe(io.env, _detect_python_exe(source.invocation.command))
+    report.warn(storage, source, captured, io.clock.now(), min_stale_sec(io.env))
+    return captured
 
 
-def _dry_run(vcs, storage, source, args):
+def _dry_run(vcs, storage, source, args, io):
     checkouts, err = plan_workdir(vcs, source.metadata, source.patches, args.worktree_dir)
     if err:
         return _refuse(source, err)
-    _capture_env(vcs, storage, args, source)
+    _capture_env(vcs, storage, args, source, io)
     report.print_plan(source, checkouts)
     return 0
 
 
-def _execute(vcs, params, storage, args, source, repo_lock):
+def _execute(vcs, params, storage, args, source, repo_lock, io):
     with exit_on_termination():
         workdir, err = prepare_workdir(vcs, source.metadata, source.patches,
                                        args.worktree_dir)
@@ -150,21 +152,32 @@ def _execute(vcs, params, storage, args, source, repo_lock):
             cwd, err = _child_dir(workdir, source.invocation.cwd)
             if err:
                 return _refuse(source, err)
-            env = _capture_env(vcs, storage, args, source)
-            verstr, err = _claim(vcs, storage, args, source, env)
+            captured = _capture_env(vcs, storage, args, source, io)
+            verstr, err = _claim(vcs, storage, args, source, captured, io.env, io.host)
             if err is not None:
                 return err
         if repo_lock is not None:
             repo_lock.release()
-        supervision = _Supervision(
-            storage, source.app_name, verstr, args, experiment_conf(vcs),
-            extra_env=core.child_env(cwd, experiment_dir(vcs, params), source.sweep_params),
-            cwd=cwd, root=workdir.app_root,
-            state_extra={"workdir": workdir.root} if args.keep_worktree else None,
+        supervision = rerun_supervision(
+            storage, source, verstr, args, experiment_conf(vcs), cwd, workdir,
+            experiment_dir(vcs, params, io.env), io,
         )
         return supervision.run(_argv(vcs, source, workdir))
     finally:
         _release_workdir(workdir, args.keep_worktree)
+
+
+def rerun_supervision(storage, source, verstr, args, exp_conf, cwd, workdir, exp_dir, io):
+    """The rerun's supervision: its child runs in the restored workspace and
+    records into the rerun unless ``--no-adopt`` or ``VMN_EXP_ADOPT`` in
+    ``io.env`` turn that off."""
+    return _Supervision(
+        storage, source.app_name, verstr, args, exp_conf,
+        extra_env=core.child_env(cwd, exp_dir, source.sweep_params),
+        cwd=cwd, root=workdir.app_root,
+        state_extra={"workdir": workdir.root} if args.keep_worktree else None,
+        adopt=adopt_requested(args, io.env), wait=threading.Event().wait, io=io,
+    )
 
 
 def _child_dir(workdir, rel_cwd):
@@ -179,11 +192,13 @@ def _child_dir(workdir, rel_cwd):
     return path, None
 
 
-def _claim(vcs, storage, args, source, env):
-    """``(new verstr, None)`` or ``(None, exit code)``."""
+def _claim(vcs, storage, args, source, captured, env, host):
+    """``(new verstr, None)`` or ``(None, exit code)``; *captured* is the
+    environment the rerun records, *env* the one it runs in (with *host*,
+    whose writer writes it)."""
     import vmn_exp.cli.experiment as cli
 
-    parent, err = cli._resolve_parent(storage, source.app_name, args)
+    parent, err = cli._resolve_parent(storage, source.app_name, args, env)
     if err is not None:
         return None, err
     note = args.note or f"rerun of {source.verstr}"
@@ -194,10 +209,11 @@ def _claim(vcs, storage, args, source, env):
     verstr = create_run(
         storage, source.app_name, source.code_verstr, template, {}, note=note,
         create_data=_create_data(source, args), parent=parent,
-        name=args.run_name, env=env,
-        features=rerun_features(vcs, source.log, source.metadata, source.patches),
+        name=args.run_name, env=captured,
+        features=rerun_features(vcs, source.log, source.metadata, source.patches, env, host),
+        **new_run_ids(env, host),
     )
-    cli._append_inputs(storage, source.app_name, verstr, args.inputs)
+    cli._append_inputs(storage, source.app_name, verstr, args.inputs, get_writer_id(env, host))
     return verstr, None
 
 

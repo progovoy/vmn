@@ -20,47 +20,43 @@ is cached is the folded files: :func:`list_runs` reads through the experiment
 index (:mod:`vmn_exp.core.index`, persisted as
 a per-host cache file, :mod:`vmn_exp.storage.host_dirs`), which re-reads only what changed.
 
-Depends on ``version_stamp.core`` and the snapshot storage helpers only, never
-on ``vmn_exp.ui``, so the experiment feature can be lifted out later. The
+Depends on ``vmn_exp.core`` and the storage helpers only, never on
+``version_stamp`` or ``vmn_exp.ui``, so it ships in the SDK wheel. The
 log folding it shares with the CLI and the ui lives in
 :mod:`vmn_exp.core.log`.
 """
-import os
-import warnings
 
 import vmn_exp.core.index as experiment_index
 from vmn_exp.core.app_conf import read_experiment_conf
 from vmn_exp.core.app_settings_store import app_metrics_schema
 from vmn_exp.core.fold import fold_definitions, fold_log, fold_row
 from vmn_exp.core.log import (
-    filter_archived,
-    filter_by_status,
-    history_points,
-    list_artifacts,
-    metric_series,
-    sort_by_metric,
+    filter_archived, filter_by_status, history_points, list_artifacts, metric_series,
 )
 from vmn_exp.core.lineage import DEFAULT_LIMIT
-from vmn_exp.core.load_progress import IndexingWarning, incomplete_text
+from vmn_exp.core.load_progress import IndexingWarning  # noqa: F401 (re-exported)
 from vmn_exp.core.log import load_log as _load_log
 from vmn_exp.core.importance import param_importance as _param_importance
 from vmn_exp.core.media import media_index
 from vmn_exp.core.ranges import ranges_view
+from vmn_exp.core.real_io import real_io
 from vmn_exp.core.metric_schema import effective_schema
 from vmn_exp.core.index_rows import row_copies
 from vmn_exp.core.query import filter_rows
 from vmn_exp.core.query_extra import rows_extra, store_extra
 from vmn_exp.core.record_format import record_format_version
-from vmn_exp.core.storage_resolve import resolve_experiment_storage, try_repo_root
+from vmn_exp.core.storage_resolve import try_repo_root
 from vmn_exp.core.step_metric import join_all, step_metrics
 from vmn_exp.core.refs import point_placement, resolve_experiment, tree_links
 from vmn_exp.core.similar_search import find as _find_similar
-from vmn_exp.core.status import load_run_state, run_state_observed_at
+from vmn_exp.core.status import load_run_state, min_stale_sec, run_state_observed_at
 from vmn_exp.core.tree import annotate_rows, run_status
 from vmn_exp.registry.lineage import app_indexes, run_lineage
 from vmn_exp.sdk import _resolve_app_name, frames
 from vmn_exp.sdk.create import SNAPSHOT_METADATA_ENV, snapshot_app_names
+from vmn_exp.sdk.reader_select import check_loading, select
 from vmn_exp.sdk.run_states import read_run_state, read_run_states
+from vmn_exp.sdk.store_resolve import resolve_storage
 
 
 # ---------------------------------------------------------------------------
@@ -68,25 +64,24 @@ from vmn_exp.sdk.run_states import read_run_state, read_run_states
 # ---------------------------------------------------------------------------
 
 
-def _app_candidates(storage):
+def _app_candidates(storage, env):
     """Apps a reader may default to: the exported snapshot's app in git-free
-    mode, else the apps with runs in *storage*."""
-    meta_path = os.environ.get(SNAPSHOT_METADATA_ENV)
+    mode (*env* says), else the apps with runs in *storage*."""
+    meta_path = env.get(SNAPSHOT_METADATA_ENV)
     return (meta_path and snapshot_app_names(meta_path)) or storage.list_apps()
 
 
 def _resolve(app_name, storage):
     """Fill in the app name and storage where :func:`start_run` records.
 
-    Storage defaults to :func:`resolve_experiment_storage`
-    (``VMN_EXPERIMENT_DIR`` > the checkout, fronting the ``VMN_STORE`` store;
-    the legacy ``VMN_EXPERIMENT_STORE`` still works).
+    Storage defaults to :func:`~vmn_exp.sdk.store_resolve.resolve_storage`
+    (``VMN_EXPERIMENT_DIR`` > the checkout, fronting ``VMN_STORE``, legacy ``VMN_EXPERIMENT_STORE``).
     Returns ``(app_name, storage, root_path)``; *root_path* is None when the
-    caller supplied both or no checkout is found: there is no conf.yml to read.
-    """
+    caller supplied both or no checkout is found: there is no conf.yml to read."""
     root_path = None if (app_name and storage) else try_repo_root()
-    storage = storage or resolve_experiment_storage(repo_root=root_path or False)
-    app_name = _resolve_app_name(app_name, lambda: _app_candidates(storage))
+    storage = storage or resolve_storage(repo_root=root_path or False)
+    env = real_io().env  # reached only from the public readers, SDK entry points
+    app_name = _resolve_app_name(app_name, lambda: _app_candidates(storage, env), env)
     return app_name, storage, root_path
 
 
@@ -94,8 +89,7 @@ def _metrics_schema(storage, root_path, app_name):
     """``experiment.metrics`` from the app's conf.yml over the store settings
     (:mod:`vmn_exp.core.app_settings`) — sort direction and summary policies.
 
-    The app conf only, like the ui reads it; branch confs are not consulted.
-    """
+    The app conf only, like the ui reads it; branch confs are not consulted."""
     conf = read_experiment_conf(app_name, root_path).get("metrics") if root_path else None
     return app_metrics_schema(storage, app_name, conf)
 
@@ -105,7 +99,8 @@ def _metrics_schema(storage, root_path, app_name):
 # ---------------------------------------------------------------------------
 
 
-def _rows_and_declared(app_name, storage, use_index=True, schema=None):
+def _rows_and_declared(app_name, storage, use_index=True, schema=None, incomplete=None,
+                       *, clock, stale_sec):
     """``(rows, declared schema, extra)``: every run of an app,
     status-annotated, in storage order (oldest first); the goals/hidden flags
     the runs declare (:mod:`vmn_exp.core.metric_schema`) and what a query
@@ -114,25 +109,25 @@ def _rows_and_declared(app_name, storage, use_index=True, schema=None):
     With *use_index* the rows come from the experiment index, which re-reads
     only what changed since the last call; without, every run's log and run
     state is read (and ``similar()`` searches a ``:memory:`` database).
+    An index still loading raises :class:`IndexingWarning`, or with
+    *incomplete* ``"warn"`` warns it at the public reader's caller
+    (:func:`~vmn_exp.sdk.reader_select.check_loading`).
     Asking about a single run goes through :func:`_subtree_row` instead.
+    *clock* (a :class:`~vmn_exp.core.ports.Clock`): the index's and the statuses' (on *stale_sec*).
     """
+    now = clock.now()
     if use_index:
-        snap = experiment_index.indexed_snapshot(storage, app_name, wait=True, schema=schema)
-        extra = store_extra(storage, app_name, snap)
-        _warn_loading(snap)
+        snap = experiment_index.indexed_snapshot(storage, app_name, wait=True, schema=schema,
+                                                 clock=clock)
+        extra = store_extra(storage, app_name, snap, now=now)
     else:
         snap = experiment_index.direct_snapshot(
             storage, app_name, schema, read_log=_load_log, read_run_state=load_run_state)
-        extra = rows_extra(snap)
-    rows = annotate_rows(row_copies(snap, False), snap.run_states, snap.run_state_observed_at)
+        extra = rows_extra(snap, now=now)
+    check_loading(snap.loading, incomplete, stacklevel=3)
+    rows = annotate_rows(row_copies(snap, False), snap.run_states, snap.run_state_observed_at,
+                         now=now, min_stale_sec=stale_sec)
     return rows, snap.declared_schema(), extra
-
-
-def _warn_loading(snap):
-    """Warn :class:`IndexingWarning` when *snap*'s index is still loading:
-    its rows are some of the app's, not all."""
-    if snap.loading is not None:
-        warnings.warn(incomplete_text(snap.loading), IndexingWarning, stacklevel=4)
 
 
 # ---------------------------------------------------------------------------
@@ -141,29 +136,30 @@ def _warn_loading(snap):
 
 
 def list_runs(
-    app_name=None,
-    *,
-    storage=None,
-    sort=None,
-    last=None,
-    status=None,
-    query=None,
-    use_index=True,
-    include_archived=False,
+    app_name=None, *, storage=None, sort=None, descending=None, last=None, limit=None,
+    status=None, query=None, use_index=True, include_archived=False, incomplete=None,
+    clock=None,
 ):
-    """Runs of an app, oldest first unless *sort* or a primary metric reorders.
+    """Runs of an app: ordered by *sort*, else by the app's primary metric
+    when one is configured, else in storage order (oldest first).
 
     Args:
         app_name: the vmn app; inferred from the current repo when omitted.
         storage: a snapshot storage backend; the local checkout's when omitted.
             Passing one together with *app_name* skips the checkout entirely, so
             there is no conf.yml to take sort direction from.
-        sort: a metric name to order by.
-        last: keep only the *last* runs (applied before sorting).
+        sort: a metric name to order by; ``"timestamp"`` or ``"idx"`` for
+            newest first.
+        descending: force the direction of *sort* (by default the metric's
+            goal; newest first for ``"timestamp"``/``"idx"``).
+        last: keep only the *last* runs in storage order, applied before
+            sorting: the newest N, then sorted.
+        limit: keep the first *limit* rows after sorting: the best N.
+            A positive int (ValueError otherwise).
         status: keep only these statuses — a list or a comma-separated string.
         query: an experiment query (``metrics.loss < 0.5 and params.model = "xgb"``),
             ANDed with *status* and applied before *last* and *sort*. Raises
-            :class:`~version_stamp.core.experiment_query.QueryError` when it will
+            :class:`~vmn_exp.core.query.QueryError` when it will
             not compile — a caller wants the error, not a silent empty list.
         use_index: read through the incremental experiment index cached at
             the per-host cache dir (:mod:`vmn_exp.storage.host_dirs`) — what ``vmn-exp list`` and the
@@ -172,38 +168,43 @@ def list_runs(
             every run straight from storage (and writes no index file).
         include_archived: also return archived runs (hidden by default; see
             :mod:`vmn_exp.sdk.manage`).
-    """
+        incomplete: while the index is still loading its rows are some of
+            the app's: by default (or ``"raise"``) that raises
+            :class:`IndexingWarning`; ``"warn"`` warns it and returns the
+            rows loaded so far.
+        clock: the :class:`~vmn_exp.core.ports.Clock` statuses derive on."""
     app_name, storage, root_path = _resolve(app_name, storage)
-    schema = _metrics_schema(storage, root_path, app_name)
-    rows, declared, extra = _rows_and_declared(app_name, storage, use_index, schema)
+    schema, clock = _metrics_schema(storage, root_path, app_name), clock or real_io().clock
+    rows, declared, extra = _rows_and_declared(app_name, storage, use_index, schema, incomplete,
+                                               clock=clock, stale_sec=min_stale_sec(real_io().env))
     rows = filter_archived(rows, include_archived)
-    rows = filter_rows(filter_by_status(rows, status), query, extra=extra)
-    if last:
-        rows = rows[-int(last) :]
+    rows = filter_rows(filter_by_status(rows, status), query, extra, clock.now())
     # Summaries follow the conf schema only; direction also what runs declare.
-    return sort_by_metric(rows, effective_schema(schema, declared), sort=sort)
+    return select(rows, effective_schema(schema, declared), last=last, sort=sort,
+                  descending=descending, limit=limit)
 
 
-def param_importance(
-    app_name=None, metric=None, *, storage=None, query=None, status=None,
-    include_archived=False,
-):
+def param_importance(app_name=None, metric=None, *, storage=None, query=None, status=None,
+                     include_archived=False, incomplete=None):
     """Which params drive *metric*: ``[{param, importance, correlation,
     spearman, kind, n}]`` over the runs :func:`list_runs` would return for
     the same *query*/*status*, most important first (see
     :mod:`vmn_exp.core.importance`).
 
     Raises ValueError when no run carries *metric*, ``QueryError`` on a bad
-    *query*.
+    *query*, :class:`IndexingWarning` while the index loads unless
+    *incomplete* is ``"warn"`` (as in :func:`list_runs`).
     """
     app_name, storage, _ = _resolve(app_name, storage)
-    rows, _, extra = _rows_and_declared(app_name, storage)
+    clock = real_io().clock
+    rows, _, extra = _rows_and_declared(app_name, storage, incomplete=incomplete, clock=clock,
+                                        stale_sec=min_stale_sec(real_io().env))
     rows = filter_archived(rows, include_archived)
-    matching = filter_rows(filter_by_status(rows, status), query, extra=extra)
+    matching = filter_rows(filter_by_status(rows, status), query, extra=extra, now=clock.now())
     return _param_importance(matching, metric, universe=rows)
 
 
-def _subtree_row(app_name, storage, verstr, snapshot):
+def _subtree_row(app_name, storage, verstr, snapshot, now, stale_sec):
     """The row for one run, costing the run's subtree rather than the workspace.
 
     The placement *snapshot* gives the parent/child edges and the row's index;
@@ -224,11 +225,12 @@ def _subtree_row(app_name, storage, verstr, snapshot):
         observed_at=lambda v: run_state_observed_at(storage, app_name, v),
         children_of=children_of,
         row_of=snapshot.row,
+        now=now, min_stale_sec=stale_sec,
     )
     return {"idx": row["idx"], "meta": meta}, status
 
 
-def get_run(app_name=None, ref="latest", *, storage=None, x=None):
+def get_run(app_name=None, ref="latest", *, storage=None, x=None, clock=None):
     """One run: a :func:`list_runs` row plus its ``log``, ``series``,
     ``step_metrics``, ``artifacts`` and the ``media`` / ``tables`` /
     ``histograms`` indexes (see :mod:`vmn_exp.core.media`) and the marked
@@ -241,6 +243,7 @@ def get_run(app_name=None, ref="latest", *, storage=None, x=None):
     the conf.yml schema) to its x metric. With *x* (a metric name), ``series``
     holds every other metric joined on it: each point carries ``x``, the x
     metric's value at the same step, and points without one are dropped.
+    *clock*: the :class:`~vmn_exp.core.ports.Clock` its status derives on.
     """
     app_name, storage, root_path = _resolve(app_name, storage)
     exact = _exact_verstr(storage, app_name, ref)
@@ -251,7 +254,8 @@ def get_run(app_name=None, ref="latest", *, storage=None, x=None):
     if err:
         raise ValueError(err)
 
-    target, status = _subtree_row(app_name, storage, verstr, snapshot)
+    target, status = _subtree_row(app_name, storage, verstr, snapshot,
+                                  (clock or real_io().clock).now(), min_stale_sec(real_io().env))
     if target is None:
         raise ValueError(f"Experiment '{verstr}' not found for {app_name}")
 
@@ -287,7 +291,8 @@ def get_run_state(app_name=None, verstr=None, *, storage=None):
     listing. *verstr* must be the exact name. Raises ValueError when no such
     run exists."""
     app_name, storage, _ = _resolve(app_name, storage)
-    read = read_run_state(storage, app_name, verstr) if verstr else None
+    now, stale_sec = real_io().clock.now(), min_stale_sec(real_io().env)
+    read = read_run_state(storage, app_name, verstr, now, stale_sec) if verstr else None
     if read is None:
         raise ValueError(f"Experiment '{verstr}' not found for {app_name}")
     return read[2]
@@ -301,7 +306,8 @@ def get_run_states(app_name=None, refs=(), *, storage=None):
     never touch the index or list the app (``latest`` / ``@N`` resolve through
     it once per call; prefixes are not resolved)."""
     app_name, storage, _ = _resolve(app_name, storage)
-    return read_run_states(storage, app_name, list(refs))
+    io = real_io()
+    return read_run_states(storage, app_name, list(refs), io.clock.now(), min_stale_sec(io.env))
 
 
 def get_lineage(app_name=None, ref="latest", *, depth=1, storage=None, limit=DEFAULT_LIMIT):
@@ -323,9 +329,8 @@ def get_lineage(app_name=None, ref="latest", *, depth=1, storage=None, limit=DEF
     if err:
         raise ValueError(err)
     try:
-        return run_lineage(
-            storage, app_name, verstr, app_indexes(storage), depth=depth, limit=limit
-        )
+        return run_lineage(storage, app_name, verstr, app_indexes(storage, real_io().clock),
+                           depth=depth, limit=limit)
     except KeyError as e:
         raise ValueError(e.args[0]) from None
 
@@ -350,7 +355,7 @@ def similar_runs(app_name=None, ref="latest", *, storage=None, top=10, query=Non
     exp_conf = read_experiment_conf(app_name, root_path) if root_path else {}
     return _find_similar(
         storage, app_name, ref, exp_conf, top=top, query=query, context=context,
-        text_only=text_only, all_apps=all_apps,
+        text_only=text_only, all_apps=all_apps, clock=real_io().clock,
         schema_of=lambda app: _metrics_schema(storage, root_path, app),
     )
 
@@ -374,7 +379,7 @@ def runs_dataframe(app_name=None, **list_runs_kwargs):
     return frames.to_dataframe(records, frames.run_columns(records))
 
 
-def get_metric_history(metric, app_name=None, ref="latest", *, storage=None,
+def get_metric_history(metric, *, app_name=None, ref="latest", storage=None,
                        step_range=None, max_points=None):
     """Every recorded value of *metric* in one run, as a DataFrame.
 

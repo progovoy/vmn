@@ -10,6 +10,8 @@ vmn-exp run <app_name> --note "description" -- <your command>
 
 # Your script writes metrics to $VMN_METRICS_FILE as key=value lines
 # vmn ingests them automatically when the run finishes.
+# Or call start_run() in the script: it records into the same run
+# (--no-adopt keeps a separate inner run).
 
 # Manual experiment (no command to run)
 vmn-exp create <app_name> --metrics loss=0.34 acc=0.91 --note "manual run"
@@ -34,6 +36,9 @@ vmn-exp rerun <app_name> -v <version> [-- <other command>]
 # What a cluster job would run (command, cwd, code identity); vmn does not schedule
 vmn-exp rerun <app_name> -v <version> --print --json
 ```
+
+Each action takes only its own flags (plus the store flags and `--from-snapshot`):
+a flag it does not own exits 2 before anything runs, e.g. `list --force`.
 
 ### Driving the UI's fleet counts (total / waiting / running / done / failed / stuck)
 

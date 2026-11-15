@@ -37,8 +37,8 @@ because the frameworks disagree on every one of them: scikit-learn hands the
 metrics back on the estimator, Keras returns them in a ``History``, and
 ``Trainer.fit(model, ...)`` trains an *argument* rather than its own ``self``.
 
-``sklearn``, ``xgboost``, ``keras`` (which is also what ``tensorflow.keras``
-is) and Lightning under both its import names ship today, each covered by
+``sklearn``, ``xgboost``, ``lightgbm``, ``catboost``, ``keras`` (which is also
+what ``tensorflow.keras`` is) and Lightning under both its import names ship today, each covered by
 integration tests against the real library.
 
 Plain ``torch`` is deliberately absent: there is no training entry point to
@@ -55,14 +55,9 @@ import tempfile
 import threading
 import weakref
 
+from vmn_exp.core.real_io import real_io
 from vmn_exp.core.values import metric_number
-from vmn_exp.sdk import (
-    autolog_hf,
-    autolog_keras,
-    autolog_lightning,
-    autolog_sklearn,
-    import_hooks,
-)
+from vmn_exp.sdk import autolog_hf, autolog_keras, autolog_lightning, autolog_sklearn, import_hooks
 from vmn_exp.sdk.autolog_adapter import (  # noqa: F401 - the extension API
     _CONFIG,
     _LOGGER,
@@ -144,7 +139,7 @@ def autolog(frameworks=None, log_models=False, training_score="auto"):
     Calling it again with other options reconfigures the installed wrappers.
     Under ``VMN_MODE=disabled`` it patches nothing.
     """
-    if is_disabled():
+    if is_disabled(None, real_io().env):
         return
     _CONFIG.update(log_models=bool(log_models), training_score=training_score)
     names = list(SUPPORTED_FRAMEWORKS) if frameworks is None else list(frameworks)
@@ -152,7 +147,7 @@ def autolog(frameworks=None, log_models=False, training_score="auto"):
         if name not in SUPPORTED_FRAMEWORKS:
             _LOGGER.debug("vmn autolog has no adapter for %r", name)
             continue
-        adapter = SUPPORTED_FRAMEWORKS[name]
+        adapter = _adapter_of(name)
         watch_names = adapter.watch if adapter.watch else (name,)
         for watch_name in watch_names:
             module = sys.modules.get(watch_name)
@@ -181,7 +176,7 @@ def autolog_disable():
 
 
 def _patch_framework(name, module):
-    adapter = SUPPORTED_FRAMEWORKS[name]
+    adapter = _adapter_of(name)
     try:
         if adapter.method_owners is not None:
             targets = adapter.method_owners(module)
@@ -347,10 +342,33 @@ def _artifact_name(run, base):
     return base if seen[base] == 1 else f"{base}_{seen[base]}"
 
 
-#: Framework import name -> adapter. The extension point.
+def _adapter_of(name):
+    adapter = SUPPORTED_FRAMEWORKS[name]
+    return adapter if isinstance(adapter, _Adapter) else adapter()
+
+
+def _gbdt(name):
+    """An ``autolog_gbdt`` adapter, imported on first use.
+
+    It stays off the ``import vmn_exp.sdk`` path (the import budget of
+    test_sdk_import_budget.py), so its registry entry is a loader.
+    """
+
+    def load():
+        from vmn_exp.sdk import autolog_gbdt
+
+        return getattr(autolog_gbdt, name)
+
+    return load
+
+
+#: Framework import name -> adapter (or a loader returning one). The extension
+#: point.
 SUPPORTED_FRAMEWORKS = {
     "sklearn": autolog_sklearn.SKLEARN,
     "xgboost": autolog_sklearn.XGBOOST,
+    "lightgbm": _gbdt("LIGHTGBM"),
+    "catboost": _gbdt("CATBOOST"),
     "keras": autolog_keras.KERAS,
     "lightning": autolog_lightning.LIGHTNING,
     # The aliases: a second import name for a framework already described.

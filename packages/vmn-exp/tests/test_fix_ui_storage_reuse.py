@@ -10,6 +10,7 @@ from fastapi.testclient import TestClient
 
 from vmn_exp.snapshot import LocalSnapshotStorage
 from vmn_exp.storage.areas import local_store_root
+from vmn_exp.core.real_io import real_io
 
 APP = "app"
 
@@ -34,7 +35,7 @@ def test_detail_log_and_series_requests_reuse_one_storage(tmp_path, monkeypatch)
 
     manager = WorkspaceManager(str(tmp_path / "data"))
     manager.attach_path("ws", str(root))
-    app = create_app(manager, background_refresh=True)
+    app = create_app(manager, io=real_io(), background_refresh=True)
     base = f"/api/v1/workspaces/ws/apps/{APP}"
     try:
         with TestClient(app) as client:

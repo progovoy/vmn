@@ -5,13 +5,14 @@ import datetime
 
 import pytest
 
-from vmn_exp.core import status as status_mod
+from fakes.clock import FakeClock
 from vmn_exp.core import tree as tree_mod
 from vmn_exp.core.index_snapshot import IndexSnapshot
 from vmn_exp.core.log import experiment_row
 from vmn_exp.core.query import QueryError
 from vmn_exp.ui import leaderboard_cache as lb
 from vmn_exp.ui.readers import experiments as exp_reader
+from vmn_exp.core.real_io import RealClock
 
 APP = "app"
 NOW = datetime.datetime.now(datetime.timezone.utc)
@@ -61,7 +62,8 @@ def _counting(monkeypatch, name, module=lb, calls=None):
 
 def _reference(snap, schema, **params):
     rows = copy.deepcopy(list(snap.rows))
-    return exp_reader.leaderboard(rows, dict(snap.run_states), schema, **params)
+    return exp_reader.leaderboard(rows, dict(snap.run_states), schema, now=RealClock().now(),
+                                  **params)
 
 
 def _strip_time(result):
@@ -133,32 +135,30 @@ def test_only_live_rows_are_rederived_as_time_passes(monkeypatch):
     # The first pass derives through core's annotate_rows, a re-derive in lb.
     status_calls = _counting(monkeypatch, "status_fields")
     _counting(monkeypatch, "status_fields", module=tree_mod, calls=status_calls)
-    cache = lb.LeaderboardCache(bucket_sec=2)
-    snap = _snapshot(n=50, live={7})
     # Pin the first page to NOW: on the real clock a run reaching here ~10s
-    # after import would share `later`'s bucket and re-derive nothing.
-    monkeypatch.setattr(status_mod, "_now", lambda now=None: now or NOW)
+    # after import would share the later page's bucket and re-derive nothing.
+    clock = FakeClock(start=NOW)
+    cache = lb.LeaderboardCache(bucket_sec=2, now=clock.now)
+    snap = _snapshot(n=50, live={7})
 
     cache.page(snap, {}, limit=10)
     assert len(status_calls) == 50
 
-    later = NOW + datetime.timedelta(seconds=10)
-    monkeypatch.setattr(status_mod, "_now", lambda now=None: now or later)
+    clock.advance(10)
     cache.page(snap, {}, limit=10)
     assert len(status_calls) == 51  # the running row only
 
 
-def test_a_stale_heartbeat_turns_stuck_within_a_bucket(monkeypatch):
-    cache = lb.LeaderboardCache(bucket_sec=2)
-    snap = _snapshot(n=5, live={2}, parent_of={2: 1})
+def test_a_stale_heartbeat_turns_stuck_within_a_bucket():
     # Heartbeats are stamped with the import-time NOW; pin the clock to it so
     # a slow, loaded run cannot see them as stale before the test begins.
-    monkeypatch.setattr(status_mod, "_now", lambda now=None: now or NOW)
+    clock = FakeClock(start=NOW)
+    cache = lb.LeaderboardCache(bucket_sec=2, now=clock.now)
+    snap = _snapshot(n=5, live={2}, parent_of={2: 1})
     by_verstr = {r["verstr"]: r for r in cache.page(snap, {}, limit=10)["rows"]}
     assert by_verstr["1.0.0-dev.r0002"]["status"] == "running"
 
-    later = NOW + datetime.timedelta(hours=1)
-    monkeypatch.setattr(status_mod, "_now", lambda now=None: now or later)
+    clock.advance(3600)
     by_verstr = {r["verstr"]: r for r in cache.page(snap, {}, limit=10)["rows"]}
     assert by_verstr["1.0.0-dev.r0002"]["status"] == "stuck"
     # Its parent has finished: a stuck child of an ended outer run is lost,
@@ -168,8 +168,9 @@ def test_a_stale_heartbeat_turns_stuck_within_a_bucket(monkeypatch):
     assert cache.page(snap, {}, status="stuck", limit=10)["total"] == 1
 
 
-def test_etag_tracks_generation_params_and_live_time(monkeypatch):
-    cache = lb.LeaderboardCache(bucket_sec=2)
+def test_etag_tracks_generation_params_and_live_time():
+    clock = FakeClock(start=NOW)
+    cache = lb.LeaderboardCache(bucket_sec=2, now=clock.now)
     done = _snapshot(n=10)
     tag = cache.etag(done, {}, sort="loss", limit=10)
     assert tag == cache.etag(done, {}, sort="loss", limit=10)
@@ -178,10 +179,8 @@ def test_etag_tracks_generation_params_and_live_time(monkeypatch):
     assert tag != cache.etag(_snapshot(n=10, generation=2), {}, sort="loss", limit=10)
 
     live = _snapshot(n=10, generation=3, live={1})
-    monkeypatch.setattr(status_mod, "_now", lambda now=None: now or NOW)
     live_tag = cache.etag(live, {}, limit=10)
-    later = NOW + datetime.timedelta(seconds=30)
-    monkeypatch.setattr(status_mod, "_now", lambda now=None: now or later)
+    clock.advance(30)
     assert cache.etag(done, {}, sort="loss", limit=10) == tag  # nothing live: timeless
     assert cache.etag(live, {}, limit=10) != live_tag
 
@@ -212,16 +211,15 @@ def test_facets_are_computed_once_per_generation():
     assert cache.facets(snap) is facets
 
 
-def test_a_stuck_run_does_not_move_the_etag_with_time(monkeypatch):
-    cache = lb.LeaderboardCache(bucket_sec=2)
+def test_a_stuck_run_does_not_move_the_etag_with_time():
+    clock = FakeClock(start=NOW)
+    cache = lb.LeaderboardCache(bucket_sec=2, now=clock.now)
     snap = _snapshot(n=10, live={1})
     verstr = "1.0.0-dev.r0001"
     stale = NOW - datetime.timedelta(hours=1)
     snap.run_states[verstr]["heartbeat"] = _iso(stale)
     snap.run_state_observed_at[verstr] = stale
-    monkeypatch.setattr(status_mod, "_now", lambda now=None: now or NOW)
     tag = cache.etag(snap, {}, limit=10)
 
-    later = NOW + datetime.timedelta(seconds=30)
-    monkeypatch.setattr(status_mod, "_now", lambda now=None: now or later)
+    clock.advance(30)
     assert cache.etag(snap, {}, limit=10) == tag

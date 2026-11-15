@@ -7,6 +7,8 @@ from vmn_exp.core.log import experiment_row
 from vmn_exp.core.metric_stream import MetricWriter
 from vmn_exp.core.metric_time import us_to_iso
 from vmn_exp.snapshot import LocalSnapshotStorage
+import time
+from writer_args import process_writer
 
 APP = "app"
 V = "0.0.1-dev.abc.r1"
@@ -38,7 +40,7 @@ def _fields(row):
 
 
 def _log_points(st, writer, n, rng, step0=0):
-    w = MetricWriter(st, APP, V, writer)
+    w = MetricWriter(st, APP, V, writer, clock=time.time)
     for i in range(n):
         ts = T0 + (step0 + i) * 1000 + rng.randint(0, 999)
         w.add("loss", rng.random(), step=step0 + i, ts_us=ts)
@@ -67,7 +69,7 @@ def test_stream_fold_matches_the_entry_fold(tmp_path):
 
 def test_a_rewind_refolds_the_streams(tmp_path):
     st = _storage(tmp_path)
-    w = MetricWriter(st, APP, V, "w")
+    w = MetricWriter(st, APP, V, "w", clock=time.time)
     for step in range(10):
         w.add("loss", float(step), step=step, ts_us=T0 + step)
     w.flush()
@@ -82,7 +84,7 @@ def test_a_rewind_refolds_the_streams(tmp_path):
 
 def test_a_grown_stream_reads_only_its_new_headers(tmp_path, monkeypatch):
     st = _storage(tmp_path)
-    w = MetricWriter(st, APP, V, "w")
+    w = MetricWriter(st, APP, V, "w", clock=time.time)
     for step in range(2000):
         w.add("loss", float(step), step=step, ts_us=T0 + step)
     w.flush()
@@ -112,15 +114,15 @@ def test_a_sealed_stream_and_the_next_one_fold_like_the_stream(tmp_path):
 
     st = _storage(tmp_path)
     rng = random.Random(9)
-    _log_points(st, own_stream(st, APP, V), 40, rng)
+    _log_points(st, own_stream(st, APP, V, writer=process_writer()), 40, rng)
     index = ExperimentIndex(st, APP)
     index.refresh()
-    assert seal_writer(st, APP, V, own_stream(st, APP, V))
-    _log_points(st, own_stream(st, APP, V), 40, rng, step0=40)
+    assert seal_writer(st, APP, V, own_stream(st, APP, V, writer=process_writer()))
+    _log_points(st, own_stream(st, APP, V, writer=process_writer()), 40, rng, step0=40)
     assert _fields(index.refresh().rows()[0]) == _fields(_expected(st))
     assert _fields(_row(st)) == _fields(_expected(st))
     expected = _fields(_expected(st))
-    assert compact_writer(st, APP, V, own_stream(st, APP, V))
+    assert compact_writer(st, APP, V, own_stream(st, APP, V, writer=process_writer()))
     assert _fields(index.refresh().rows()[0]) == expected
 
 
@@ -130,10 +132,10 @@ def test_a_resumed_writer_compacted_again_refolds_like_a_cold_build(tmp_path):
 
     st = _storage(tmp_path)
     rng = random.Random(11)
-    _log_points(st, own_stream(st, APP, V), 40, rng)
-    assert compact_writer(st, APP, V, own_stream(st, APP, V))
+    _log_points(st, own_stream(st, APP, V, writer=process_writer()), 40, rng)
+    assert compact_writer(st, APP, V, own_stream(st, APP, V, writer=process_writer()))
     index = ExperimentIndex(st, APP)
     index.refresh()
-    _log_points(st, own_stream(st, APP, V), 40, rng, step0=40)
-    assert compact_writer(st, APP, V, own_stream(st, APP, V))
+    _log_points(st, own_stream(st, APP, V, writer=process_writer()), 40, rng, step0=40)
+    assert compact_writer(st, APP, V, own_stream(st, APP, V, writer=process_writer()))
     assert _fields(index.refresh().rows()[0]) == _fields(_row(st))

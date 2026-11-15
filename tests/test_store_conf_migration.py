@@ -1,4 +1,4 @@
-"""Conf ``experiment.storage`` -> top-level ``store`` (plan 37 P4c).
+"""Conf ``experiment.storage`` -> top-level ``store`` (plan 45 P4c).
 
 Loading only flags the legacy section (the store resolver reads both);
 ``vmn stamp`` rewrites the conf file text, keeping comments and key order.

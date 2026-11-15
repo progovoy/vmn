@@ -9,7 +9,8 @@ Only the main thread may install a handler, yet runs are often opened from
 worker threads (a thread-pool sweep). So the handler is installed when
 ``vmn_exp.sdk`` is imported on the main thread (and again by a main-thread
 ``start_run()`` if the workload replaced it since), and stays: with no open
-run it finalizes nothing. It is never installed over ``SIG_IGN`` — a process
+run it is inert, putting the previous handler back and handing the signal on
+at once, with no finalizer thread. It is never installed over ``SIG_IGN`` — a process
 that ignores SIGTERM survives it, so its runs did not end. When it fires it
 finalizes the open runs, puts the previous handler back and hands the signal
 on: a Python handler the workload installed is called, and the default
@@ -25,7 +26,7 @@ _HANDLED = signal.SIGTERM
 # Only ever touched from the main thread (Python delivers signals there too),
 # so there is no lock: the one "concurrent" caller is the handler itself.
 _STATE = {"previous": None, "finalize": None, "timeout": None, "raises": None,
-          "finalizing": False}
+          "has_work": None, "finalizing": False}
 
 
 def _on_main_thread():
@@ -36,19 +37,25 @@ def _never():
     return False
 
 
-def install(finalize, timeout, raises=_never):
+def _always():
+    return True
+
+
+def install(finalize, timeout, raises=_never, has_work=_always):
     """Route SIGTERM through ``finalize(signum)`` first, waiting at most
     ``timeout()`` seconds for it (read when the signal arrives). Idempotent; chains whatever handler is current,
     so it can be called again after the workload installed its own. Where the
     default disposition would kill, ``raises()`` (read before finalizing)
-    raises ``SystemExit`` instead."""
+    raises ``SystemExit`` instead. When ``has_work()`` is false at the signal,
+    nothing is finalized."""
     if not _on_main_thread():
         return
     previous = signal.getsignal(_HANDLED)
     # None: a handler installed outside Python, which cannot be chained.
     if previous in (_handle, signal.SIG_IGN, None):
         return
-    _STATE.update(previous=previous, finalize=finalize, timeout=timeout, raises=raises)
+    _STATE.update(previous=previous, finalize=finalize, timeout=timeout, raises=raises,
+                  has_work=has_work)
     signal.signal(_HANDLED, _handle)
 
 
@@ -61,7 +68,8 @@ def _handle(signum, frame):
     _STATE["finalizing"] = True
     previous = _STATE["previous"]
     try:
-        _run_bounded(_STATE["finalize"], signum, _STATE["timeout"]())
+        if _STATE["has_work"]():
+            _run_bounded(_STATE["finalize"], signum, _STATE["timeout"]())
     finally:
         _STATE["finalizing"] = False
         if signal.getsignal(_HANDLED) is _handle:

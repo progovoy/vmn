@@ -107,6 +107,7 @@ function useOuterScroll(card: RefObject<HTMLElement>, body: RefObject<HTMLElemen
   useLayoutEffect(() => {
     if (on) box.current = scrollParent(card.current?.parentElement ?? null);
   }, [on, card]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- re-read each render (above); an equal margin does not re-render
   useLayoutEffect(() => {
     const scroller = box.current;
     if (!scroller || !body.current) return;

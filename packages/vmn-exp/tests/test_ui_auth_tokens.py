@@ -9,6 +9,7 @@ from fastapi.testclient import TestClient
 from vmn_exp.ui.auth.principal import EDITOR, VIEWER
 from vmn_exp.ui.auth.tokens import ApiTokenAuthenticator, TokenService
 from vmn_exp.ui.control_plane import SQLiteControlPlane
+from vmn_exp.core.real_io import RealRandom, real_io
 
 
 class _Clock:
@@ -23,7 +24,7 @@ class _Clock:
 def svc(tmp_path):
     clock = _Clock()
     path = tmp_path / "cp.sqlite3"
-    return TokenService(SQLiteControlPlane(str(path)), clock=clock), clock, path
+    return TokenService(SQLiteControlPlane(str(path)), clock=clock, random=RealRandom()), clock, path
 
 
 def test_create_returns_prefixed_secret_and_verifies(svc):
@@ -81,7 +82,7 @@ def test_rejects_unknown_role(svc):
 def test_tokens_persist_across_store_instances(svc):
     tokens, clock, path = svc
     secret, _ = tokens.create("ci", {"ml": VIEWER})
-    again = TokenService(SQLiteControlPlane(str(path)), clock=clock)
+    again = TokenService(SQLiteControlPlane(str(path)), clock=clock, random=RealRandom())
     assert again.verify(secret) is not None
 
 
@@ -93,7 +94,43 @@ def test_api_token_authenticates_requests(tmp_path, svc):
     tokens, _, _ = svc
     secret, _ = tokens.create("ci", {"ml": VIEWER})
     chain = AuthenticatorChain([ApiTokenAuthenticator(tokens)])
-    client = TestClient(create_app(WorkspaceManager(str(tmp_path / "ui")), auth=chain))
+    client = TestClient(create_app(WorkspaceManager(str(tmp_path / "ui")), io=real_io(), auth=chain))
     assert client.get("/api/v1/workspaces").status_code == 401
     r = client.get("/api/v1/workspaces", headers={"Authorization": f"Bearer {secret}"})
     assert r.status_code == 200
+
+
+def test_revoke_owner_revokes_all_of_that_owner_only(svc):
+    tokens, _, _ = svc
+    a1, _ = tokens.create("a1", {}, owner="oidc:alice", groups=("ml",))
+    a2, _ = tokens.create("a2", {"ml": VIEWER}, owner="oidc:alice")
+    b1, _ = tokens.create("b1", {}, owner="oidc:bob", groups=("ml",))
+    assert tokens.revoke_owner("oidc:alice") == 2
+    assert tokens.verify(a1) is None and tokens.verify(a2) is None
+    assert tokens.verify(b1) is not None
+    assert tokens.revoke_owner("oidc:alice") == 0
+
+
+def test_record_without_groups_field_still_loads(svc):
+    tokens, _, _ = svc
+    secret, record = tokens.create("old", {"ml": EDITOR}, owner="oidc:a")
+    stored = tokens.store.get("token", record.id)
+    del stored["groups"]
+    tokens.store.put("token", record.id, stored)
+    principal = tokens.verify(secret)
+    assert principal.roles == {"ml": EDITOR} and principal.groups == ()
+    assert [t.groups for t in tokens.list()] == [()]
+
+
+def test_admin_created_token_keeps_explicit_roles(svc):
+    tokens, _, _ = svc
+    secret, record = tokens.create("ci", {"ml": EDITOR}, owner="oidc:admin")
+    principal = tokens.verify(secret)
+    assert principal.roles == {"ml": EDITOR} and principal.groups == ()
+    assert record.groups == ()
+
+
+def test_login_token_returns_its_groups(svc):
+    tokens, _, _ = svc
+    secret, _ = tokens.create("login", {}, owner="oidc:a", groups=("ml", "ops"))
+    assert tokens.verify(secret).groups == ("ml", "ops")

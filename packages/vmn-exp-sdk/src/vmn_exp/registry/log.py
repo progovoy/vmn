@@ -53,9 +53,14 @@ def _build_entry(
     entries: list,
     entry_type: str,
     actor: dict | None,
+    *,
+    env,
+    host,
     **fields,
 ) -> dict:
-    writer_id = get_writer_id()
+    """An entry by the writer of *env* and *host*, as *actor* (default: their
+    :func:`actor_identity`)."""
+    writer_id = get_writer_id(env, host)
     pos = _writer_pos(entries, writer_id)
     ts = next_ts(_max_ts(entries), _reg_ts())
     return {
@@ -63,7 +68,7 @@ def _build_entry(
         "ts": ts,
         "writer": writer_id,
         "pos": pos,
-        "actor": actor if actor is not None else actor_identity(),
+        "actor": actor if actor is not None else actor_identity(env, host),
         **fields,
     }
 
@@ -71,8 +76,9 @@ def _build_entry(
 def _append_entry(storage, model: str, entry: dict, record: str = HEADER_RECORD) -> None:
     """Append *entry* to *model*'s *record* log and flush to remote so readers see it."""
     reg = registry_storage(storage)
-    reg.append_log_entry(model, record, own_stream(reg, model, record), entry)
-    flush_log(reg, model, record)
+    writer = entry["writer"]
+    reg.append_log_entry(model, record, own_stream(reg, model, record, writer), entry)
+    flush_log(reg, model, record, writer)
 
 
 # ---------------------------------------------------------------------------
@@ -87,8 +93,11 @@ def set_alias(
     *,
     expect=None,
     actor: dict | None = None,
+    env,
+    host,
 ) -> None:
-    """Point *alias* at *version* in *model*'s registry log.
+    """Point *alias* at *version* in *model*'s registry log, as the writer
+    of *env* and *host*.
 
     *version* is an int (point) or None (tombstone / removal).
     *expect* is the version the caller believes the alias currently holds, or
@@ -98,7 +107,8 @@ def set_alias(
     entries = read_entries(storage, model)
     if expect is not None:
         _check_expect(alias, expect, fold_registry(entries))
-    entry = _build_entry(entries, "alias", actor, alias=alias, version=version)
+    entry = _build_entry(entries, "alias", actor, env=env, host=host, alias=alias,
+                         version=version)
     _append_entry(storage, model, entry)
 
 
@@ -109,9 +119,11 @@ def remove_alias(
     *,
     expect=None,
     actor: dict | None = None,
+    env,
+    host,
 ) -> None:
     """Tombstone *alias* in *model*'s registry log (version → None)."""
-    set_alias(storage, model, alias, None, expect=expect, actor=actor)
+    set_alias(storage, model, alias, None, expect=expect, actor=actor, env=env, host=host)
 
 
 def set_version_status(
@@ -121,6 +133,8 @@ def set_version_status(
     status: str,
     *,
     actor: dict | None = None,
+    env,
+    host,
 ) -> None:
     """Record a status change for *version* of *model*.
 
@@ -137,7 +151,8 @@ def set_version_status(
                 f"Cannot delete version {version} of model {model!r}: "
                 f"aliases {pointing!r} still point to it — remove them first."
             )
-    entry = _build_entry(entries, "status", actor, version=version, status=status)
+    entry = _build_entry(entries, "status", actor, env=env, host=host, version=version,
+                         status=status)
     _append_entry(storage, model, entry)
 
 
@@ -149,6 +164,8 @@ def record_use(
     verstr: str,
     *,
     actor: dict | None = None,
+    env,
+    host,
 ) -> None:
     """Record that run *verstr* of *app* used *version* of *model*.
 
@@ -164,7 +181,7 @@ def record_use(
     if any(e.get("type") == "use" and e.get("version") == version and e.get("run") == run
            for e in entries):
         return
-    entry = _build_entry(entries, "use", actor, version=version, run=run)
+    entry = _build_entry(entries, "use", actor, env=env, host=host, version=version, run=run)
     _append_entry(storage, model, entry, USES_RECORD)
 
 

@@ -4,24 +4,19 @@ from the leaderboard cache, as a brute-force walk of the snapshot does."""
 import datetime
 
 import pytest
+from fakes.clock import FakeClock
 from job_rollup_reference import annotated, members_of
 from leaderboard_fleet import T0, Fleet
 from vmn_exp.ui.failure_signature import signature
 from vmn_exp.ui.job_views import JobViews
 from vmn_exp.ui.leaderboard_cache import LeaderboardCache
 
-from vmn_exp.core import status as status_mod
 
 SCHEMA = {"loss": {"goal": "min", "primary": True}}
 
 
-@pytest.fixture(autouse=True)
-def _clock(monkeypatch):
-    monkeypatch.setattr(status_mod, "_now", lambda now=None: now or T0)
-
-
 def _members(snap, job):
-    return members_of(annotated(snap), job)
+    return members_of(annotated(snap, T0), job)
 
 
 def _want_top(members, descending=False):
@@ -35,7 +30,7 @@ def _want_top(members, descending=False):
 def test_the_summary_is_the_rollup_with_the_job_row_and_its_top_ten():
     fleet = Fleet(31)
     jobs = fleet.seed_jobs(2, 60, T0, live=10)
-    views, snap = JobViews(LeaderboardCache()), fleet.snapshot()
+    views, snap = JobViews(LeaderboardCache(now=FakeClock(T0).now)), fleet.snapshot()
     summary = views.summary(snap, SCHEMA, jobs[0])
     rollup = views.cache.job_rollup(snap, SCHEMA, jobs[0])
     assert {k: summary[k] for k in rollup} == rollup
@@ -49,7 +44,7 @@ def test_the_summary_is_the_rollup_with_the_job_row_and_its_top_ten():
 def test_top_follows_the_goal_and_moves_with_each_generation():
     fleet = Fleet(32)
     jobs = fleet.seed_jobs(3, 40, T0, live=8)
-    views = JobViews(LeaderboardCache())
+    views = JobViews(LeaderboardCache(now=FakeClock(T0).now))
     schema = {"loss": {"goal": "max", "primary": True}}
     now = T0
     for _ in range(6):
@@ -64,7 +59,7 @@ def test_top_follows_the_goal_and_moves_with_each_generation():
 def test_only_a_run_with_children_has_a_summary():
     fleet = Fleet(33)
     jobs = fleet.seed_jobs(1, 3, T0)
-    views, snap = JobViews(LeaderboardCache()), fleet.snapshot()
+    views, snap = JobViews(LeaderboardCache(now=FakeClock(T0).now)), fleet.snapshot()
     assert views.summary(snap, SCHEMA, fleet.specs[1]["verstr"]) is None
     assert views.summary(snap, SCHEMA, "1.0.0-dev.nope") is None
     assert views.failures(snap, SCHEMA, fleet.specs[1]["verstr"]) is None
@@ -74,7 +69,7 @@ def test_only_a_run_with_children_has_a_summary():
 def test_answers_are_memoized():
     fleet = Fleet(34)
     jobs = fleet.seed_jobs(1, 30, T0, live=3)
-    views, snap = JobViews(LeaderboardCache()), fleet.snapshot()
+    views, snap = JobViews(LeaderboardCache(now=FakeClock(T0).now)), fleet.snapshot()
     assert views.summary(snap, SCHEMA, jobs[0]) is views.summary(snap, SCHEMA, jobs[0])
     assert views.failures(snap, SCHEMA, jobs[0]) is views.failures(snap, SCHEMA, jobs[0])
 
@@ -96,7 +91,7 @@ def _failing_job():
 
 def test_failures_cluster_by_signature_with_hosts_and_overrepresented_params():
     fleet, job = _failing_job()
-    views, snap = JobViews(LeaderboardCache()), fleet.snapshot()
+    views, snap = JobViews(LeaderboardCache(now=FakeClock(T0).now)), fleet.snapshot()
     body = views.failures(snap, SCHEMA, job)
     assert body["total_failed"] == 15
     oom, nan = body["clusters"]
@@ -115,7 +110,7 @@ def test_failures_cluster_by_signature_with_hosts_and_overrepresented_params():
 def test_failure_counts_match_a_brute_force_walk_and_the_limit_caps_clusters():
     fleet = Fleet(36)
     jobs = fleet.seed_jobs(2, 200, T0, live=20)
-    views = JobViews(LeaderboardCache())
+    views = JobViews(LeaderboardCache(now=FakeClock(T0).now))
     for _ in range(4):
         snap = fleet.snapshot()
         for job in jobs:
@@ -132,7 +127,7 @@ def test_failure_counts_match_a_brute_force_walk_and_the_limit_caps_clusters():
 
 def test_a_param_too_rare_in_the_cluster_is_not_reported():
     fleet, job = _failing_job()
-    views, snap = JobViews(LeaderboardCache()), fleet.snapshot()
+    views, snap = JobViews(LeaderboardCache(now=FakeClock(T0).now)), fleet.snapshot()
     nan = views.failures(snap, SCHEMA, job)["clusters"][1]
     # adam/sgd split the NaN runs about as they split the job: no lift worth a mention.
     assert all(p["share"] > p["base_share"] for p in nan["params"])
@@ -143,7 +138,7 @@ def test_the_detail_fleet_reads_counts_and_expected_from_the_rollup():
     fleet = Fleet(37)
     jobs = fleet.seed_jobs(1, 30, T0, live=4)
     fleet.edit(0, values={"loss": 0.1})
-    views, snap = JobViews(LeaderboardCache()), fleet.snapshot()
+    views, snap = JobViews(LeaderboardCache(now=FakeClock(T0).now)), fleet.snapshot()
     status = views.detail_status(snap, SCHEMA, jobs[0])
     rollup = views.cache.job_rollup(snap, SCHEMA, jobs[0])
     counts = rollup["counts"]
@@ -164,7 +159,7 @@ def test_without_a_goal_the_summary_tracks_the_most_common_metrics_unranked():
     jobs = fleet.seed_jobs(1, 40, T0)
     for i in range(1, 41):
         fleet.edit(i, values={"loss": i / 10, **({"acc": 0.5} if i % 4 else {})})
-    views, snap = JobViews(LeaderboardCache()), fleet.snapshot()
+    views, snap = JobViews(LeaderboardCache(now=FakeClock(T0).now)), fleet.snapshot()
     summary = views.summary(snap, {}, jobs[0])
     assert summary["ranked"] is False and summary["metric"] == "loss"
     assert set(summary["metrics"]) == {"loss", "acc"}
@@ -183,7 +178,8 @@ def test_the_goal_less_fallback_leaves_out_numeric_params_folded_into_metrics():
     jobs = fleet.seed_jobs(1, 20, T0)
     for i in range(21):  # the job's own row too
         fleet.edit(i, opt=32, values={"loss": i / 10} if i else {})
-    summary = JobViews(LeaderboardCache()).summary(fleet.snapshot(), {}, jobs[0])
+    summary = JobViews(LeaderboardCache(now=FakeClock(T0).now)).summary(
+        fleet.snapshot(), {}, jobs[0])
     assert summary["metric"] == "loss" and set(summary["metrics"]) == {"loss"}
 
 
@@ -192,7 +188,8 @@ def test_the_goal_less_fallback_keeps_the_five_most_common_metrics():
     jobs = fleet.seed_jobs(1, 20, T0)
     for i in range(1, 21):
         fleet.edit(i, values={f"m{k}": 1.0 for k in range(7) if i <= 20 - k})
-    summary = JobViews(LeaderboardCache()).summary(fleet.snapshot(), {}, jobs[0])
+    summary = JobViews(LeaderboardCache(now=FakeClock(T0).now)).summary(
+        fleet.snapshot(), {}, jobs[0])
     assert sorted(summary["metrics"]) == ["m0", "m1", "m2", "m3", "m4"]
     assert summary["metric"] == "m0"
 
@@ -202,7 +199,7 @@ def test_the_goal_less_fallback_follows_metrics_logged_in_a_later_generation():
     jobs = fleet.seed_jobs(1, 10, T0)
     for i in range(11):  # the job's own row too
         fleet.edit(i, values={})
-    views = JobViews(LeaderboardCache())
+    views = JobViews(LeaderboardCache(now=FakeClock(T0).now))
     assert views.summary(fleet.snapshot(), {}, jobs[0])["metric"] is None
     for i in range(1, 11):
         fleet.edit(i, values={"f1": i / 10})
@@ -213,5 +210,6 @@ def test_the_goal_less_fallback_follows_metrics_logged_in_a_later_generation():
 def test_a_declared_goal_ranks_as_before():
     fleet = Fleet(41)
     jobs = fleet.seed_jobs(1, 20, T0)
-    summary = JobViews(LeaderboardCache()).summary(fleet.snapshot(), SCHEMA, jobs[0])
+    summary = JobViews(LeaderboardCache(now=FakeClock(T0).now)).summary(
+        fleet.snapshot(), SCHEMA, jobs[0])
     assert summary["ranked"] is True and summary["top"]

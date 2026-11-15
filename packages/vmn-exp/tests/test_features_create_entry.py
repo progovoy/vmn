@@ -6,6 +6,7 @@ from vmn_exp.core import writer as experiment_writer
 from vmn_exp.core.features import FEATURES_VERSION, build_features_entry
 from vmn_exp.core.streams import display_writer
 from vmn_exp.core.writer import create_run
+from writer_args import process_suffix, process_writer
 
 
 class _Scalar:
@@ -56,7 +57,7 @@ def _features():
 def test_the_features_entry_follows_the_create_entry_in_one_write():
     storage = _BatchStorage()
     verstr = create_run(storage, "app", "0.0.1-dev.aaa.bbb", {}, {}, note="n",
-                        create_data={"params": {"lr": _Scalar()}}, features=_features())
+                        create_data={"params": {"lr": _Scalar()}}, features=_features(), writer=process_writer(), suffix=process_suffix())
 
     [(written_verstr, writer, entries)] = storage.writes
     assert (written_verstr, display_writer(writer)) == (verstr, "gpu-07")
@@ -74,7 +75,7 @@ def test_the_features_entry_follows_the_create_entry_in_one_write():
 
 def test_without_features_only_the_create_entry_is_written():
     storage = _BatchStorage()
-    create_run(storage, "app", "0.0.1-dev.aaa.bbb", {}, {}, note="n")
+    create_run(storage, "app", "0.0.1-dev.aaa.bbb", {}, {}, note="n", writer=process_writer(), suffix=process_suffix())
 
     [(_, _, entries)] = storage.writes
     assert [e["type"] for e in entries] == ["create"]
@@ -84,5 +85,5 @@ def test_the_given_features_entry_is_not_modified():
     storage = _BatchStorage()
     features = _features()
     before = dict(features)
-    create_run(storage, "app", "0.0.1-dev.aaa.bbb", {}, {}, features=features)
+    create_run(storage, "app", "0.0.1-dev.aaa.bbb", {}, {}, features=features, writer=process_writer(), suffix=process_suffix())
     assert features == before

@@ -19,6 +19,7 @@ from vmn_exp.core.metric_compact import compact_writer
 from vmn_exp.core.writer import own_stream
 from vmn_exp.storage import local_metrics
 from vmn_exp.storage.local import LocalSnapshotStorage
+from writer_args import process_writer
 
 # How long the held append waits for the compaction it raced to finish.
 _HOLD_SEC = 1.5
@@ -66,7 +67,7 @@ def test_a_block_appended_while_another_process_compacts_reaches_the_remote(
 def test_a_block_appended_while_an_offline_root_compacts_is_kept(tmp_path, monkeypatch):
     root = LocalSnapshotStorage(str(tmp_path / "a"), "runs")
     assert root.create_exclusive(APP, V, meta(V), {})
-    own = own_stream(root, APP, V)
+    own = own_stream(root, APP, V, writer=process_writer())
     assert root.append_metric_block(APP, V, own, block(1.0, start=1))
     threads = _compact_during_next_append(
         monkeypatch, lambda: compact_writer(root, APP, V, own))

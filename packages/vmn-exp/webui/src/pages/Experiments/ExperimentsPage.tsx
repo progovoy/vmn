@@ -3,7 +3,8 @@
  *  runs view (the runs board's columns) or All runs (plan 22's board), switched by one control in the board's head: `Jobs (20) ·
  *  Single runs (19,580) · All runs`, or `Runs · All runs` for an app
  *  without jobs, then the Outer runs view's presets `Live · Review` (plan 28
- *  §4.5). Switching app starts from a clean slate; the views not
+ *  §4.5). An app with single runs and no outer runs lists them under `Runs`
+ *  on the Single runs view's board (plan 38 A6). Switching app starts from a clean slate; the views not
  *  shown have their first page prefetched (useViewPrefetch). The switch
  *  counts each side from the facets; under a filter (or a preset) the shown
  *  side counts what its board answered and the other side shows no number. */
@@ -19,7 +20,7 @@ import SinglesView from "./SinglesView";
 import { useExperimentsView } from "./experimentsView";
 import { useJobsKind, type JobsKind, type JobsKindState } from "./jobsKind";
 import { PRESETS, isPreset, type Preset } from "./presets";
-import { useViewPrefetch } from "./useViewPrefetch";
+import { appShape, useViewPrefetch } from "./useViewPrefetch";
 
 type ViewOption = JobsKind | "all";
 
@@ -48,7 +49,7 @@ function AppExperiments({ ws, app }: { ws: string; app: string }) {
   const kind = useJobsKind(ws, app);
   const preset = isPreset(view) ? view : undefined;
   const board = useLeaderboardView();
-  useViewPrefetch(ws, app, board, view === "all" ? "all" : preset ?? kind.kind ?? "top", kind);
+  useViewPrefetch(ws, app, board, view === "all" ? "all" : preset ?? kind.kind ?? appShape(kind), kind);
   // The shown board's total, for the switch's count under a filter.
   const [totals, setTotals] = useState<SideCounts>(null);
   const onJobsTotal = useCallback((jobs?: number) => setTotals({ jobs }), []);
@@ -77,7 +78,7 @@ function AppExperiments({ ws, app }: { ws: string; app: string }) {
     </span>
   );
   if (view === "all") return <AllRunsView ws={ws} app={app} views={views} onJobs={onJobs} />;
-  return shownKind.kind === "singles"
+  return shownKind.kind === "singles" || kind.singlesOnly
     ? <SinglesView ws={ws} app={app} views={views} onJobs={onJobs} onTotal={onSinglesTotal} />
     : <JobsView ws={ws} app={app} views={views} kind={shownKind} preset={preset} onAll={onAll} onTotal={onJobsTotal} />;
 }

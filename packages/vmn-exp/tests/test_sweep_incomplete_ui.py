@@ -6,8 +6,8 @@ import copy
 import datetime
 
 import pytest
+from fakes.clock import FakeClock
 from run_code_seed import client, finished_state, run_url, seed_run
-from vmn_exp.core import status as status_mod
 from vmn_exp.core.index_snapshot import IndexSnapshot
 from vmn_exp.core.log import experiment_row
 from vmn_exp.core.sweep.spec import parse_spec
@@ -55,9 +55,9 @@ def _snapshot(trials, generation=1, live=()):
     return IndexSnapshot.build(APP, generation, rows, states)
 
 
-def _reference(snap):
+def _reference(snap, now=NOW):
     rows = copy.deepcopy(list(snap.rows))
-    return exp_reader.leaderboard(rows, dict(snap.run_states), {}, limit=50)
+    return exp_reader.leaderboard(rows, dict(snap.run_states), {}, limit=50, now=now)
 
 
 def _outer(result):
@@ -69,18 +69,13 @@ def _strip(result):
             for r in result["rows"]]
 
 
-@pytest.fixture(autouse=True)
-def _clock(monkeypatch):
-    monkeypatch.setattr(status_mod, "_now", lambda now=None: now or NOW)
-
-
 def test_the_uncached_pipeline_says_created_until_every_trial_ran():
     assert _outer(_reference(_snapshot(3)))["tree_status"] == "created"
     assert _outer(_reference(_snapshot(4)))["tree_status"] == "succeeded"
 
 
 def test_a_new_generation_derives_the_same_rollup():
-    cache = lb.LeaderboardCache()
+    cache = lb.LeaderboardCache(now=FakeClock(NOW).now)
     first = cache.page(_snapshot(3), {}, limit=50)
     assert (_outer(first)["tree_status"], _outer(first)["sweep_trials"]) == ("created", 3)
     snap = _snapshot(4, generation=2)
@@ -90,7 +85,7 @@ def test_a_new_generation_derives_the_same_rollup():
 
 
 def test_a_trial_finishing_in_a_new_generation_leaves_it_created():
-    cache = lb.LeaderboardCache()
+    cache = lb.LeaderboardCache(now=FakeClock(NOW).now)
     assert _outer(cache.page(_snapshot(3, live={2}), {}, limit=50))["tree_status"] == "running"
     snap = _snapshot(3, generation=2)
     got = cache.page(snap, {}, limit=50)
@@ -99,14 +94,14 @@ def test_a_trial_finishing_in_a_new_generation_leaves_it_created():
 
 
 def test_live_rows_patched_over_time_match_the_reference(monkeypatch):
-    cache = lb.LeaderboardCache(bucket_sec=2)
+    clock = FakeClock(NOW)
+    cache = lb.LeaderboardCache(bucket_sec=2, now=clock.now)
     snap = _snapshot(3, live={1})
     assert _outer(cache.page(snap, {}, limit=50))["tree_status"] == "running"
-    later = NOW + datetime.timedelta(hours=1)
-    monkeypatch.setattr(status_mod, "_now", lambda now=None: now or later)
+    clock.advance(3600)
     got = cache.page(snap, {}, limit=50)
     assert _outer(got)["tree_status"] == "stuck"
-    assert _strip(got) == _strip(_reference(snap))
+    assert _strip(got) == _strip(_reference(snap, clock.now()))
 
 
 OUTER = "0.0.1-dev.r1"

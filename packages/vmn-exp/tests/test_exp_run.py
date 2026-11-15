@@ -5,6 +5,7 @@ verstr scheme, same ``metadata.yml``, same per-writer log, same
 ``run_state.yml`` — so every reader (``vmn exp list/show``, the dashboard) works
 on it with no changes.
 """
+from datetime import datetime, timezone
 import logging
 import os
 import subprocess
@@ -26,6 +27,7 @@ from vmn_exp.core import status as st
 from version_stamp.core.constants import VMN_USER_NAME
 from vmn_exp.core.status import RUN_STATE_FILE, load_run_state
 from vmn_exp.sdk import Run, start_run
+from vmn_exp.core.real_io import real_io
 
 _RUN_STATE_KEYS = {
     "state",
@@ -93,7 +95,7 @@ def test_clean_context_manager_run_derives_succeeded(app_layout):
         live = _state(app_layout, verstr)
         assert live["state"] == "running"
         assert live["exit_code"] is None
-        assert st.derive_status(live) == st.RUNNING
+        assert st.derive_status(live, now=datetime.now(timezone.utc)) == st.RUNNING
 
     state = _state(app_layout, verstr)
     assert state["state"] == "finished"
@@ -104,7 +106,7 @@ def test_clean_context_manager_run_derives_succeeded(app_layout):
     assert state["host"]
     assert state["command"] == list(sys.argv)
     assert state["heartbeat_interval_sec"] == st.DEFAULT_HEARTBEAT_INTERVAL_SEC
-    assert st.derive_status(state) == st.SUCCEEDED
+    assert st.derive_status(state, now=datetime.now(timezone.utc)) == st.SUCCEEDED
 
     assert _meta(app_layout, verstr)["note"] == "sdk run"
 
@@ -122,7 +124,7 @@ def test_explicit_finish_records_a_failing_exit_code(app_layout):
 
     state = _state(app_layout, run.id)
     assert state["exit_code"] == 3
-    assert st.derive_status(state) == st.FAILED
+    assert st.derive_status(state, now=datetime.now(timezone.utc)) == st.FAILED
 
 
 def test_exception_is_reraised_and_recorded(app_layout):
@@ -138,7 +140,7 @@ def test_exception_is_reraised_and_recorded(app_layout):
     state = _state(app_layout, verstr)
     assert state["state"] == "finished"
     assert state["exit_code"] == 1
-    assert st.derive_status(state) == st.FAILED
+    assert st.derive_status(state, now=datetime.now(timezone.utc)) == st.FAILED
 
     errors = [e for e in _log(app_layout, verstr) if e.get("type") == "error"]
     assert len(errors) == 1
@@ -188,7 +190,7 @@ def test_heartbeat_refreshes_run_state_while_open(app_layout):
         live = _state(app_layout, run.id)
         assert live["heartbeat_interval_sec"] == 1
         assert live["heartbeat"] > started, "heartbeat never refreshed"
-        assert st.derive_status(live) == st.RUNNING
+        assert st.derive_status(live, now=datetime.now(timezone.utc)) == st.RUNNING
     finally:
         run.finish()
 
@@ -201,7 +203,7 @@ def test_run_whose_heartbeat_went_stale_derives_stuck(app_layout):
     try:
         storage = _storage(app_layout)
         state = _state(app_layout, run.id)
-        assert st.derive_status(state) == st.RUNNING
+        assert st.derive_status(state, now=datetime.now(timezone.utc)) == st.RUNNING
 
         # Fixture setup: age the heartbeat past the staleness window.
         state["heartbeat"] = "2020-01-01T00:00:00Z"
@@ -213,7 +215,7 @@ def test_run_whose_heartbeat_went_stale_derives_stuck(app_layout):
             yaml.dump(state, sort_keys=False),
         )
         aged = load_run_state(storage, app_layout.app_name, run.id)
-        assert st.derive_status(aged) == st.STUCK
+        assert st.derive_status(aged, now=datetime.now(timezone.utc)) == st.STUCK
     finally:
         run.finish()
 
@@ -380,7 +382,7 @@ def test_sdk_writes_the_same_per_writer_log_file_as_the_cli(app_layout):
     )
     [log_file] = os.listdir(log_dir)
     assert log_file.endswith(".jsonl")
-    assert display_writer(log_file[:-len(".jsonl")]) == get_writer_id()
+    assert display_writer(log_file[:-len(".jsonl")]) == get_writer_id(real_io().env, real_io().host)
 
 
 # ---------------------------------------------------------------------------
@@ -424,7 +426,7 @@ def test_ambiguous_app_name_error_names_the_candidates():
 
     os.environ.pop("VMN_APP_NAME", None)
     with pytest.raises(ValueError) as exc:
-        _resolve_app_name(None, lambda: ["alpha", "beta"])
+        _resolve_app_name(None, lambda: ["alpha", "beta"], os.environ)
 
     message = str(exc.value)
     assert "alpha" in message and "beta" in message
@@ -513,7 +515,7 @@ def test_sdk_runs_in_a_bare_python_process(app_layout):
 
     verstr = proc.stdout.strip().splitlines()[-1]
     state = _state(app_layout, verstr)
-    assert st.derive_status(state) == st.SUCCEEDED
+    assert st.derive_status(state, now=datetime.now(timezone.utc)) == st.SUCCEEDED
     assert [e for e in _log(app_layout, verstr) if e.get("type") == "note"]
 
 
@@ -539,7 +541,32 @@ def test_atexit_finalizes_a_forgotten_run_as_succeeded(app_layout):
     state = _state(app_layout, verstr)
     assert state["state"] == "finished", "a forgotten run must not stay running"
     assert state["exit_code"] == 0
-    assert st.derive_status(state) == st.SUCCEEDED
+    assert st.derive_status(state, now=datetime.now(timezone.utc)) == st.SUCCEEDED
+
+
+def test_sys_exit_3_without_a_with_block_reads_failed_3(app_layout):
+    """``sys.exit(main())`` with a run left open: the job failed, and so does
+    the run, with the process's own exit code."""
+    _bootstrap(app_layout)
+
+    proc = _run_python(
+        app_layout,
+        _sdk_script(
+            app_layout.app_name,
+            "import sys\n"
+            "run = start_run(APP)\n"
+            "print(run.id)\n"
+            "sys.stdout.flush()\n"
+            "sys.exit(3)\n",
+        ),
+    )
+    assert proc.returncode == 3, proc.stderr
+
+    verstr = proc.stdout.strip().splitlines()[-1]
+    state = _state(app_layout, verstr)
+    assert state["state"] == "finished"
+    assert state["exit_code"] == 3
+    assert st.derive_status(state, now=datetime.now(timezone.utc)) == st.FAILED
 
 
 def test_atexit_finalizes_a_crashed_run_as_failed(app_layout):
@@ -564,7 +591,7 @@ def test_atexit_finalizes_a_crashed_run_as_failed(app_layout):
     state = _state(app_layout, verstr)
     assert state["state"] == "finished"
     assert state["exit_code"] != 0
-    assert st.derive_status(state) == st.FAILED
+    assert st.derive_status(state, now=datetime.now(timezone.utc)) == st.FAILED
 
 
 def test_system_exit_zero_inside_a_run_is_succeeded(app_layout):
@@ -576,7 +603,7 @@ def test_system_exit_zero_inside_a_run_is_succeeded(app_layout):
 
     state = _state(app_layout, run.id)
     assert state["exit_code"] == 0
-    assert st.derive_status(state) == st.SUCCEEDED
+    assert st.derive_status(state, now=datetime.now(timezone.utc)) == st.SUCCEEDED
 
 
 def test_system_exit_nonzero_inside_a_run_records_that_code(app_layout):
@@ -588,4 +615,4 @@ def test_system_exit_nonzero_inside_a_run_records_that_code(app_layout):
 
     state = _state(app_layout, run.id)
     assert state["exit_code"] == 3
-    assert st.derive_status(state) == st.FAILED
+    assert st.derive_status(state, now=datetime.now(timezone.utc)) == st.FAILED

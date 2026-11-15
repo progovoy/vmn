@@ -7,57 +7,61 @@ from vmn_exp.cli.experiment import (
 )
 from vmn_exp.cli.views import dumps
 from vmn_exp.core.refs import resolve_experiment
+from vmn_exp.core.status import min_stale_sec
 from vmn_exp.core.storage_resolve import _get_experiment_storage
 from vmn_exp.core.sweep.claims import claimed_trials
 from vmn_exp.core.sweep.spec import SpecError, load_spec, metric_definition, parse_spec
 from vmn_exp.core.sweep.summary import summarize, trial_rows
-from vmn_exp.core.writer import append_to_log, flush_log
+from vmn_exp.core.writer import append_to_log, flush_log, get_writer_id
 from version_stamp.api import VMN_LOGGER
 
 
-def handle_sweep(vmn_ctx):
+def handle_sweep(vmn_ctx, io):
     vcs, args = vmn_ctx.vcs, vmn_ctx.args
-    params = experiment_storage_params(vcs, args)
+    params = experiment_storage_params(vcs, args, io.env)
     if args.action == "create":
         err = auto_init(vmn_ctx)
         if err:
             return err
-    storage = _get_experiment_storage(vcs, params)
+    storage = _get_experiment_storage(vcs, params, clock=io.clock, env=io.env)
     try:
         if args.action == "create":
-            return sweep_create(vcs, storage, args)
+            return sweep_create(vcs, storage, args, io.env, io.host)
         sweep, spec = resolve_sweep(storage, vcs.name, args.ref)
         if args.action == "status":
-            return sweep_status(storage, vcs.name, sweep, spec, args)
+            return sweep_status(storage, vcs.name, sweep, spec, args, io.clock, min_stale_sec(io.env))
         from vmn_exp.cli.sweep.agent import run_agent
 
-        return run_agent(vcs, storage, args, sweep, spec, getattr(vmn_ctx, "repo_lock", None))
+        return run_agent(vcs, storage, args, sweep, spec, getattr(vmn_ctx, "repo_lock", None),
+                         io=io)
     except SpecError as exc:
         VMN_LOGGER.error(f"Sweep: {exc}")
         return 1
 
 
-def sweep_create(vcs, storage, args):
-    """The sweep's outer run, its normalized spec in the metadata."""
+def sweep_create(vcs, storage, args, env, host):
+    """The sweep's outer run, its normalized spec in the metadata, written as
+    the writer of *env* and *host*."""
     if not args.file:
         raise SpecError("sweep create needs the spec: -f sweep.yml")
     try:
         spec = load_spec(args.file)
     except OSError as exc:
         raise SpecError(f"cannot read {args.file}: {exc}")
-    parent, err = _resolve_parent(storage, vcs.name, args)
+    parent, err = _resolve_parent(storage, vcs.name, args, env)
     if err is not None:
         return err
     verstr, err = _experiment_create_core(
         vcs, storage, note=args.note, name=args.run_name, parent=parent,
         extra_create_data={"tags": {"sweep": spec["method"]}},
-        capture_env=getattr(args, "capture_env", None),
+        capture_env=getattr(args, "capture_env", None), env=env, host=host,
     )
     if err is not None:
         return err
     storage.update_metadata(vcs.name, verstr, {"sweep": spec})
-    append_to_log(storage, vcs.name, verstr, metric_definition(spec))
-    flush_log(storage, vcs.name, verstr)
+    writer = get_writer_id(env, host)
+    append_to_log(storage, vcs.name, verstr, metric_definition(spec), writer)
+    flush_log(storage, vcs.name, verstr, writer)
     print(verstr)
     return 0
 
@@ -75,9 +79,9 @@ def resolve_sweep(storage, app_name, ref):
     return verstr, parse_spec(meta["sweep"])
 
 
-def sweep_status(storage, app_name, sweep, spec, args):
-    summary = summarize(spec, trial_rows(storage, app_name, sweep, spec),
-                        claimed_trials(storage, app_name, sweep))
+def sweep_status(storage, app_name, sweep, spec, args, clock, stale_sec):
+    rows = trial_rows(storage, app_name, sweep, spec, clock=clock, min_stale_sec=stale_sec)
+    summary = summarize(spec, rows, claimed_trials(storage, app_name, sweep))
     summary["sweep"] = sweep
     if args.json:
         print(dumps(summary))

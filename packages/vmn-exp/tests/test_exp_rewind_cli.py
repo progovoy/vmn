@@ -13,6 +13,7 @@ from vmn_exp.core.log import latest_metrics, load_log, metric_series
 from vmn_exp.core.status import RUN_STATE_FILE, load_run_state
 from vmn_exp.sdk import start_run
 from vmn_exp.sdk.reader import list_runs
+from vmn_exp.core.real_io import real_io
 
 
 @pytest.fixture(autouse=True)
@@ -144,7 +145,7 @@ def test_rewind_works_git_free_on_s3(container, capfd):
     from vmn_exp.storage.s3 import S3SnapshotStorage
 
     store = ["--store", f"s3://{BUCKET}/cli"]
-    assert vmn_exp_run(["exp", "create", APP, *store])[0] == 0
+    assert vmn_exp_run(["exp", "create", APP, *store], real_io())[0] == 0
     remote = S3SnapshotStorage(BUCKET, prefix="cli/runs")
     verstr = remote.list_snapshots(APP)[-1]["verstr"]
     for step in (1, 2, 3):
@@ -154,7 +155,7 @@ def test_rewind_works_git_free_on_s3(container, capfd):
         })
     capfd.readouterr()
 
-    assert vmn_exp_run(["exp", "rewind", APP, "-v", verstr, "--step", "1", *store])[0] == 0
+    assert vmn_exp_run(["exp", "rewind", APP, "-v", verstr, "--step", "1", *store], real_io())[0] == 0
     assert "(hid 2 entries)" in capfd.readouterr().out
     log = load_log(remote, APP, verstr)
     assert [p["step"] for p in metric_series(log).get("loss", [])] == [1]

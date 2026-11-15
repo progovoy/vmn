@@ -1,28 +1,30 @@
 # MLflow / W&B adoption plans
 
-Status of the 9 candidate features on `master` (after the `feature-parity` merge and
-the code-store change, `0096782`).
+Every plan, numbered, with its status on `master` (re-checked against the code on
+2026-11-11). The status word is one of: proposal (plans 35 and 37-44 say proposed),
+in progress, done, done except <what>, evaluation. It is the first word of the plan file's own `Status:` line, and
+`packages/vmn-exp/tests/test_plans_index.py` keeps the two equal.
 
 | # | Feature | Status on master | Plan |
 |---|---|---|---|
-| 1 | `vmn-exp rerun` (MLflow Projects / W&B Launch) | missing | [01-exp-rerun.md](01-exp-rerun.md) |
+| 1 | `vmn-exp rerun` (MLflow Projects / W&B Launch) | **done** (`cli/rerun.py`, `rerun_workdir.py`, `rerun_report.py`) | [01-exp-rerun.md](01-exp-rerun.md) |
 | 2 | Console output capture (W&B `output.log`) | **done** (`cli/output_tee.py`, SDK `capture_output=True`) | — |
 | 3 | Alerts on status transitions (`wandb.alert`, MLflow webhooks) | **done** (`run.alert()`, `vmn-exp watch`, `core/alerts/`) | — |
-| 4 | `define_metric` + summaries | mostly done; missing `first`/`mean`, `hidden`, cross-run declared goals | [04-metric-defs-autostep-disabled.md](04-metric-defs-autostep-disabled.md) |
-| 4b | Auto-incrementing step (W&B `_step`) | missing | same file |
+| 4 | `define_metric` + summaries | **done** (`first`/`mean` in `core/metric_summary.py`, `hidden`, declared goals in `core/goal_counts.py`) | [04-metric-defs-autostep-disabled.md](04-metric-defs-autostep-disabled.md) |
+| 4b | Auto-incrementing step (W&B `_step`) | **done** | same file |
 | 5 | DataFrame reader (`search_runs`, `run.history()`) | **done** (`sdk/frames.py`) | — |
-| 6 | Lineage | run-level done; missing datasets + model/dataset use edges | [06-datasets-usage.md](06-datasets-usage.md) |
-| 7 | Disabled mode (`WANDB_MODE=disabled`) | missing | [04-metric-defs-autostep-disabled.md](04-metric-defs-autostep-disabled.md) |
-| 8 | Step media / histograms | done; missing `watch(model)` for plain torch | [08-torch-watch.md](08-torch-watch.md) |
-| 9 | Offline record + `vmn-exp push` (`wandb sync`) | missing | [09-offline-push.md](09-offline-push.md) |
-| 10 | `vmn snapshot` back as a vmn command (experiments reuse it) | removed in d4954f8; being reintroduced | [10-vmn-snapshot.md](10-vmn-snapshot.md) |
-| 11 | Central server: on-prem + BYO-bucket SaaS, DB cache, change journal, SSO/roles | design | [11-central-server.md](11-central-server.md) |
-| 12 | Columnar metric storage: binary streams + indexed files with LOD, range reads, zoom | design | [12-columnar-metrics.md](12-columnar-metrics.md) |
-| 13 | Reports (markdown + live panels, publish/export) and comments | design | [13-reports-comments.md](13-reports-comments.md) |
-| 14 | Store layout v2: top-level areas, one layout for all backends, `store.yml`, `vmn-exp migrate` (fixes runs/snapshots key collision) | proposal — do before 11–13 | [14-store-layout.md](14-store-layout.md) |
+| 6 | Lineage | **done** (run-level lineage, `sdk/datasets.py`, `sdk/usage.py` `use_model`/`use_dataset`, `registry/lineage.py` `version_lineage`) | [06-datasets-usage.md](06-datasets-usage.md) |
+| 7 | Disabled mode (`WANDB_MODE=disabled`) | **done** (`VMN_MODE=disabled`, `sdk/mode.py`, `cli/run_disabled.py`) | [04-metric-defs-autostep-disabled.md](04-metric-defs-autostep-disabled.md) |
+| 8 | Step media / histograms | **done** (`integrations/torch_watch.py` `watch(model)`) | [08-torch-watch.md](08-torch-watch.md) |
+| 9 | Offline record + `vmn-exp push` (`wandb sync`) | **done** (`VMN_EXP_OFFLINE=1`, `cli/push.py`, `core/push_*`) | [09-offline-push.md](09-offline-push.md) |
+| 10 | `vmn snapshot` back as a vmn command (experiments reuse it) | **done** (`version_stamp/snapshot/`, `cli/snapshot_cmd.py`, [docs/snapshots.md](../snapshots.md)) | [10-vmn-snapshot.md](10-vmn-snapshot.md) |
+| 11 | Central server: on-prem + BYO-bucket SaaS, DB cache, change journal, SSO/roles | **done** (`ui/cache_pg.py`, `journal_follow.py`, `ui/auth/`, `tenancy.py`, `onboarding*.py`; [server.md](../vmn-exp/server.md), [byo-bucket.md](../vmn-exp/byo-bucket.md)) | [11-central-server.md](11-central-server.md) |
+| 12 | Columnar metric storage: binary streams + indexed files with LOD, range reads, zoom | **done** (`core/metric_stream.py`, `metric_block.py`, `metric_index_file.py`, `series_reader.py`, `ui/routes_series.py`, `cli/compact.py`, `cli/export_metrics.py`) | [12-columnar-metrics.md](12-columnar-metrics.md) |
+| 13 | Reports (markdown + live panels, publish/export) and comments | **done** (`reports/`, `ui/routes_reports.py`, `routes_comments.py`, `cli/report.py`, `cli/comment.py`, webui `pages/Report*.tsx`; [reports.md](../vmn-exp/reports.md)) | [13-reports-comments.md](13-reports-comments.md) |
+| 14 | Store layout v2: top-level areas, one layout for all backends, `store.yml`, `vmn-exp migrate` (fixes runs/snapshots key collision) | **done** (`storage/store_marker.py` `LAYOUT = 2`, `cli/migrate.py`) | [14-store-layout.md](14-store-layout.md) |
 | 15 | Core CLI speedups: lazy TUI import, bulk tag reads, drop GitPython | proposal | [15-core-cli-speedups.md](15-core-cli-speedups.md) |
 | 16 | Native code (Rust): static core binary, vmn-exp hot paths | evaluation, nothing scheduled | [16-native-code.md](16-native-code.md) |
-| 17 | Detached HEAD: no invented branches, one branch resolver, CI-safe stamp/goto, silent config-key migration, accurate goto output | proposal | [17-detached-head-and-goto.md](17-detached-head-and-goto.md) |
+| 17 | Detached HEAD: no invented branches, one branch resolver, CI-safe stamp/goto, silent config-key migration, accurate goto output | **done** | [17-detached-head-and-goto.md](17-detached-head-and-goto.md) |
 | 18 | Similar runs: features on the record at submission, structured similarity + reasons, backfill and MLflow refresh; v2 intent text written by the user's own AI (via a skill), lexical match + agent re-rank | **done** (`vmn-exp similar`/`similar-backfill`, `--intent*`, `show --patch`, SDK `similar_runs`, UI routes + card, skill) | [18-similar-runs.md](18-similar-runs.md) |
 | 19 | vmn-native dashboard shell: context root (`branch @ HEAD`, dirty, store), status rollup, CLI-grammar ⌘K, sign-in page + 401 auth hints, drawer, not-found | **done** (`ui/routes_shell.py`, `shell_meta.py`, `git_context.py`, `status_summary.py`, webui `shell/`, `auth/`, `components/palette/`) | [19-vmn-native-shell.md](19-vmn-native-shell.md) |
 | 20 | Dashboard flows that beat W&B/MLflow: diff metrics on the summary policy, goal-less metrics and params never crowned, run page Changes card + Reproduce menu + failure context, one Compare page, leaderboard default columns and one filter grammar, outer runs headlined by their tree, plan-19 critique carry-over | **done** (`ui/routes_run_code.py`, `ui/readers/{patch_files,baselines,failure_context}.py`, webui `pages/Compare/`, `RunChanges`, `RunHeaderActions`, `RunLayout`/`Disclosure`, `defaultColumns.ts`, `LeaderboardFilter`, `AttentionStrip`, `LeaderboardCards`) | [20-flows-beat-wandb-mlflow.md](20-flows-beat-wandb-mlflow.md) |
@@ -33,7 +35,7 @@ the code-store change, `0096782`).
 | 25 | Production-grade database use: lean persisted rows + side tables and indexed point reads (`show`/`get_run` without loading the app), incremental revalidation across processes, one SQLite connection policy + safe rebuilds, Postgres pool/timeouts/reconnects, indexed credential lookup + expiry sweep, HMAC tokens, audit paging/retention, control-plane backups (no compatibility) | **done** (`core/index_store*.py`, `index_lean_store.py`, `index_point*.py`, `index_list*.py`, `index_baseline.py`, `index_sweep.py`, `sqlite_conn.py`, `sqlite_files.py`, `storage/host_dirs.py`, `storage/fs_type.py`, `ui/pg_pool.py`, `control_plane*.py`, `migrations/0006_*.sql`, `auth/tokens.py`, `audit.py`, `backup_cli.py`). §1 CLI targets met at 100k except `similar` (see 24); a cold build from an empty cache is still 40–80 s and 3.3 GB (not a target); the Postgres p99-at-1M-sessions and restart-recovery targets are covered by tests (indexed lookup `EXPLAIN`, backend kill, expiry sweep), not benchmarked | [25-database-production-grade.md](25-database-production-grade.md) |
 | 26 | `vmn-exp ui` on free-threaded Python at 500k runs: long-lived data built on owner threads, recycling request executor, GC-untracked rows, a free-threaded GC policy, a Linux 3.14/3.14t/3.15t harness and a gate that flips the GIL hint back | proposal; the flip (F7) **done** by plan 31 D2 on the client's 737k-run numbers | [26-free-threaded-server.md](26-free-threaded-server.md) |
 | 27 | `vmn-exp ui` at millions of runs: one index per store published into the store (immutable checksummed parts + manifest, consumed by every server and caught up from the journal), the board answered from SQL with only live + newest runs in memory, sweeps bounded by time, a lean parallel first build, upgrades that publish then switch; targets at 10M runs (new host ≤ 5 min, RSS ≤ 2 GB) | proposal | [27-millions-of-runs.md](27-millions-of-runs.md) |
-| 28 | Training health, progress and regression at a glance (a client's seed ideas, triaged): public bulk pre-registration (`create_runs`) and run hand-back (`run.release`, `on_sigterm`), store-side app settings, configurable attention queries + `ago()`, a declared progress metric, splits by a tag, baseline compare for outer runs, pivot heatmaps cached once settled, queue/duration-vs-siblings, a multi-level tree with per-node rollups, Live/Review presets, `/metrics` rollup gauges | proposal | [28-training-health-at-a-glance.md](28-training-health-at-a-glance.md) |
+| 28 | Training health, progress and regression at a glance (a client's seed ideas, triaged): public bulk pre-registration (`create_runs`) and run hand-back (`run.release`, `on_sigterm`), store-side app settings, configurable attention queries + `ago()`, a declared progress metric, splits by a tag, baseline compare for outer runs, pivot heatmaps cached once settled, queue/duration-vs-siblings, a multi-level tree with per-node rollups, Live/Review presets, `/metrics` rollup gauges | **done** except T2c (deferred) | [28-training-health-at-a-glance.md](28-training-health-at-a-glance.md), measurements: [28-measurements.md](28-measurements.md) |
 | 29 | Fast CLI/SDK queries on big stores (client wishlist #2): `list`/`archive`/`tag --query` and SDK readers answered by the `vmn-exp ui` server's warm index (S0 paging client, then NDJSON export, capabilities, freshness contract, bulk lane); a faster local fallback (parallel resumable first listing, journal catch-up, streaming selection); optional seed | proposal | [29-shared-query-index.md](29-shared-query-index.md) |
 | 30 | Fork safety you can rely on (client wishlist #10): a published guarantee, child-reset registry, process-wide storage quiesce, per-process clients, inert inherited runs, a ratchet test; no new API beyond `ForkedThroughError` | proposal | [30-fork-safety.md](30-fork-safety.md) |
 | 31 | fgm feedback, November round (triaged): `failed_pct`/`failed_below` in queries instead of a new tree status, a chosen Outer-runs row aggregate (`job_agg`, median of per-child bests), warming grouped team views (on hold), stuck-vs-lost docs, never-matching-field hints and web-param 400s, parallel `prune -v` registry read, boto3 checked at startup, API-path and GIL doc fixes | **done** except §3 (on hold) | [31-fgm-feedback-nov.md](31-fgm-feedback-nov.md) |
@@ -42,7 +44,15 @@ the code-store change, `0096782`).
 | 34 | fgm after 0.1.36: one training's attempts pooled in grouped Outer runs (latest attempt wins, one row per group), `baseline.differ` peers, lost runs no longer fail a tree (`lost_below`), the empty board after an in-place upgrade | **done** | [34-fgm-attempts-baseline-lost.md](34-fgm-attempts-baseline-lost.md) |
 | 35 | Core vmn IO behind interfaces: ports for time/env/processes/filesystem/git/lock/console wired in `vmn_run`, in-memory fakes with contract tests, a ratchet test that forbids new direct IO, a no-Docker unit suite | **proposed** | [35-core-io-behind-interfaces.md](35-core-io-behind-interfaces.md) |
 | 36 | fgm after 0.1.37: counts that follow `q`/groups, the default view on every bare visit, job sorts on grouped boards, Models page speed, absolute `artifact_uri`, a store-only nav; `job_aggregate.nested`, a finalise-only attempt's baseline (`baseline.pool_by`) | **done** | [36-fgm-after-0137.md](36-fgm-after-0137.md) |
-| 37 | S3 and directory snapshot stores in core vmn: `version_stamp.store` (git-free leaf: names, areas, uri, code, S3 record store, `store.yml` marker, store config), `vmn snapshot --store s3://` or `file://` with `vmn[s3]` only, vmn-exp-sdk depends on vmn and builds its run layers on core | **done** | [37-s3-snapshot-store-in-core.md](37-s3-snapshot-store-in-core.md) |
+| 37 | vmn-exp review fixes, index (product review of 2026-11-11, about 60 findings): the owner's decisions, milestones M0-M6 over the 115 items of plans 38-44, cross-plan conflicts and ordering, repo invariants touched, open owner questions | **proposed** | [37-vmn-exp-review-fixes.md](37-vmn-exp-review-fixes.md) |
+| 38 | vmn-exp first run: a script under `vmn-exp run`, a rerun or a sweep trial adopts the wrapper's run and writes its own stream (`--no-adopt` opts out), an app with no outer runs opens on the runs board, a clear error outside a checkout, an announced cold-start push, a quickstart that works as pasted, a notebook guide, an opt-in code-less run | **proposed** | [38-vmn-exp-first-run.md](38-vmn-exp-first-run.md) |
+| 39 | vmn-exp CLI surface: its own prog name and `--version`, params printed as params, flat sorted `list` with a parent marker, untracked files in patches, exit 2 for a flag the action does not own with per-action `--help`, `--json` on `compare`/`comments`, the exit-code contract, `ui` subcommands, a supervision loop that wakes on child exit, git-call budgets | **proposed** | [39-vmn-exp-cli-surface.md](39-vmn-exp-cli-surface.md) |
+| 40 | vmn-exp SDK write path: a final state or final log upload that is retried and reported, never silent (SDK runs and the `vmn-exp run` supervisor), ships off the appending and request threads, log buffers in a per-host directory with an owner lock and `vmn-exp buffers list/ship`, a 25 s SIGTERM budget, `sys.exit(N)` recorded as failed, no import-time hooks | **proposed** | [40-vmn-exp-sdk-write-path.md](40-vmn-exp-sdk-write-path.md) |
+| 41 | vmn-exp SDK shape: an import-budget ratchet and lazy imports, `reports/`, `registry/cli*` and `core/push_*` moved out of the SDK wheel, keyword-only `start_run` and other API traps (warn, then remove), `resolve_storage`, a storage conformance kit and a documented optional surface, GCS/Azure SDK parity, emulators and batch deletes | **proposed** | [41-vmn-exp-sdk-shape.md](41-vmn-exp-sdk-shape.md) |
+| 42 | vmn-exp server security and HTTP API: no symlink escapes from a record dir, one `--flag=value` argv builder for UI jobs with a fuzz test, job reads scoped to workspace and org, OIDC https-only with JWKS signature checks, per-request roles and revoke-by-owner, one error envelope, an endpoint table checked by a test, web tests and ESLint as a blocking CI stage | **proposed** | [42-vmn-exp-server-security-api.md](42-vmn-exp-server-security-api.md) |
+| 43 | vmn-exp docs and release: the current architecture rule as the headline, measured scale facts, `ui-api.md` split out of `ui.md`, a docs link checker, patch-only release rules (`upgrading.md`, a removal rule, a format ratchet), a generated changelog, the SDK/server compatibility contract, Python >=3.10, a solo-store contract test, the roadmap decision record (F14), and LightGBM/CatBoost autolog, ASHA early stopping and a notebook repr | **proposed** | [43-vmn-exp-docs-release.md](43-vmn-exp-docs-release.md) |
+| 44 | vmn-exp IO behind interfaces: a ratchet against new direct IO, ports with shared fakes and a no-Docker unit lane, composition roots for the UI, CLI and SDK, clock (including status derivation), processes, env, random, console and filesystem behind ports, a size ratchet, and splits of `ui/server.py`, `cli/experiment.py`, `sdk/run.py` and `core/index.py` | **proposed** | [44-vmn-exp-io-behind-interfaces.md](44-vmn-exp-io-behind-interfaces.md) |
+| 45 | S3 and directory snapshot stores in core vmn: `version_stamp.store` (git-free leaf: names, areas, uri, code, S3 record store, `store.yml` marker, store config), `vmn snapshot --store s3://` or `file://` with `vmn[s3]` only, vmn-exp-sdk depends on vmn and builds its run layers on core | **done** | [45-s3-snapshot-store-in-core.md](45-s3-snapshot-store-in-core.md) |
 
 Paths in the plans are repo paths under `packages/` (re-verified against `0096782`).
 
@@ -51,3 +61,19 @@ Architecture rule (revised 2026-10-02, see [11-central-server.md §2](11-central
 depends on the server being up.** A server (and a database as cache) is allowed; clients write
 straight to storage with their own storage access (the server never issues credentials). It replaces the earlier
 "no server in the data path" rule.
+
+## Solo check
+
+Solo engineers are the primary user, and nothing may make the single-user case
+worse. Every plan from 37 on carries a `Solo impact:` line (plan 36 is exempt),
+and `test_plans_index.py` reports one without it. A plan's solo case is:
+
+1. A fresh local store: no `server.yml`, no token, no outer runs.
+2. One command opens the UI (`vmn-exp ui`).
+3. No new setup step.
+4. The runs board shows the runs and their metrics
+   (`test_solo_store_board.py`, `test_solo_store_api.py`).
+5. Cold start is not slower.
+
+A plan may carry a negative solo impact only when its `Solo impact:` line
+states the trade-off and a setting keeps the solo default.

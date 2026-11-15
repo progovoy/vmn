@@ -13,6 +13,7 @@ from test_index_upgrade_in_place import _as_records_18
 from vmn_exp.core import index_store_reads
 from vmn_exp.core.index import ExperimentIndex
 from vmn_exp.core.index_io_process import ProcessIO
+from vmn_exp.core.real_io import RealClock
 
 
 @pytest.fixture
@@ -38,15 +39,17 @@ def verstrs(snap):
     return {row["verstr"] for row in snap.rows}
 
 
-def upgraded(live_store, db, io, outdate):
+def upgraded(live_store, db, io, outdate, clock):
     """``(index, its verstrs)``: an index over *db* once loaded, then
     *outdate(db)*; its I/O helper used when *io*."""
-    first = ExperimentIndex(live_store.st, APP, cache_path=db, full_sweep_sec=FULL_SWEEP_SEC)
+    first = ExperimentIndex(live_store.st, APP, cache_path=db, full_sweep_sec=FULL_SWEEP_SEC,
+                            clock=clock)
     first.refresh()
     want = verstrs(first.snapshot())
     first.close()
     outdate(db)
-    index = ExperimentIndex(live_store.st, APP, cache_path=db, full_sweep_sec=FULL_SWEEP_SEC)
+    index = ExperimentIndex(live_store.st, APP, cache_path=db, full_sweep_sec=FULL_SWEEP_SEC,
+                            clock=clock)
     assert index.use_io_process() is io
     return index, want
 
@@ -85,7 +88,7 @@ def test_an_offloaded_derive_serves_the_kept_rows_loading_from_the_helper(
     hold, release = held
     hold(ProcessIO, "derive")
     index, want = upgraded(live_store, str(tmp_path / "idx.sqlite"), True,
-                           lambda db: _as_records_18(db, ()))
+                           lambda db: _as_records_18(db, ()), clock)
     try:
         fs_calls["on"] = True
         serves_kept_rows_mid_derive(index, want, release)
@@ -103,9 +106,9 @@ def test_the_helper_reads_the_kept_rows_once(live_store, clock, tmp_path, monkey
     monkeypatch.setattr(index_store_reads.LeanReads, "load_kept",
                         lambda store, app: reads.append(app) or real(store, app))
     db = str(tmp_path / "idx.sqlite")
-    index, want = upgraded(live_store, db, True, lambda db: _as_records_18(db, ()))
+    index, want = upgraded(live_store, db, True, lambda db: _as_records_18(db, ()), clock)
     index.close()
-    helper = _Helper(live_store.st.io_process_args(), APP, db)
+    helper = _Helper(live_store.st.io_process_args(), APP, db, clock=RealClock())
 
     kept = helper.kept()
     helper.derive()

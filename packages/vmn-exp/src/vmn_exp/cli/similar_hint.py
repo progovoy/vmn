@@ -32,7 +32,6 @@ seeks), the hint says its results are incomplete.
 """
 import os
 import sys
-import time
 
 from version_stamp.api import VMN_LOGGER
 from vmn_exp.cli.similar_output import hint_lines
@@ -55,22 +54,24 @@ BEHIND_NOTE = ("similar runs: the search is still filing runs — results incomp
                " (`vmn-exp similar` files them)")
 # Set in an enclosing run's children (VMN_EXPERIMENT_ID) and in sweep trials.
 INNER_RUN_ENVS = ("VMN_EXPERIMENT_ID", "VMN_SWEEP_TRIAL")
-# The search's clock (time.monotonic): the deadline handed to it is read off this.
-_clock = time.monotonic
 
 
-def print_hint(storage, app_name, verstr, args, exp_conf, command=None):
+def print_hint(storage, app_name, verstr, args, exp_conf, command=None, *, clock, env):
     """Print the hint for the new run *verstr* (running *command*, an argv),
-    when wanted and found within :data:`BUDGET_SEC`."""
-    deadline = _clock() + BUDGET_SEC
+    when wanted and found within :data:`BUDGET_SEC` on *clock*'s monotonic
+    time (a :class:`~vmn_exp.core.ports.Clock`, also the search's); not inside
+    a run the Env *env* names."""
+    monotonic = clock.monotonic
+    deadline = monotonic() + BUDGET_SEC
     try:
-        if not _wanted(args, exp_conf):
+        if not _wanted(args, exp_conf, env):
             return
         local = local_side(storage)
         path = index_path(storage, app_name)
         if local is None or not path or not os.path.isfile(path):
             return
-        lines = _lines(local, app_name, verstr, exp_conf, path, deadline, command)
+        lines = _lines(local, app_name, verstr, exp_conf, path, (deadline, monotonic), command,
+                       clock)
     except SimilarDeadlineExceeded:
         VMN_LOGGER.debug("No similar-runs hint: past its time budget")
         return
@@ -81,29 +82,30 @@ def print_hint(storage, app_name, verstr, args, exp_conf, command=None):
         print(line, file=sys.stderr)
 
 
-def _wanted(args, exp_conf):
+def _wanted(args, exp_conf, env):
     if getattr(args, "similar_hint", None) is False or not hint_enabled(exp_conf):
         return False
     return not getattr(args, "parent", None) and not any(
-        os.environ.get(name) for name in INNER_RUN_ENVS)
+        env.get(name) for name in INNER_RUN_ENVS)
 
 
-def _check(deadline):
+def _check(deadline, monotonic):
     """Raise :class:`SimilarDeadlineExceeded` once *deadline* has passed."""
-    if _clock() >= deadline:
+    if monotonic() >= deadline:
         raise SimilarDeadlineExceeded
 
 
-def _lines(local, app_name, verstr, exp_conf, path, deadline, command):
+def _lines(local, app_name, verstr, exp_conf, path, budget, command, clock):
+    deadline, monotonic = budget
     target = record_target(local, app_name, verstr, command=command)
     if target["row"].get("parent"):
         return None
-    _check(deadline)
+    _check(deadline, monotonic)
     schema = conf_schema(exp_conf)
     scope = file_scope(app_name, path, schema, repair=False)
     if scope is None:
         return None
     items = search(local, app_name, scope, target, schema=schema, top=HINT_TOP,
-                   weights=conf_weights(exp_conf), deadline=deadline)
-    _check(deadline)
+                   weights=conf_weights(exp_conf), deadline=deadline, clock=clock)
+    _check(deadline, monotonic)
     return hint_lines(items) + ([BEHIND_NOTE] if scope.behind else [])

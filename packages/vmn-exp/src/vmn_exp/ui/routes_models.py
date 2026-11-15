@@ -19,8 +19,9 @@ from vmn_exp.registry.names import KINDS, valid_alias_name, valid_model_name
 from vmn_exp.registry.store import ensure_model, register_version
 
 
-def register(app, api_prefix, any_exp_storage, listings):
-    """Register model registry routes on *app*.
+def register(app, api_prefix, any_exp_storage, listings, io):
+    """Register model registry routes on *app*; its writes are the writer's
+    of *io*'s env and host.
 
     *any_exp_storage(ws_name)* — callable returning the experiment storage
     for a workspace, raising HTTPException(404) when the workspace is unknown.
@@ -48,10 +49,10 @@ def register(app, api_prefix, any_exp_storage, listings):
     # ------------------------------------------------------------------
 
     @app.get(f"{base}", dependencies=[require(VIEWER)])
-    def list_models_route(ws_name: str, kind: str = None):
+    def list_models_route(ws_name: str, kind: str = None, offset: int = 0, limit: int = None):
         if kind is not None and kind not in KINDS:
             raise HTTPException(400, f"kind must be one of {', '.join(KINDS)}")
-        return listings.get(any_exp_storage(ws_name)).response(kind)
+        return listings.get(any_exp_storage(ws_name)).response(kind, offset, limit)
 
     @app.get(f"{base}/{{model_name}}", dependencies=[require(VIEWER)])
     def get_model_route(ws_name: str, model_name: str):
@@ -91,7 +92,7 @@ def register(app, api_prefix, any_exp_storage, listings):
         # Optional initial alias (best-effort)
         if normalised.get("alias"):
             try:
-                set_alias(storage, model_name, normalised["alias"], n)
+                set_alias(storage, model_name, normalised["alias"], n, env=io.env, host=io.host)
             except Exception:
                 pass
 
@@ -115,6 +116,8 @@ def register(app, api_prefix, any_exp_storage, listings):
                 normalised["alias"],
                 normalised["version"],
                 expect=expect,
+                env=io.env,
+                host=io.host,
             )
         except ValueError as exc:
             # expect mismatch → 409; invalid input caught earlier
@@ -129,7 +132,7 @@ def register(app, api_prefix, any_exp_storage, listings):
         _valid_alias(alias)
         storage = any_exp_storage(ws_name)
         try:
-            remove_alias(storage, model_name, alias)
+            remove_alias(storage, model_name, alias, env=io.env, host=io.host)
         except ValueError as exc:
             raise HTTPException(400, str(exc))
         listings.refresh_model(storage, model_name)
@@ -145,7 +148,7 @@ def register(app, api_prefix, any_exp_storage, listings):
             raise HTTPException(400, err)
         storage = any_exp_storage(ws_name)
         try:
-            set_version_status(storage, model_name, version_n, status)
+            set_version_status(storage, model_name, version_n, status, env=io.env, host=io.host)
         except ValueError as exc:
             raise HTTPException(400, str(exc))
         listings.refresh_model(storage, model_name)

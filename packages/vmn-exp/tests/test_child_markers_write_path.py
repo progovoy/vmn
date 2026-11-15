@@ -2,12 +2,14 @@
 CLI create/run, sweeps, reruns, the SDK and imports all claim through
 ``core.writer`` — and a pruned child drops its marker. Best-effort: a marker
 that cannot be written never fails the child."""
+import os
 import pytest
 from exp_helpers import _bootstrap, _exp, _storage
 from s3_helpers import mocked_bucket, s3_storage
 
 from vmn_exp.core.writer import claim_record, create_run
 from vmn_exp.storage.local import LocalSnapshotStorage
+from writer_args import process_suffix, process_writer
 
 APP = "my_app"
 CODE = "0.0.1-dev.abc.def"
@@ -15,7 +17,7 @@ CODE = "0.0.1-dev.abc.def"
 
 def _run(storage, parent=None):
     return create_run(storage, APP, CODE, {"timestamp": "2026-01-01T00:00:00Z"}, {},
-                      parent=parent)
+                      parent=parent, writer=process_writer(), suffix=process_suffix())
 
 
 @pytest.fixture
@@ -96,13 +98,13 @@ def test_pruning_a_child_drops_its_marker(app_layout, capfd):
 
 def test_pushing_an_offline_child_marks_its_parent_on_the_remote(tmp_path, s3):
     from push_helpers import APP as PUSH_APP, X, local_root, make_run
-    from vmn_exp.core.push_run import NEW, push_run
+    from vmn_exp.cli.pushing.push_run import NEW, push_run
 
     local = local_root(tmp_path)
     outer = make_run(local, tmp_path, verstr=X + ".outer")
     kid = make_run(local, tmp_path, verstr=X + ".kid", parent=outer)
-    assert push_run(local, s3, PUSH_APP, outer).status == NEW
+    assert push_run(local, s3, PUSH_APP, outer, env=os.environ).status == NEW
 
-    assert push_run(local, s3, PUSH_APP, kid).status == NEW
+    assert push_run(local, s3, PUSH_APP, kid, env=os.environ).status == NEW
 
     assert s3.list_children(PUSH_APP, outer) == [kid]

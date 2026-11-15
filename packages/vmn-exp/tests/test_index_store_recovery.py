@@ -4,7 +4,8 @@ import logging
 import os
 import sqlite3
 
-from vmn_exp.core import index_store, index_store_conn, sqlite_files
+from fakes.clock import FakeClock
+from vmn_exp.core import index_store, sqlite_files
 from vmn_exp.core.index_store import SqliteStore
 from vmn_exp.ui.cache_rebuild import SqliteSwap
 
@@ -91,24 +92,15 @@ def test_corruption_under_another_open_store_flips_it_over(tmp_path):
     assert set(other.load(APP)) == {"b"}
 
 
-class _Clock:
-    def __init__(self):
-        self.now = 1000.0
-
-    def __call__(self):
-        return self.now
-
-
-def test_an_open_failure_retries_with_backoff(tmp_path, monkeypatch, caplog):
-    clock = _Clock()
-    monkeypatch.setattr(index_store_conn, "_monotonic", clock)
+def test_an_open_failure_retries_with_backoff(tmp_path, caplog):
+    clock = FakeClock()
     path = str(tmp_path / "missing-dir" / "idx.sqlite")
     caplog.set_level(logging.WARNING)
-    store = SqliteStore(path)
+    store = SqliteStore(path, clock=clock)
     assert store.save(APP, {"a": _rec("1")}, set()) is False
     os.makedirs(tmp_path / "missing-dir")
     assert store.save(APP, {"a": _rec("1")}, set()) is False  # still backing off
-    clock.now += 60
+    clock.advance(60)
     assert store.save(APP, {"a": _rec("1")}, set()) is True
     assert set(SqliteStore(path).load(APP)) == {"a"}
     warnings = [r for r in caplog.records if path in r.getMessage()]
@@ -116,19 +108,18 @@ def test_an_open_failure_retries_with_backoff(tmp_path, monkeypatch, caplog):
 
 
 def test_backoff_grows_while_failing(tmp_path, monkeypatch):
-    clock = _Clock()
-    monkeypatch.setattr(index_store_conn, "_monotonic", clock)
+    clock = FakeClock()
     attempts = []
     real = index_store._connect
 
     def counted(file):
-        attempts.append(clock.now)
+        attempts.append(clock.monotonic())
         return real(file)
 
     monkeypatch.setattr(index_store, "_connect", counted)
-    store = SqliteStore(str(tmp_path / "missing-dir" / "idx.sqlite"))
+    store = SqliteStore(str(tmp_path / "missing-dir" / "idx.sqlite"), clock=clock)
     for _ in range(200):
-        clock.now += 0.5
+        clock.advance(0.5)
         store.load(APP)
     gaps = [b - a for a, b in zip(attempts, attempts[1:])]
     assert len(attempts) < 20 and gaps == sorted(gaps)

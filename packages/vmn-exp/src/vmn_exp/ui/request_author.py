@@ -10,11 +10,12 @@ def _principal(request):
     return getattr(request.state, "principal", None)
 
 
-def author_of(request):
-    """The request principal as ``{id, name}``, else the server's identity."""
+def author_of(request, env, host):
+    """The request principal as ``{id, name}``, else the server's identity
+    (*env*'s and *host*'s)."""
     principal = _principal(request)
     if principal is None:
-        return actor_identity()
+        return actor_identity(env, host)
     return {"id": principal.id, "name": principal.name}
 
 

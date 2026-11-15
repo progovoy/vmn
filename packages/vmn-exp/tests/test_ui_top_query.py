@@ -3,25 +3,24 @@ over HTTP): a query the top-level rows pass by their own fields, beside
 ``q``, so a Jobs view search matching subtrees (``match_subtree``) keeps
 the preset on the outer runs themselves."""
 import pytest
+from fakes.clock import FakeClock
 from leaderboard_fleet import T0, Fleet, finished
 from vmn_exp.ui.leaderboard_cache import LeaderboardCache
 
-from vmn_exp.core import status as status_mod
-
+CLOCK = FakeClock(start=T0)
 SCHEMA = {"loss": {"goal": "min", "primary": True}}
 NEEDLE = 'verstr ~ "needle"'
 OUTERS = 'kind = "outer"'
 
 
 @pytest.fixture
-def board(monkeypatch):
-    monkeypatch.setattr(status_mod, "_now", lambda now=None: now or T0)
+def board():
     fleet = Fleet(5)
     jobs = fleet.seed_jobs(3, 6, T0, live=2)
     hits = [fleet.append(parent=job, state=fleet.ended(T0), verstr=f"1.0.0-dev.needle{i}")
             for i, job in enumerate(jobs[:2])]
     single = fleet.append(state=fleet.ended(T0), verstr="1.0.0-dev.needle-single")
-    return fleet, jobs, hits, single, LeaderboardCache()
+    return fleet, jobs, hits, single, LeaderboardCache(now=CLOCK.now)
 
 
 def _verstrs(page):

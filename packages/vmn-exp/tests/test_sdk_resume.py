@@ -3,6 +3,7 @@
 A requeued job must continue the run it was, not start a new one: same verstr,
 running again, heartbeating, and appending to the same log.
 """
+from datetime import datetime, timezone
 import os
 import time
 
@@ -55,7 +56,7 @@ def test_resume_reopens_the_same_run(app_layout):
         assert state["finished_at"] is None
         assert state["started_at"] == started_at
         assert state["resume_count"] == 1
-        assert derive_status(state) == RUNNING
+        assert derive_status(state, now=datetime.now(timezone.utc)) == RUNNING
 
         beat = state["heartbeat"]
         deadline = time.monotonic() + 10

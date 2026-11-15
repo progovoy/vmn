@@ -43,9 +43,10 @@ def register(app, api_prefix, inputs, cache, aggregate_of):
             raise HTTPException(400, f"Invalid scope '{scope}'")
         snapshot, schema = inputs(ws_name, app_tag)
         try:
-            spec = pivot_spec(rows, cols, cell, pinned(match), metric,
-                              agg or aggregate_of(ws_name, app_tag), status, pinned(q), archived,
-                              scope)
+            now = cache.now()
+            spec = pivot_spec(rows, cols, cell, pinned(match, now), metric,
+                              agg or aggregate_of(ws_name, app_tag), status, pinned(q, now),
+                              archived, scope)
             etag = pivots.etag(snapshot, schema, spec)
             return indexed_response(
                 request, etag, snapshot, lambda: pivots.pivot(snapshot, schema, spec), bodies)

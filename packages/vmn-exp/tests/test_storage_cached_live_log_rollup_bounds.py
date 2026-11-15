@@ -9,6 +9,8 @@ from vmn_exp.core.writer import own_stream
 from vmn_exp.storage import buffered, cached_logs
 from vmn_exp.storage.buffered import BufferedRemoteStorage
 from vmn_exp.storage.ship_state import finalizing
+from vmn_exp.core.real_io import RealClock
+from writer_args import process_writer
 
 APP = "app"
 V = "0.0.1-dev.aaa1111.bbb2222"
@@ -28,7 +30,7 @@ def _note(i):
 
 
 def _ship(host, start, stop):
-    stream = own_stream(host, APP, V)
+    stream = own_stream(host, APP, V, writer=process_writer())
     for i in range(start, stop):
         assert host.append_log_entry(APP, V, stream, _note(i))
         host.sync_log_to_remote(APP, V, stream)
@@ -60,10 +62,10 @@ def test_a_finalizer_ship_never_rolls_up(tmp_path):
     assert len(_objects(stream)) == ROLLUP + 1
 
 
-def test_an_exit_flush_never_rolls_up():
-    pod = BufferedRemoteStorage(s3_storage(), area="runs", flush_interval_sec=0)
+def test_an_exit_flush_never_rolls_up(tmp_path):
+    pod = BufferedRemoteStorage(s3_storage(), str(tmp_path), area="runs", flush_interval_sec=0, clock=RealClock())
     pod.save(APP, V, meta(V), {})
-    stream = own_stream(pod, APP, V)
+    stream = own_stream(pod, APP, V, writer=process_writer())
     for i in range(ROLLUP):
         assert pod.append_log_entry(APP, V, stream, _note(i))
     pod._flush_interval_sec = 3600  # the next lines wait for the exit flush

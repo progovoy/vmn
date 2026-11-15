@@ -10,6 +10,7 @@ from fastapi.testclient import TestClient  # noqa: E402
 
 from vmn_exp.storage.areas import RUNS  # noqa: E402
 from vmn_exp.storage.open import open_storage  # noqa: E402
+from vmn_exp.core.real_io import RealClock, real_io
 
 GIT_ENV = {
     "GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@t",
@@ -41,12 +42,12 @@ def _store_client(tmp_path, apps):
     from vmn_exp.ui.server import create_app
 
     uri = f"file://{tmp_path}/store"
-    storage = open_storage(uri, area=RUNS)
+    storage = open_storage(uri, area=RUNS, clock=RealClock(), env=os.environ)
     for app, count in apps.items():
         _save_runs(storage, app, count)
     manager = _manager(tmp_path)
     manager.add_store("ws", uri)
-    return TestClient(create_app(manager))
+    return TestClient(create_app(manager, io=real_io()))
 
 
 def _git_client(tmp_path, conf_apps, runs):
@@ -63,10 +64,10 @@ def _git_client(tmp_path, conf_apps, runs):
         (conf_dir / "conf.yml").write_text("conf: {}\n")
     store = f"file://{repo}/.vmn/store"
     for app, count in runs.items():
-        _save_runs(open_storage(store, area=RUNS), app, count)
+        _save_runs(open_storage(store, area=RUNS, clock=RealClock(), env=os.environ), app, count)
     manager = _manager(tmp_path)
     manager.attach_path("ws", str(repo))
-    return TestClient(create_app(manager))
+    return TestClient(create_app(manager, io=real_io()))
 
 
 def _get(client, path, status=200):

@@ -58,7 +58,7 @@ def _wait_for(predicate, timeout=5.0):
 
 @pytest.fixture
 def refresher():
-    r = Refresher(interval_sec=0.02, idle_sec=60)
+    r = Refresher(interval_sec=0.02, idle_sec=60, clock=time.monotonic)
     yield r
     r.stop()
 
@@ -94,7 +94,8 @@ def test_a_raising_gil_hint_never_ends_the_loop(refresher, monkeypatch):
 
 
 def test_a_raising_warming_hook_never_ends_the_loop():
-    refresher = Refresher(interval_sec=0.02, idle_sec=60, on_refresh=_raise)
+    refresher = Refresher(interval_sec=0.02, idle_sec=60, on_refresh=_raise,
+                          clock=time.monotonic)
     try:
         index = _Index()
         refresher.snapshot(index)

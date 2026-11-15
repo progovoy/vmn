@@ -15,6 +15,7 @@ from vmn_exp.core.similar import SimilarDeadlineExceeded
 from vmn_exp.snapshot import open_storage
 from vmn_exp.ui import similar_corpora
 from vmn_exp.ui.similar_corpora import SimilarCorpora
+from vmn_exp.core.real_io import RealClock
 
 KEY = ("ws", "app")
 
@@ -33,7 +34,7 @@ class _Refresher:
 
 
 def test_an_index_persisted_in_a_file_is_searched_in_it(tmp_path):
-    storage = open_storage(root=str(tmp_path / "store"), area="runs")
+    storage = open_storage(root=str(tmp_path / "store"), area="runs", clock=RealClock(), env=os.environ)
     focal = seed(storage, "app", verstr(1), note="focal loss")
     path = str(tmp_path / "index.sqlite")
     index = ExperimentIndex(storage, "app", path, full_sweep_sec=0)

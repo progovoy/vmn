@@ -1,5 +1,7 @@
 # Plan 26: `vmn-exp ui` on free-threaded Python at 500k runs
 
+Status: **proposal** (2026-10-27); F7 (the GIL-hint flip) done by plan 31 D2.
+
 > A client served one app of 486k runs from `vmn-exp ui` 0.1.21. On the GIL build
 > (3.10) the server reached 57.7 GiB after 4.3 h. On 3.14t it was 28.3 GiB at
 > 161 s, 192.7 GiB at 75 min, and 210 → 229 → 251 GiB in later periodic dumps,

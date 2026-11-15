@@ -3,17 +3,16 @@ a top-level row is kept when it or any run of its subtree passes ``q``; it
 carries ``matched`` (how many runs of its tree pass), and the page carries
 ``jobs_matched`` and ``runs_matched`` (every passing run of the app)."""
 import pytest
+from fakes.clock import FakeClock
 from leaderboard_fleet import T0, Fleet
 from vmn_exp.ui.leaderboard_cache import LeaderboardCache
 
-from vmn_exp.core import status as status_mod
 
 SCHEMA = {"loss": {"goal": "min", "primary": True}}
 
 
 @pytest.fixture
-def board(monkeypatch):
-    monkeypatch.setattr(status_mod, "_now", lambda now=None: now or T0)
+def board():
     fleet = Fleet(3)
     jobs = fleet.seed_jobs(3, 10, T0, live=4)
     hits = [fleet.append(parent=jobs[0], state=fleet.ended(T0), verstr=f"1.0.0-dev.needle{i}")
@@ -22,7 +21,7 @@ def board(monkeypatch):
     deep = fleet.append(parent=nested, state=fleet.ended(T0), verstr="1.0.0-dev.needle-deep")
     single = fleet.append(state=fleet.ended(T0), verstr="1.0.0-dev.needle-single")
     others = [fleet.append(state=fleet.ended(T0)) for _ in range(3)]
-    return fleet, jobs, hits, deep, single, others, LeaderboardCache()
+    return fleet, jobs, hits, deep, single, others, LeaderboardCache(now=FakeClock(T0).now)
 
 
 def _page(cache, snap, **params):

@@ -1,4 +1,4 @@
-"""Conf ``experiment.storage`` -> top-level ``store`` (plan 37).
+"""Conf ``experiment.storage`` -> top-level ``store`` (plan 45).
 
 The store resolver (``version_stamp.store.config``) reads both, ``store``
 first, so loading only flags the legacy section; ``vmn stamp`` moves it in

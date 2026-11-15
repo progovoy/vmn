@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
-"""Transport middleware for vmn-exp ui: compression and the bearer-token check."""
+"""Transport middleware for vmn-exp ui: compression, request gates and the bearer-token check."""
 import hmac
 
+from fastapi import Request
 from fastapi.middleware.gzip import GZipMiddleware
 
 from vmn_exp.ui.responses import GZIP_LEVEL, GZIP_MIN_BYTES
@@ -26,6 +27,23 @@ class SelectiveGZipMiddleware(GZipMiddleware):
             await self.app(scope, receive, send)
             return
         await super().__call__(scope, receive, send)
+
+
+class RequestGate:
+    """Plain ASGI around ``await check(request)``: the response it answers is
+    sent instead of the request, ``None`` passes the request on. A
+    BaseHTTPMiddleware would leave cyclic garbage per request."""
+
+    def __init__(self, app, check):
+        self.app = app
+        self.check = check
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+        refusal = await self.check(Request(scope, receive))
+        await (self.app if refusal is None else refusal)(scope, receive, send)
 
 
 def bearer_matches(authorization, token):

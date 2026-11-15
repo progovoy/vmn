@@ -15,6 +15,7 @@ from uiload import worker
 from vmn_exp.sdk.reader import list_runs
 from vmn_exp.storage.open import open_storage
 from vmn_exp.storage.areas import local_store_root
+from vmn_exp.core.real_io import RealClock
 
 APP = "loadapp"
 HB = 0.5
@@ -86,7 +87,7 @@ def launched(tmp_path_factory):
 
 
 def _storage(root):
-    return open_storage(root=local_store_root(root), area="runs")
+    return open_storage(root=local_store_root(root), area="runs", clock=RealClock(), env=os.environ)
 
 
 def _rows(root):

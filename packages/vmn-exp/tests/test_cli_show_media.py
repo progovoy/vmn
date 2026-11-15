@@ -1,4 +1,5 @@
 """``vmn-exp show`` summarizes a run's logged images, tables and histograms."""
+from datetime import datetime, timezone
 from vmn_exp.cli.experiment import _describe_log_entry
 from vmn_exp.cli.media_view import media_lines
 from vmn_exp.cli.views import show_payload
@@ -26,5 +27,5 @@ def test_log_entries_describe_media():
 
 
 def test_show_json_carries_media_counts():
-    payload = show_payload(1, {"verstr": "v"}, {}, LOG, None, {})
+    payload = show_payload(1, {"verstr": "v"}, {}, LOG, None, {}, now=datetime.now(timezone.utc))
     assert payload["media_counts"]["images"] == {"keys": 1, "entries": 2}

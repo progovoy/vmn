@@ -2,6 +2,8 @@
 missing ``vmn_cache_meta`` row) or another schema is detected, and a rebuild
 replaces a scope's rows in one transaction under a generation past any a
 follower saw."""
+import time
+
 import pytest
 
 from vmn_exp.ui.cache_health import PgHealth
@@ -80,7 +82,7 @@ def test_a_truncated_cache_is_rebuilt_under_a_shadow_generation(store, tmp_path)
     health = PgHealth(store)
     health.observe("app")
     seen = store.generation("app")
-    cache = WorkspaceCache("ws", health=health, check_sec=0,
+    cache = WorkspaceCache("ws", health=health, check_sec=0, clock=time.monotonic,
                            target_of=lambda: PgShadow(store, health, lambda app: app))
     cache.note("app", st, lambda: index)
     _sql(store, "TRUNCATE vmn_records, vmn_run_states, vmn_tombstones, vmn_scope_gen")

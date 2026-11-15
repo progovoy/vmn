@@ -5,6 +5,7 @@ must not flip ``run_state.yml`` back to running.
 A legit resume of a finished run (``start_run(run_id=...)``) still reopens it:
 its start is always written, and its own heartbeats keep the run running.
 """
+import os
 import time
 
 import pytest
@@ -13,7 +14,8 @@ from s3_helpers import cached_host, meta, mocked_bucket, s3_storage
 
 from vmn_exp.core.status import load_run_state
 from vmn_exp.sdk import start_run
-from vmn_exp.sdk.run import Run
+from vmn_exp.sdk.run import Run, _real_process_hooks
+from vmn_exp.core.real_io import RealClock, RealHost, RealRandom
 
 APP = "app"
 X = "0.0.1-dev.abc1234.0000001"
@@ -58,7 +60,7 @@ def _bucket(monkeypatch):
 
 
 def _open(host, prior_state=None):
-    run = Run(host, APP, X, BEAT, prior_state=prior_state)
+    run = Run(host, APP, X, BEAT, prior_state=prior_state, clock=RealClock(), host=RealHost(), random=RealRandom(), env=os.environ, install_hooks=_real_process_hooks())
     run._open()
     return run
 
@@ -85,7 +87,7 @@ def test_a_duplicate_on_another_host_does_not_reopen_the_finished_run(
     host_a, host_b = cached_host(tmp_path, "a"), cached_host(tmp_path, "b")
     assert host_a.create_exclusive(APP, X, meta(X), {})
     loser = _open(host_b, prior_state={})
-    winner = Run(host_a, APP, X, 3600)
+    winner = Run(host_a, APP, X, 3600, clock=RealClock(), host=RealHost(), random=RealRandom(), env=os.environ, install_hooks=_real_process_hooks())
     winner._open()
     try:
         _wait_until_remote_written_by(loser)
@@ -101,7 +103,7 @@ def test_a_duplicate_on_another_host_does_not_reopen_the_finished_run(
 def test_resuming_a_finished_run_on_another_host_keeps_it_running(tmp_path, _bucket):
     host_a, host_b = cached_host(tmp_path, "a"), cached_host(tmp_path, "b")
     assert host_a.create_exclusive(APP, X, meta(X), {})
-    first = Run(host_a, APP, X, 3600)
+    first = Run(host_a, APP, X, 3600, clock=RealClock(), host=RealHost(), random=RealRandom(), env=os.environ, install_hooks=_real_process_hooks())
     first._open()
     first.finish(exit_code=143)
 

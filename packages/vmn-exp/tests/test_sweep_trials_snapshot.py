@@ -1,6 +1,7 @@
 """A sweep's trials read off an index snapshot touch the sweep's subtree only:
 the rest of the app's runs are neither copied nor status-annotated, and the
 parent -> children map is built once per snapshot."""
+from datetime import datetime, timezone
 from vmn_exp.core import tree
 from vmn_exp.core.index_snapshot import IndexSnapshot
 from vmn_exp.core.sweep import summary
@@ -29,7 +30,7 @@ def _snapshot(unrelated=200):
 
 
 def test_trials_are_attributed_from_the_snapshot():
-    trials = summary.snapshot_trials(SPEC, "sweep", _snapshot())
+    trials = summary.snapshot_trials(SPEC, "sweep", _snapshot(), now=datetime.now(timezone.utc))
     by_verstr = {t["verstr"]: t for t in trials}
     assert sorted(by_verstr) == ["t0", "t1"]
     assert by_verstr["t0"]["metric_source"] == "t0.sdk"
@@ -47,7 +48,7 @@ def test_only_the_sweeps_subtree_is_annotated(monkeypatch):
         return real(rows, *args, **kwargs)
 
     monkeypatch.setattr(summary, "annotate_rows", counting)
-    summary.snapshot_trials(SPEC, "sweep", _snapshot())
+    summary.snapshot_trials(SPEC, "sweep", _snapshot(), now=datetime.now(timezone.utc))
     assert sizes and max(sizes) <= 4
 
 
@@ -62,6 +63,6 @@ def test_the_children_map_is_built_once_per_snapshot(monkeypatch):
 
     monkeypatch.setattr(summary, "children_by_parent", counting)
     snap = _snapshot()
-    summary.snapshot_trials(SPEC, "sweep", snap)
-    summary.snapshot_trials(SPEC, "sweep", snap)
+    summary.snapshot_trials(SPEC, "sweep", snap, now=datetime.now(timezone.utc))
+    summary.snapshot_trials(SPEC, "sweep", snap, now=datetime.now(timezone.utc))
     assert sum(1 for n in calls if n > 4) == 1

@@ -6,7 +6,7 @@ set -o pipefail
 usage()
 {
 cat << EOF
-    Usage: run_pytest.sh [--suite core|exp (the default is core)]
+    Usage: run_pytest.sh [--suite core|exp|exp-unit (the default is core)]
            [--color] [--base_log_dir (the default is /tmp)]
            [--specific_test <test_name>]
            [--skip_test <test_name>]
@@ -14,8 +14,12 @@ cat << EOF
            [--ci_coverage] (turns on pytest coverage for codecov, pytest-coverage should be installed)
            [-h or --help for this usage message]
     Suites: core = vmn alone (tests/, vmn's source root only);
-            exp  = vmn-exp (packages/vmn-exp/tests/, all three source roots).
+            exp  = vmn-exp (packages/vmn-exp/tests/, all three source roots);
+            exp-unit = vmn-exp's unit lane (packages/vmn-exp/tests/unit/: fakes only, no Docker).
     Default values: --base_log_dir='/tmp'
+    The log is <base_log_dir>/tests_output_<suite>_<checkout>_<key>.log, one per
+    checkout and suite, so parallel worktrees never write into one log.
+    VMN_TEST_WORKERS=<n> runs the parallel pass on n workers instead of 29.
 EOF
 }
 
@@ -70,6 +74,10 @@ case ${suite} in
            SRC_PATH=${REPO_ROOT}/packages/vmn/src:${REPO_ROOT}/packages/vmn-exp-sdk/src:${REPO_ROOT}/packages/vmn-exp/src
            COV_PACKAGES='--cov=vmn_exp'
            ;;
+    exp-unit ) SUITE_DIR=${REPO_ROOT}/packages/vmn-exp/tests/unit
+           SRC_PATH=${REPO_ROOT}/packages/vmn/src:${REPO_ROOT}/packages/vmn-exp-sdk/src:${REPO_ROOT}/packages/vmn-exp/src
+           COV_PACKAGES='--cov=vmn_exp'
+           ;;
     * )    usage
            exit 1
 esac
@@ -98,8 +106,8 @@ if [ -n "${K_EXPR}" ]; then
 fi
 html_report_suffix=${suite}_${html_report_suffix//[^A-Za-z0-9_.-]/_}
 
-DATE=$(date +%Y-%m-%d_%H-%M-%S)
-OUT_PATH=${base_log_dir}
+CHECKOUT_KEY=$(printf '%s' "${REPO_ROOT}" | cksum | cut -d' ' -f1)
+LOG_PATH=${base_log_dir%/}/tests_output_${suite}_$(basename "${REPO_ROOT}")_${CHECKOUT_KEY}.log
 
 rm -rf ${REPO_ROOT}/version_stamp/__pycache__
 # macOS caches .pyc files outside __pycache__, under a tree mirroring the
@@ -117,6 +125,7 @@ if ! ${PYTHON} -c 'import coverage, pytest' 2>/dev/null; then
 fi
 
 echo "Will run the ${suite} suite:"
+echo "Log: ${LOG_PATH}"
 export PYTHONPATH=${SRC_PATH}
 # macOS: torch bundles libomp and xgboost loads Homebrew's; two OpenMP runtimes
 # in one worker crash it. Make xgboost load torch's too.
@@ -127,11 +136,13 @@ if [ "$(uname)" = "Darwin" ]; then
 	fi
 fi
 # Timing benchmarks (marker "serial") run in a second, one-process pass:
-# under 29 busy workers they measure the contention, not the code.
-cmd='${PYTHON} -m coverage run -m pytest  -n 29 -m "not serial" --html=report_${html_report_suffix}.html --self-contained-html -vv ${COVERAGE} ${COLOR} "${K_ARGS[@]}" ${module_name} | tee ${OUT_PATH}/tests_output.log'
-serial_cmd='${PYTHON} -m coverage run -a -m pytest -m serial --html=report_${html_report_suffix}_serial.html --self-contained-html -vv ${COVERAGE:+${COVERAGE} --cov-append} ${COLOR} "${K_ARGS[@]}" ${module_name} | tee -a ${OUT_PATH}/tests_output.log'
+# under 29 busy workers they measure the contention, not the code. Storage
+# emulator tests (marker "emulator") run only in CI's tests_storage_emulators.
+cmd='${PYTHON} -m coverage run -m pytest  -n ${WORKERS} -m "not serial and not emulator" --html=report_${html_report_suffix}.html --self-contained-html -vv ${COVERAGE} ${COLOR} "${K_ARGS[@]}" ${module_name} | tee "${LOG_PATH}"'
+serial_cmd='${PYTHON} -m coverage run -a -m pytest -m serial --html=report_${html_report_suffix}_serial.html --self-contained-html -vv ${COVERAGE:+${COVERAGE} --cov-append} ${COLOR} "${K_ARGS[@]}" ${module_name} | tee -a "${LOG_PATH}"'
 
 # pytest exits 5 when a filter leaves a pass nothing to run; only both empty fails.
+WORKERS=${VMN_TEST_WORKERS:-29}
 NO_TESTS=5
 
 echo "${cmd}"

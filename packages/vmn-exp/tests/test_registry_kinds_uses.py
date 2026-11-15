@@ -29,6 +29,7 @@ from vmn_exp.registry.store import (
 from vmn_exp.registry.view import models_for_run, registered_runs
 from vmn_exp.registry import view
 from vmn_exp.storage.local import LocalSnapshotStorage
+from vmn_exp.core.real_io import real_io
 
 
 def _storage(tmp_path):
@@ -101,7 +102,7 @@ def test_use_entries_not_in_model_audit(tmp_path):
     storage = _storage(tmp_path)
     ensure_model(storage, "resnet")
     n = register_version(storage, "resnet", {"app": "a", "verstr": "0.1"})
-    record_use(storage, "resnet", n, "consumer", "0.9")
+    record_use(storage, "resnet", n, "consumer", "0.9", env=real_io().env, host=real_io().host)
     assert fold_registry(read_entries(storage, "resnet"))["audit"] == []
     uses = read_uses(storage, "resnet")
     assert list(uses) == [n]
@@ -112,8 +113,8 @@ def test_record_use_same_run_twice_writes_one_entry(tmp_path):
     storage = _storage(tmp_path)
     ensure_model(storage, "resnet")
     n = register_version(storage, "resnet", {"app": "a", "verstr": "0.1"})
-    record_use(storage, "resnet", n, "consumer", "0.9")
-    record_use(storage, "resnet", n, "consumer", "0.9")
+    record_use(storage, "resnet", n, "consumer", "0.9", env=real_io().env, host=real_io().host)
+    record_use(storage, "resnet", n, "consumer", "0.9", env=real_io().env, host=real_io().host)
     assert len(read_entries(storage, "resnet", USES_RECORD)) == 1
 
 
@@ -126,8 +127,8 @@ def test_use_entry_does_not_invalidate_run_models_cache(tmp_path, monkeypatch):
     scans = []
     real_scan = view._scan_run_models
     monkeypatch.setattr(view, "_scan_run_models", lambda s: scans.append(1) or real_scan(s))
-    record_use(storage, "resnet", n, "consumer", "0.9")
-    record_use(storage, "resnet", n, "consumer", "1.0")
+    record_use(storage, "resnet", n, "consumer", "0.9", env=real_io().env, host=real_io().host)
+    record_use(storage, "resnet", n, "consumer", "1.0", env=real_io().env, host=real_io().host)
     models_for_run(storage, "a", "0.1")
     assert scans == []
 
@@ -185,7 +186,7 @@ def test_list_models_kind_filter(tmp_path):
     storage = _storage(tmp_path)
     ensure_model(storage, "resnet")
     ensure_model(storage, "imagenet", kind="dataset")
-    record_use(storage, "resnet", 1, "a", "0.1")
+    record_use(storage, "resnet", 1, "a", "0.1", env=real_io().env, host=real_io().host)
     assert list_models(storage) == ["imagenet", "resnet"]
     assert list_models(storage, kind="model") == ["resnet"]
     assert list_models(storage, kind="dataset") == ["imagenet"]

@@ -5,6 +5,7 @@ sets it after a clean pass through the same conditional write."""
 from types import SimpleNamespace
 
 import pytest
+from fakes.clock import FakeClock
 from s3_helpers import mocked_bucket, s3_storage
 
 from vmn_exp.cli import backfill_children
@@ -14,6 +15,8 @@ from vmn_exp.core.writer import create_run
 from vmn_exp.storage.cached import CachedSnapshotStorage
 from vmn_exp.storage.local import LocalSnapshotStorage
 from vmn_exp.ui.store_upkeep import AppUpkeep
+from vmn_exp.core.real_io import RealClock
+from writer_args import process_suffix, process_writer
 
 APP = "my_app"
 CODE = "0.0.1-dev.abc.def"
@@ -21,7 +24,7 @@ CODE = "0.0.1-dev.abc.def"
 
 def _run(storage, parent=None):
     return create_run(storage, APP, CODE, {"timestamp": "2026-01-01T00:00:00Z"}, {},
-                      parent=parent)
+                      parent=parent, writer=process_writer(), suffix=process_suffix())
 
 
 def _broken(*args):
@@ -178,7 +181,7 @@ def test_a_failed_remote_drop_still_protects_the_parent(cached, s3, monkeypatch)
 
     args = SimpleNamespace(version=[outer], keep=None, older_than=None, force=False,
                            dry_run=False, query=None, protect_tag=None)
-    assert prune_mod.experiment_prune(None, {}, cached, args, APP) == 0
+    assert prune_mod.experiment_prune(None, {}, cached, args, APP, clock=RealClock()) == 0
 
     assert cached.exists(APP, outer) and cached.exists(APP, kid)
 
@@ -200,7 +203,12 @@ def test_a_scan_through_the_cache_clears_the_kept_drop(cached, s3, monkeypatch):
 
 
 def _snap(storage):
-    return experiment_index.indexed_snapshot(storage, APP, wait=True)
+    return experiment_index.indexed_snapshot(storage, APP, wait=True, clock=FakeClock())
+
+
+def _upkeep(storage):
+    clock = FakeClock()
+    return AppUpkeep(storage, APP, clock.monotonic, now=clock.now)
 
 
 def _markerless_tree(storage):
@@ -213,7 +221,7 @@ def _markerless_tree(storage):
 def test_upkeep_flags_the_app_after_a_clean_pass(local):
     _markerless_tree(local)
 
-    AppUpkeep(local, APP).run(_snap(local))
+    _upkeep(local).run(_snap(local))
 
     assert local.children_complete(APP)
 
@@ -222,7 +230,7 @@ def test_upkeep_does_not_flag_after_a_failed_mark(local, monkeypatch):
     _markerless_tree(local)
     monkeypatch.setattr(local, "mark_child", _broken)
 
-    assert AppUpkeep(local, APP).run(_snap(local))["failed"] == 1
+    assert _upkeep(local).run(_snap(local))["failed"] == 1
 
     assert not local.children_complete(APP)
 
@@ -232,7 +240,7 @@ def test_upkeep_does_not_flag_over_a_drop_during_its_check(local, monkeypatch):
     snapshot = _snap(local)
     _race_the_listing(local, monkeypatch, outer)
 
-    AppUpkeep(local, APP).run(snapshot)
+    _upkeep(local).run(snapshot)
 
     assert not local.children_complete(APP)
 
@@ -243,7 +251,7 @@ def test_upkeep_marks_a_run_its_snapshot_lacks_before_flagging(local):
     late = _run(local, parent=outer)
     local.unmark_child(APP, outer, late)
 
-    AppUpkeep(local, APP).run(snapshot)
+    _upkeep(local).run(snapshot)
 
     assert local.list_children(APP, outer) == [late]
     assert local.children_complete(APP)
@@ -255,6 +263,6 @@ def test_upkeep_leaves_a_flagged_app_alone(local, monkeypatch):
     snapshot = _snap(local)
     monkeypatch.setattr(local, "list_verstrs", lambda app: pytest.fail("listed"))
 
-    AppUpkeep(local, APP).run(snapshot)
+    _upkeep(local).run(snapshot)
 
     assert local.children_complete(APP)

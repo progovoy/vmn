@@ -1,35 +1,30 @@
 #!/usr/bin/env python3
-"""The leaderboard pipeline, memoized per index snapshot and carried across
-index generations.
+"""The leaderboard pipeline, memoized per index snapshot and carried across index generations.
 
-Deriving status, the run tree, filtering and sorting cost O(N) per request —
-at 100k runs that is the whole budget. But an :class:`IndexSnapshot` never
-changes, so all of it is done once per snapshot and a page is a slice of the
-memoized ordering.
+Deriving status, the run tree, filtering and sorting cost O(N) per request — at 100k runs
+that is the whole budget. But an :class:`IndexSnapshot` never changes, so all of it is done
+once per snapshot and a page is a slice of the memoized ordering.
 
-A new index generation (about one a second under a live fleet) is not paid
-for from scratch either: its base is derived from the previous generation's
-(:meth:`_Base.derived`). Rows found changed by identity, plus the live ones,
-get their status again; only they, their parents and ancestors get their
-tree fields again (:mod:`~vmn_exp.ui.leaderboard_tree`); each cached
-ordering drops the rows that left and bisects the new ones in
+A new index generation (about one a second under a live fleet) is not paid for from scratch
+either: its base is derived from the previous generation's (:meth:`_Base.derived`). Rows
+found changed by identity, plus the live ones, get their status again; only they, their
+parents and ancestors get their tree fields again (:mod:`~vmn_exp.ui.leaderboard_tree`);
+each cached ordering drops the rows that left and bisects the new ones in
 (:meth:`_Static.advanced`); facet counts move by the same rows
-(:mod:`~vmn_exp.ui.leaderboard_facets`). A large delta, a repeated verstr
-or a parent cycle falls back to a full rebuild. Non-live rows keep the
-time-relative fields (``stale_sec``, ``duration_sec``) of when their record
-last changed, as they always did within one snapshot.
+(:mod:`~vmn_exp.ui.leaderboard_facets`). A large delta, a repeated verstr or a parent cycle
+falls back to a full rebuild. Non-live rows keep the time-relative fields (``stale_sec``,
+``duration_sec``) of when their record last changed, as they always did within one snapshot.
 
-Status is time-dependent only while a run is live (no exit code yet: a stale
-heartbeat turns ``running`` into ``stuck``). Finished and never-run rows get
-their status when their record last changed. Per ``bucket_sec`` time bucket
-only the live rows are re-derived, their ancestors' ``tree_status`` rolled
-up again, and those few rows re-filtered and bisected into the cached order
-(:mod:`~vmn_exp.ui.leaderboard_live`) — O(live · log N), never a full sort.
-``last`` (a storage-order window taken after filtering) scans back from the
-newest row only as far as it needs. Scope and top (plan 23 S2) are filters
-like the others (:mod:`~vmn_exp.ui.leaderboard_scope`), a scoped order built
-from the subtree alone; ``job:*`` orders are :mod:`~vmn_exp.ui.leaderboard_jobs`.
-Rows handed out are shared: callers must treat them as read-only.
+Status is time-dependent only while a run is live (no exit code yet: a stale heartbeat turns
+``running`` into ``stuck``). Finished and never-run rows get their status when their record
+last changed. Per ``bucket_sec`` time bucket only the live rows are re-derived, their
+ancestors' ``tree_status`` rolled up again, and those few rows re-filtered and bisected into
+the cached order (:mod:`~vmn_exp.ui.leaderboard_live`) — O(live · log N), never a full sort.
+``last`` (a storage-order window taken after filtering) scans back from the newest row only
+as far as it needs. Scope and top (plan 23 S2) are filters like the others
+(:mod:`~vmn_exp.ui.leaderboard_scope`), a scoped order built from the subtree alone;
+``job:*`` orders are :mod:`~vmn_exp.ui.leaderboard_jobs`. Rows handed out are shared:
+callers must treat them as read-only.
 """
 import hashlib
 import itertools
@@ -37,11 +32,11 @@ import json
 import os
 from collections import namedtuple
 
-import vmn_exp.core.status as experiment_status
 from vmn_exp.core.gc_pause import freeze_long_lived, gc_paused
 from vmn_exp.core.log import primary_metric
 from vmn_exp.core.query import parse_query
-from vmn_exp.core.status import status_fields, with_queue_sec
+from vmn_exp.core.real_io import real_io
+from vmn_exp.core.status import MIN_STALE_SEC, status_fields, with_queue_sec
 from vmn_exp.core.traced_lock import TracedLock
 from vmn_exp.core.tree import annotate_rows
 from vmn_exp.ui import search_prefilter
@@ -104,24 +99,28 @@ BASE_APPS = 8
 _NONCE = os.urandom(8).hex()
 
 
-def _status(snapshot, row):
-    """*row*'s status fields, judged with the store's write time too."""
+def _status(snapshot, row, now, stale_sec):
+    """*row*'s status fields at *now* on *stale_sec*, judged with the store's write time too."""
     verstr = row["verstr"]
     return with_queue_sec(row, status_fields(
-        snapshot.run_states.get(verstr),
+        snapshot.run_states.get(verstr), now=now, min_stale_sec=stale_sec,
         observed_at=snapshot.run_state_observed_at.get(verstr),
     ))
 
 
-def _restated(snapshot, row):
-    """A copy of *row* with its status fields as of now."""
-    return signed({**row, **_status(snapshot, row)}, snapshot.notes_of(row["verstr"]))
+def _restated(snapshot, row, now, stale_sec):
+    """A copy of *row* with its status fields as of *now* (on *stale_sec*)."""
+    status = _status(snapshot, row, now, stale_sec)
+    return signed({**row, **status}, snapshot.notes_of(row["verstr"]))
 
 
 class _Base:
-    """One snapshot's rows with their status and tree fields."""
+    """One snapshot's rows with their status and tree fields; *now_of()*
+    is the time a build or a time bucket's re-derivation reads, once (on *stale_sec*)."""
 
-    def __init__(self, snapshot, token, bucket, rows, position, patch, tree, siblings):
+    def __init__(self, snapshot, token, bucket, rows, position, patch, tree, siblings, now_of,
+                 stale_sec):
+        self.now_of, self.stale_sec = now_of, stale_sec
         self.snapshot = snapshot
         self.siblings = siblings  # the duration_ratio medians (sibling_durations)
         self.token = token
@@ -144,22 +143,25 @@ class _Base:
         self.built_bucket = bucket
 
     @classmethod
-    def build(cls, snapshot, token, bucket, split=None):
+    def build(cls, snapshot, token, bucket, split, now_of, stale_sec):
         """From scratch: O(N) — a copy of every row, so with collection
         paused (see :mod:`~vmn_exp.core.gc_pause`). *split*: the field
         ``duration_ratio`` compares siblings by (none: the parent alone)."""
-        states = snapshot.run_states
+        states, now = snapshot.run_states, now_of()
         with gc_paused():
-            live = [i for i, row in enumerate(snapshot.rows) if is_live(snapshot, row["verstr"])]
-            rows = [signed(row, snapshot.notes_of(row["verstr"])) for row in
-                    annotate_rows(snapshot.rows, states, snapshot.run_state_observed_at)]
+            live = [i for i, row in enumerate(snapshot.rows)
+                    if is_live(snapshot, row["verstr"], now, stale_sec)]
+            rows = [signed(row, snapshot.notes_of(row["verstr"])) for row in annotate_rows(
+                snapshot.rows, states, snapshot.run_state_observed_at, now=now,
+                min_stale_sec=stale_sec)]
             siblings = SiblingDurations.stamping(rows, split)
             position = {row["verstr"]: i for i, row in enumerate(rows)}
             patch = LivePatch.of_rows(rows, live, position)
-            return cls(snapshot, token, bucket, rows, position, patch, tree_index(rows), siblings)
+            return cls(snapshot, token, bucket, rows, position, patch, tree_index(rows), siblings,
+                       now_of, stale_sec)
 
     @classmethod
-    def derived(cls, prev, snapshot, token, bucket, delta=None):
+    def derived(cls, prev, snapshot, token, bucket, delta=None, *, now_of):
         """From *prev*'s base, re-deriving only what changed (*delta*:
         ``(storage indexes, verstrs gone)``, else found), its ratios against
         siblings by *prev*'s split; None when the delta is large, a verstr
@@ -172,11 +174,11 @@ class _Base:
         position = prev.position if snapshot is prev.snapshot else dict(prev.position)
         for verstr in gone:
             del position[verstr]
-        fresh = {}
+        fresh, now = {}, now_of()
         for i in fresh_at:
             verstr = snapshot.rows[i]["verstr"]
             position[verstr] = i
-            fresh[verstr] = _restated(snapshot, snapshot.rows[i])
+            fresh[verstr] = _restated(snapshot, snapshot.rows[i], now, prev.stale_sec)
         tree = derive_tree(prev, snapshot, fresh, gone, position)
         if tree is None:
             return None
@@ -184,10 +186,10 @@ class _Base:
         was = [prev.rows[prev.position[v]] for v in (*fresh, *gone) if v in prev.position]
         siblings, regrouped = prev.siblings.advanced(was, fresh.values())
         copied = restamped(rows, position, children_of, siblings, regrouped, fresh, rebuilt)
-        live = sorted(position[v] for v in fresh if is_live(snapshot, v))
+        live = sorted(position[v] for v in fresh if is_live(snapshot, v, now, prev.stale_sec))
         patch = LivePatch.from_counts(rows, live, position, snapshot.edges, counts)
         base = cls(snapshot, token, bucket, rows, position, patch, (children_of, counts),
-                   siblings)
+                   siblings, now_of, prev.stale_sec)
         base.delta = (prev.token,) + static_moves(prev, base, rebuilt | gone | copied, copied)
         base.up_moved = ancestors_changed(prev, fresh, gone, children_of)
         return base
@@ -219,12 +221,14 @@ class _Base:
         while stop and (count < 1 or len(out) < count):
             start = max(0, stop - chunk)
             window = [patched.get(i, self.rows[i]) for i in at[start:stop]]
-            out = filtered(self.snapshot, window, f) + out
+            out = filtered(self.snapshot, window, f, self.now_of()) + out
             stop, chunk = start, chunk * 2
         return out
 
     def _rederive_live(self):
-        fresh = {i: _restated(self.snapshot, self.rows[i]) for i in self.patch.live}
+        now = self.now_of()
+        snap, stale_sec = self.snapshot, self.stale_sec
+        fresh = {i: _restated(snap, self.rows[i], now, stale_sec) for i in self.patch.live}
         stamped(fresh.values(), self.siblings)
         return self.patch.rolled_up(self.rows, fresh)
 
@@ -260,7 +264,7 @@ class _Static:
         elif at is None:
             at = range(len(base.rows))
         rows = [base.rows[i] for i in at if i not in changed]
-        kept = filtered(base.snapshot, rows, f)
+        kept = filtered(base.snapshot, rows, f, base.now_of())
         ordered = sort_rows(kept, schema, sort=f.sort, order=f.order)
         with_metric = _carrying(f.sort or primary_metric(schema), kept)
         return cls(base.token, ordered, kept, with_metric)
@@ -271,7 +275,7 @@ class _Static:
         bisection. None when whether any row carries the sort metric flips —
         the order changes shape then — or a left row is missing."""
         left = left_filtered(self.sorted, left, f)
-        joined = filtered(base.snapshot, joined, f)
+        joined = filtered(base.snapshot, joined, f, base.now_of())
         sort, order = f.sort, f.order
         metric = sort or primary_metric(schema)
         with_metric = self.with_metric - _carrying(metric, left) + _carrying(metric, joined)
@@ -311,28 +315,30 @@ def _no_conf(snapshot):
 
 class LeaderboardCache(SetAnswers):
     def __init__(self, max_page=MAX_PAGE, bucket_sec=BUCKET_SEC, size=32,
-                 base_wait_sec=BASE_WAIT_SEC, conf_of=_no_conf):
+                 base_wait_sec=BASE_WAIT_SEC, conf_of=_no_conf, now=None, min_stale_sec=MIN_STALE_SEC):
         """*conf_of(snapshot)* -> ``(metrics schema, experiment.ui)`` of the
         app whose index published *snapshot* (its conf over its store
         settings): what the board warm-up sorts by, job rollups read
-        their progress names from and ``duration_ratio`` its split by."""
+        their progress names from and ``duration_ratio`` its split by.
+        *now()* is the aware UTC time statuses are derived at, read once
+        per build or time bucket (None: ``real_io().clock.now``), on *min_stale_sec*."""
+        self._clock_now, self.min_stale_sec = now or real_io().clock.now, min_stale_sec
         self.conf_of = conf_of
         self.max_page = max_page
         self.bucket_sec = bucket_sec
         self.base_wait_sec = base_wait_sec
         self._tokens = itertools.count(1)
-        # A snapshot's token identifies it across every app/workspace sharing
-        # this cache, so it must never repeat (hence the counter above, not
-        # e.g. snapshot.generation, which restarts per app). Keeping it in
-        # its own small LRU, separate from the heavy _bases below, means a
-        # snapshot recomputed after its _Base was evicted still gets back the
-        # token it had before, so its etag stays stable; entries here are a
-        # few bytes each, so a larger bound than _bases costs nothing.
+        # A snapshot's token identifies it across every app/workspace sharing this cache,
+        # so it must never repeat (hence the counter above, not e.g. snapshot.generation,
+        # which restarts per app). Keeping it in its own small LRU, separate from the heavy
+        # _bases below, means a snapshot recomputed after its _Base was evicted still gets
+        # back the token it had before, so its etag stays stable; entries here are a few
+        # bytes each, so a larger bound than _bases costs nothing.
         self._base_tokens = LRU(size, name="leaderboard base tokens")
-        # Each generation's _Base is a full copy of annotated rows (heavy at
-        # 100k+ runs); keep just enough per app to survive a refresh's
-        # old/new snapshot handoff, and to derive the next generation from —
-        # per app, so going round apps (or a /metrics scrape) rebuilds none.
+        # Each generation's _Base is a full copy of annotated rows (heavy at 100k+ runs);
+        # keep just enough per app to survive a refresh's old/new snapshot handoff, and to
+        # derive the next generation from — per app, so going round apps (or a /metrics
+        # scrape) rebuilds none.
         self._bases = GroupedLRU(2, BASE_APPS, lambda hit: hit[1].snapshot.app_name,
                                  name="leaderboard bases")
         # Caches keyed by a base token first keep each app's newest generations.
@@ -363,8 +369,12 @@ class LeaderboardCache(SetAnswers):
 
     schema_key = staticmethod(_schema_key)
 
+    def now(self):
+        """The time statuses are derived at now."""
+        return self._clock_now()
+
     def _bucket(self):
-        return int(experiment_status._now().timestamp() // self.bucket_sec)
+        return int(self.now().timestamp() // self.bucket_sec)
 
     def _base(self, snapshot):
         """``(base, bucket)``; the bucket is None while nothing is live.
@@ -399,10 +409,11 @@ class LeaderboardCache(SetAnswers):
         stuck): derived like a new generation, else built."""
         token, bucket = next(self._tokens), self._bucket()
         live = (sorted(prev.patch.live), set())  # nothing else changed
-        base = _Base.derived(prev, prev.snapshot, token, bucket, delta=live)
+        base = _Base.derived(prev, prev.snapshot, token, bucket, delta=live, now_of=self.now)
         if base:
             self._deltas.add(base)
-        base = base or _Base.build(prev.snapshot, token, bucket, prev.siblings.split)
+        base = base or _Base.build(prev.snapshot, token, bucket, prev.siblings.split, self.now,
+                                   self.min_stale_sec)
         self.generations.advance(prev.snapshot.app_name, token)
         return base
 
@@ -412,11 +423,11 @@ class LeaderboardCache(SetAnswers):
         prev = self._latest_base(snapshot.app_name)
         prev = prev and latest(prev, bucket)
         same_split = prev and prev.siblings.split == split
-        base = same_split and _Base.derived(prev, snapshot, token, bucket)
+        base = same_split and _Base.derived(prev, snapshot, token, bucket, now_of=self.now)
         if base:
             self._deltas.add(base)
         else:
-            base = _Base.build(snapshot, token, bucket, split)
+            base = _Base.build(snapshot, token, bucket, split, self.now, self.min_stale_sec)
             # A whole board's new rows; a derived base's few are not worth a
             # freeze, which keeps every cycle alive now for good.
             freeze_long_lived()
@@ -443,9 +454,8 @@ class LeaderboardCache(SetAnswers):
             return static.sorted
         return merged.get(
             (base.token, bucket, schema_key, None) + f,
-            lambda: static.merged(
-                base, filtered(base.snapshot, base.changed_at(bucket), f), schema, f.sort, f.order,
-            ),
+            lambda: static.merged(base, filtered(base.snapshot, base.changed_at(bucket), f,
+                                                 base.now_of()), schema, f.sort, f.order),
         )
 
     def _orders_for(self, f):
@@ -489,7 +499,8 @@ class LeaderboardCache(SetAnswers):
     def search(self, snapshot, text, limit, archived=False):
         """``{"results"}``: ⌘K "go to run" over every run (plan 23 S8)."""
         index = self._search.get(snapshot)
-        return {"results": results(snapshot, index.ranked(text, limit, archived))}
+        hits = index.ranked(text, limit, archived)
+        return {"results": results(snapshot, hits, self.now(), self.min_stale_sec)}
 
     def warm(self, snapshot):
         """Build or move *snapshot*'s board base, search index, facets and

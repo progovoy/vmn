@@ -78,8 +78,8 @@ def _load_full_env(storage, app_name, verstr):
         return None
 
 
-def print_provenance_diff_section(storage, app_name, v1, meta1, v2, meta2, cap=30):
-    """Print the env / packages / inputs diff section between two runs.
+def print_provenance_diff_section(storage, app_name, v1, meta1, v2, meta2, out, cap=30):
+    """Write to *out* the env / packages / inputs diff section between two runs.
 
     Printed only when there is something to show.  Output is capped at
     *cap* change lines (+ one ``"... N more"`` trailer).
@@ -93,17 +93,17 @@ def print_provenance_diff_section(storage, app_name, v1, meta1, v2, meta2, cap=3
 
     e_lines = env_diff(env1, env2, cap=cap)
     if e_lines:
-        print("\nEnv/packages:")
+        out("\nEnv/packages:")
         for ln in e_lines:
-            print(f"  {ln}")
+            out(f"  {ln}")
 
     inputs1 = (meta1.get("inputs") or {}) if isinstance(meta1, dict) else {}
     inputs2 = (meta2.get("inputs") or {}) if isinstance(meta2, dict) else {}
     i_lines = inputs_diff(inputs1, inputs2)
     if i_lines:
-        print("\nInputs:")
+        out("\nInputs:")
         for ln in i_lines:
-            print(f"  {ln}")
+            out(f"  {ln}")
 
 
 # ---------------------------------------------------------------------------

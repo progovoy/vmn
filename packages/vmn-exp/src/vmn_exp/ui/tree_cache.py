@@ -5,9 +5,10 @@
 Every tree is a pure function of the app's tags, and those only change when a
 version is stamped, so one ``git tag --list`` per request tells whether the
 last answer still holds — instead of re-reading and re-parsing every tag.
+The caller lists the tags (:func:`versions_fingerprint`); the cache itself
+runs nothing.
 """
 import hashlib
-import subprocess
 
 from version_stamp.api import app_name_to_tag_name
 from vmn_exp.ui.memo import LRU
@@ -16,16 +17,16 @@ MAX_ENTRIES = 128
 UNKNOWN = "error"  # the fingerprint when the tags could not be listed
 
 
-def versions_fingerprint(root_path, app_name):
+def versions_fingerprint(root_path, app_name, processes):
     """Cheap staleness signal: the app's tag list (one local git call)."""
     prefix = app_name_to_tag_name(app_name)
-    result = subprocess.run(
+    result = processes.run(
         ["git", "tag", "--list", f"{prefix}_*"],
         capture_output=True,
         text=True,
         cwd=root_path,
     )
-    if result.returncode != 0:
+    if result is None or result.returncode != 0:
         return UNKNOWN
     return hashlib.sha256(result.stdout.encode()).hexdigest()
 
@@ -37,9 +38,9 @@ class TreeCache:
     def clear(self):
         self._entries.clear()
 
-    def get(self, root_path, app_name, kind, compute, *args):
-        """``compute()``'s value, reused while the app's tags are unchanged."""
-        fingerprint = versions_fingerprint(root_path, app_name)
+    def get(self, fingerprint, root_path, app_name, kind, compute, *args):
+        """``compute()``'s value, reused while the app's tag-list *fingerprint*
+        is unchanged."""
         if fingerprint == UNKNOWN:
             return compute()
         return self._entries.get(

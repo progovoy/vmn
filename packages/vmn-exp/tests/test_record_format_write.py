@@ -11,6 +11,8 @@ sys.path.insert(0, str(Path(__file__).parent))
 from vmn_exp.core.record_format import RECORD_FORMAT_VERSION
 from vmn_exp.core.writer import create_run
 from vmn_exp.storage.local import LocalSnapshotStorage
+from writer_args import process_suffix, process_writer
+from vmn_exp.core.real_io import real_io
 
 
 def _local(tmp_path):
@@ -27,7 +29,7 @@ def test_the_format_version_is_a_positive_int():
 
 def test_create_run_stamps_the_format_version(tmp_path):
     storage = _local(tmp_path)
-    verstr = create_run(storage, "app", "0.0.1", {"timestamp": "t"}, {})
+    verstr = create_run(storage, "app", "0.0.1", {"timestamp": "t"}, {}, writer=process_writer(), suffix=process_suffix())
     assert _format(storage, "app", verstr) == RECORD_FORMAT_VERSION
 
 
@@ -36,7 +38,7 @@ def test_a_run_created_straight_on_s3_is_stamped(monkeypatch):
 
     with mocked_bucket(monkeypatch):
         storage = s3_storage()
-        verstr = create_run(storage, "app", "0.0.1", {"timestamp": "t"}, {})
+        verstr = create_run(storage, "app", "0.0.1", {"timestamp": "t"}, {}, writer=process_writer(), suffix=process_suffix())
         assert _format(storage, "app", verstr) == RECORD_FORMAT_VERSION
 
 
@@ -75,7 +77,7 @@ def test_a_git_free_from_snapshot_run_is_stamped(tmp_path):
                    "base_version": "0.0.1", "branch": "main"})
     )
     storage = _local(tmp_path / "exp")
-    verstr, err = create_from_snapshot(storage, "app", str(meta_path))
+    verstr, err = create_from_snapshot(storage, "app", str(meta_path), environ=real_io().env, host=real_io().host)
     assert err is None
     assert _format(storage, "app", verstr) == RECORD_FORMAT_VERSION
 

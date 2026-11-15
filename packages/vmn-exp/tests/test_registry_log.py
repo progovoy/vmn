@@ -15,6 +15,7 @@ from vmn_exp.registry.log import (
     set_alias,
     set_version_status,
 )
+from vmn_exp.core.real_io import real_io
 
 
 # ---------------------------------------------------------------------------
@@ -37,7 +38,7 @@ def _make_model(storage, model):
 def test_set_alias_visible_in_fold(tmp_path):
     st = _local(tmp_path)
     _make_model(st, "resnet")
-    set_alias(st, "resnet", "prod", 1)
+    set_alias(st, "resnet", "prod", 1, env=real_io().env, host=real_io().host)
     fold = fold_registry(read_entries(st, "resnet"))
     assert fold["aliases"]["prod"] == 1
 
@@ -49,8 +50,8 @@ def test_set_alias_visible_in_fold(tmp_path):
 def test_move_alias(tmp_path):
     st = _local(tmp_path)
     _make_model(st, "resnet")
-    set_alias(st, "resnet", "prod", 1)
-    set_alias(st, "resnet", "prod", 2)
+    set_alias(st, "resnet", "prod", 1, env=real_io().env, host=real_io().host)
+    set_alias(st, "resnet", "prod", 2, env=real_io().env, host=real_io().host)
     fold = fold_registry(read_entries(st, "resnet"))
     assert fold["aliases"]["prod"] == 2
 
@@ -62,8 +63,8 @@ def test_move_alias(tmp_path):
 def test_remove_alias(tmp_path):
     st = _local(tmp_path)
     _make_model(st, "resnet")
-    set_alias(st, "resnet", "staging", 3)
-    remove_alias(st, "resnet", "staging")
+    set_alias(st, "resnet", "staging", 3, env=real_io().env, host=real_io().host)
+    remove_alias(st, "resnet", "staging", env=real_io().env, host=real_io().host)
     fold = fold_registry(read_entries(st, "resnet"))
     assert "staging" not in fold["aliases"]
 
@@ -82,13 +83,13 @@ def test_second_host_sees_alias_move(tmp_path, monkeypatch):
     # host1 sets alias → version 1
     monkeypatch.setenv("VMN_WRITER_ID", "host1")
     ew._WRITER_ID = None
-    set_alias(st1, "bert", "prod", 1)
+    set_alias(st1, "bert", "prod", 1, env=real_io().env, host=real_io().host)
 
     # host2 — fresh storage object at the same path, different writer id
     st2 = _local(tmp_path)
     monkeypatch.setenv("VMN_WRITER_ID", "host2")
     ew._WRITER_ID = None
-    set_alias(st2, "bert", "prod", 2)
+    set_alias(st2, "bert", "prod", 2, env=real_io().env, host=real_io().host)
 
     # fold should reflect host2's later move to version 2
     ew._WRITER_ID = None
@@ -110,17 +111,17 @@ def test_expect_mismatch_raises(tmp_path):
 
     # alias absent but caller expects version 1 → error
     with pytest.raises(ValueError, match="Expected alias"):
-        set_alias(st, "gpt", "prod", 2, expect=1)
+        set_alias(st, "gpt", "prod", 2, expect=1, env=real_io().env, host=real_io().host)
 
     # set alias to 1
-    set_alias(st, "gpt", "prod", 1)
+    set_alias(st, "gpt", "prod", 1, env=real_io().env, host=real_io().host)
 
     # alias exists but caller expects "none" → error
     with pytest.raises(ValueError, match="Expected alias"):
-        set_alias(st, "gpt", "prod", 2, expect="none")
+        set_alias(st, "gpt", "prod", 2, expect="none", env=real_io().env, host=real_io().host)
 
     # correct expect → succeeds
-    set_alias(st, "gpt", "prod", 2, expect=1)
+    set_alias(st, "gpt", "prod", 2, expect=1, env=real_io().env, host=real_io().host)
     assert fold_registry(read_entries(st, "gpt"))["aliases"]["prod"] == 2
 
 
@@ -131,7 +132,7 @@ def test_expect_mismatch_raises(tmp_path):
 def test_status_deprecate(tmp_path):
     st = _local(tmp_path)
     _make_model(st, "vgg")
-    set_version_status(st, "vgg", 1, "deprecated")
+    set_version_status(st, "vgg", 1, "deprecated", env=real_io().env, host=real_io().host)
     fold = fold_registry(read_entries(st, "vgg"))
     assert fold["status"][1] == "deprecated"
 
@@ -143,15 +144,15 @@ def test_status_deprecate(tmp_path):
 def test_delete_version_with_alias_refused(tmp_path):
     st = _local(tmp_path)
     _make_model(st, "efficientnet")
-    set_alias(st, "efficientnet", "prod", 2)
+    set_alias(st, "efficientnet", "prod", 2, env=real_io().env, host=real_io().host)
 
     # version 2 still aliased → delete must raise
     with pytest.raises(ValueError, match="aliases"):
-        set_version_status(st, "efficientnet", 2, "deleted")
+        set_version_status(st, "efficientnet", 2, "deleted", env=real_io().env, host=real_io().host)
 
     # remove the alias first, then delete succeeds
-    remove_alias(st, "efficientnet", "prod")
-    set_version_status(st, "efficientnet", 2, "deleted")
+    remove_alias(st, "efficientnet", "prod", env=real_io().env, host=real_io().host)
+    set_version_status(st, "efficientnet", 2, "deleted", env=real_io().env, host=real_io().host)
     fold = fold_registry(read_entries(st, "efficientnet"))
     assert fold["status"][2] == "deleted"
     assert "prod" not in fold["aliases"]

@@ -18,6 +18,7 @@ from vmn_exp.core.metric_time import us_to_iso
 from vmn_exp.core.series_reader import SeriesReader
 from vmn_exp.storage.files import flatten_logs
 from vmn_exp.storage.local import LocalSnapshotStorage
+import time
 
 APP, V = "app", "v1"
 
@@ -57,7 +58,7 @@ def _entries(rng, n, start_us, keys=("loss", "acc", "lr")):
 
 
 def _write(storage, writer, entries, flush_every=7):
-    w = MetricWriter(storage, APP, V, writer)
+    w = MetricWriter(storage, APP, V, writer, clock=time.time)
     for i in range(0, len(entries), flush_every):
         assert record_metric_entries(w, entries[i:i + flush_every])
     return w
@@ -106,7 +107,7 @@ def test_golden_indexed_writer_matches_its_stream(tmp_path):
 
 def test_rewind_hides_earlier_points_past_its_step(tmp_path):
     storage = _storage(tmp_path)
-    w = MetricWriter(storage, APP, V, "w")
+    w = MetricWriter(storage, APP, V, "w", clock=time.time)
     for step in range(5):
         w.add("loss", float(step), step=step, ts_us=1_000 + step)
     w.flush()
@@ -119,7 +120,7 @@ def test_rewind_hides_earlier_points_past_its_step(tmp_path):
 
 def test_rewinds_come_from_the_log_entries(tmp_path):
     storage = _storage(tmp_path)
-    w = MetricWriter(storage, APP, V, "w")
+    w = MetricWriter(storage, APP, V, "w", clock=time.time)
     w.add("loss", 1.0, step=5, ts_us=1_000)
     w.flush()
     log = [{"type": "rewind", "step": 2, "timestamp": us_to_iso(2_000)}]
@@ -129,7 +130,7 @@ def test_rewinds_come_from_the_log_entries(tmp_path):
 
 def test_step_less_twin_merges_back_into_its_key(tmp_path):
     storage = _storage(tmp_path)
-    w = MetricWriter(storage, APP, V, "w")
+    w = MetricWriter(storage, APP, V, "w", clock=time.time)
     w.add("x", 1.0, step=0, ts_us=10)
     w.flush()
     w.add("x", 2.0, ts_us=20)
@@ -140,7 +141,7 @@ def test_step_less_twin_merges_back_into_its_key(tmp_path):
 
 def test_points_filter_by_step_range(tmp_path):
     storage = _storage(tmp_path)
-    w = MetricWriter(storage, APP, V, "w")
+    w = MetricWriter(storage, APP, V, "w", clock=time.time)
     for step in range(10):
         w.add("x", float(step), step=step, ts_us=step + 1)
     w.flush()
@@ -150,7 +151,7 @@ def test_points_filter_by_step_range(tmp_path):
 
 def test_thinned_keeps_first_last_and_extremes(tmp_path):
     storage = _storage(tmp_path)
-    w = MetricWriter(storage, APP, V, "w")
+    w = MetricWriter(storage, APP, V, "w", clock=time.time)
     for step in range(1000):
         w.add("x", 100.0 if step == 500 else 0.0, step=step, ts_us=step + 1)
     w.flush()
@@ -162,7 +163,7 @@ def test_thinned_keeps_first_last_and_extremes(tmp_path):
 
 def test_keys_count_points_without_reading_values(tmp_path):
     storage = _storage(tmp_path)
-    w = MetricWriter(storage, APP, V, "w")
+    w = MetricWriter(storage, APP, V, "w", clock=time.time)
     w.add("x", 1.0, step=0, ts_us=1)
     w.add("y", 1.0, step=0, ts_us=1)
     w.flush()

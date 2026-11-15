@@ -6,9 +6,11 @@ import os
 
 import pytest
 import yaml
+from fakes.clock import FakeClock
 from similar_seed import TRAIN_STEP, features, seed, verstr
 from vmn_exp.core.similar_search import conf_schema_of, find
 from vmn_exp.snapshot import open_storage
+from vmn_exp.core.real_io import RealClock
 
 APP = "trainer"
 CHANGES = features(["train.py"], [TRAIN_STEP])
@@ -16,7 +18,7 @@ CHANGES = features(["train.py"], [TRAIN_STEP])
 
 @pytest.fixture
 def storage(tmp_path):
-    return open_storage(root=str(tmp_path / "store"), area="runs")
+    return open_storage(root=str(tmp_path / "store"), area="runs", clock=RealClock(), env=os.environ)
 
 
 def _verstrs(items):
@@ -28,15 +30,15 @@ def test_a_given_target_replaces_the_runs(storage):
     like = seed(storage, APP, verstr(2), changes=CHANGES, ts="2026-01-02T00:00:00Z")
     target = {"row": {"code_verstr": verstr(9)}, "features": dict(CHANGES), "text_only": False}
 
-    assert _verstrs(find(storage, APP, None, {}, target=target)) == [like, verstr(1)]
+    assert _verstrs(find(storage, APP, None, {}, target=target, clock=FakeClock())) == [like, verstr(1)]
 
 
 def test_archived_runs_are_candidates_only_when_included(storage):
     target = seed(storage, APP, verstr(1), changes=CHANGES)
     archived = seed(storage, APP, verstr(2), changes=CHANGES, archived=True)
 
-    assert _verstrs(find(storage, APP, target, {})) == []
-    assert _verstrs(find(storage, APP, target, {}, include_archived=True)) == [archived]
+    assert _verstrs(find(storage, APP, target, {}, clock=FakeClock())) == []
+    assert _verstrs(find(storage, APP, target, {}, include_archived=True, clock=FakeClock())) == [archived]
 
 
 def test_conf_schema_of_reads_an_apps_conf_metrics(tmp_path):

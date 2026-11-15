@@ -39,7 +39,7 @@ def _until(check, timeout=5):
 
 @pytest.fixture
 def store(tmp_path):
-    return journaled(LocalSnapshotStorage(str(tmp_path), "runs"), writer_id="w1")
+    return journaled(LocalSnapshotStorage(str(tmp_path), "runs"), writer_id="w1", clock=time.time)
 
 
 def _write(store, app, verstr):
@@ -57,7 +57,7 @@ class JournalReplica:
 
         self.election = AdvisoryElection(dsn)
         self.journal = WorkspaceJournal(
-            list_fn, PostgresStore(dsn), "ws", election=self.election,
+            list_fn, PostgresStore(dsn), "ws", time.time, election=self.election,
             relay=lambda payload: self.election.notify("vmn_hint", payload),
             skew_window_sec=0,  # no re-read overlap: a handover must resume the cursor
         )
@@ -121,7 +121,7 @@ def test_follower_wakes_on_vmn_gen_before_its_poll(tmp_path, pg_dsn):
     leader.refresh()
     assert leader.leading
     follower = ElectedIndex(st, "app", PostgresStore(pg_dsn), follow_el)
-    refresher = Refresher(interval_sec=30)
+    refresher = Refresher(interval_sec=30, clock=time.monotonic)
     listener = PgListener(pg_dsn, {"vmn_gen": refresher.wake_scope})
     try:
         _until(lambda: listener.listening)

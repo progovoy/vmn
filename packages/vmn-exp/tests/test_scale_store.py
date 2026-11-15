@@ -9,6 +9,7 @@ from vmn_exp.core.index import ExperimentIndex
 from vmn_exp.sdk.reader import list_runs
 from vmn_exp.snapshot import open_storage
 from vmn_exp.storage.areas import local_store_root
+from vmn_exp.core.real_io import RealClock
 
 N = 200
 
@@ -17,7 +18,7 @@ N = 200
 def generated(tmp_path_factory):
     root = str(tmp_path_factory.mktemp("scale") / "repo")
     expected = scale_store.generate(root, N, workers=2)
-    storage = open_storage(root=local_store_root(root), area="runs")
+    storage = open_storage(root=local_store_root(root), area="runs", clock=RealClock(), env=os.environ)
     rows = list_runs(scale_store.APP, storage=storage, include_archived=True)
     return root, expected, storage, rows
 

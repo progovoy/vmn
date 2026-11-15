@@ -57,8 +57,10 @@ function CurveChart({
     const step = xMode === "step";
     const marked = withRangeBands(withStepMarker(opts, step ? markX : null, theme.axis), step ? bands : null, theme.axis);
     return zoomable ? withScaleHook(marked, zoom.onScale) : marked;
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- keyed on the curves' shape (above); zoom.onScale never changes
   }, [shape, xMode, logY, height, themeVersion, markX, bands, zoomable]);
   const data = useMemo(() => curveData(series), [series]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- keyed on the curves' shape (above)
   const hiddenFlags = useMemo(() => hidden && series.map((s) => hidden.has(s.key)), [shape, hidden]);
   const focusIdx = focused === null ? -1 : series.findIndex((s) => s.key === focused && !s.faded);
   const focus = focusIdx >= 0 ? focusIdx : null;

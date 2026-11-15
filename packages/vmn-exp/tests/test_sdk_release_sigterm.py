@@ -5,6 +5,7 @@ run. Such a run is released (waiting, ``signal: SIGTERM``) instead of failed
 with 143, and the process still dies of the signal. Each run follows its own
 choice: a default run next to it still fails.
 """
+from datetime import datetime, timezone
 import os
 import signal
 
@@ -39,7 +40,7 @@ def test_sigterm_releases_a_run_that_asked_for_it(app_layout):
     assert state["state"] == "released", state
     assert state["signal"] == "SIGTERM" and state["end_reason"] == "released"
     assert state["exit_code"] is None
-    assert derive_status(state) == CREATED
+    assert derive_status(state, now=datetime.now(timezone.utc)) == CREATED
     log = storage.load_merged_log(app, handed)
     assert any(e.get("type") == "metrics" and "loss" in e.get("values", {}) for e in log)
-    assert derive_status(load_run_state(storage, app, ended)) == FAILED
+    assert derive_status(load_run_state(storage, app, ended), now=datetime.now(timezone.utc)) == FAILED

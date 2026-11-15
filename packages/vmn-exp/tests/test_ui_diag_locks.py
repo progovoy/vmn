@@ -16,6 +16,7 @@ from vmn_exp.ui.leaderboard_cache import LeaderboardCache
 from vmn_exp.ui.refresher import Refresher
 from vmn_exp.ui.report_index import ReportIndexes
 from vmn_exp.ui.store_upkeep import StoreUpkeep
+from vmn_exp.core.real_io import RealClock
 
 
 def _unique(prefix):
@@ -71,7 +72,7 @@ def teardown_module():
 
 def test_a_report_index_held_by_a_journal_catch_up_names_its_waiters(tmp_path):
     ws = types.SimpleNamespace(name=_unique("ws"), store=None, path=str(tmp_path))
-    index = ReportIndexes(background=False)._new(ws, LocalSnapshotStorage(str(tmp_path)))
+    index = ReportIndexes(background=False, clock=time.time)._new(ws, LocalSnapshotStorage(str(tmp_path)))
     release, holder = _hold(index._lock, "vmn-ui-reports")
     request = threading.Thread(target=index.refresh, name="request-1", daemon=True)
     request.start()
@@ -97,13 +98,13 @@ def test_an_experiment_index_lock_is_named_with_its_app(tmp_path):
 
 
 def test_the_refresher_lock_is_traced():
-    refresher = Refresher()
+    refresher = Refresher(clock=time.monotonic)
     _assert_named_holder(refresher._lock, "refresher")
     assert refresher.watched() == []
 
 
 def test_the_store_upkeep_lock_is_traced():
-    upkeep = StoreUpkeep()
+    upkeep = StoreUpkeep(clock=time.monotonic, now=RealClock().now)
     _assert_named_holder(upkeep._lock, "store upkeep")
     assert upkeep.wait_idle(1)
 

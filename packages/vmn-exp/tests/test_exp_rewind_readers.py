@@ -1,13 +1,17 @@
 """Every log reader honours a rewind: the experiment index (incrementally,
 across writers), the run page's parsed-log cache and S3 merged logs."""
+import os
+from datetime import datetime, timezone
+
 import pytest
+from fakes.clock import FakeClock
 from s3_helpers import mocked_bucket, s3_storage
 
-from vmn_exp.core import index as experiment_index
 from vmn_exp.core.index import ExperimentIndex
 from vmn_exp.core.log import load_log, metric_series
 from vmn_exp.snapshot import open_storage
 from vmn_exp.ui.readers.parsed_logs import ParsedLogs
+from vmn_exp.core.real_io import RealClock
 
 APP = "app"
 V = "1.0.0-dev.a"
@@ -26,16 +30,14 @@ def _rewind(i, step):
 
 
 @pytest.fixture
-def clock(monkeypatch):
-    now = [1000.0]
-    monkeypatch.setattr(experiment_index, "_monotonic", lambda: now[0])
-    return now
+def clock():
+    return FakeClock(start=datetime.now(timezone.utc), monotonic=1000.0)
 
 
 @pytest.fixture
 def storage(tmp_path):
     (tmp_path / ".git").mkdir()
-    s = open_storage(root=str(tmp_path), area="runs")
+    s = open_storage(root=str(tmp_path), area="runs", clock=RealClock(), env=os.environ)
     s.save(APP, V, {"verstr": V, "timestamp": _ts(0)}, {})
     s.save_file(APP, V, "run_state.yml", "state: running\n")
     for i, loss in ((1, 1.0), (2, 0.5), (3, 0.25)):
@@ -44,13 +46,13 @@ def storage(tmp_path):
 
 
 def _loss(index, clock):
-    clock[0] += 1
+    clock.advance(1)
     index.refresh()
     return index.rows()[0]["metrics"]["loss"]
 
 
 def test_the_index_forgets_what_a_rewind_hides(storage, clock):
-    index = ExperimentIndex(storage, APP, full_sweep_sec=300)
+    index = ExperimentIndex(storage, APP, full_sweep_sec=300, clock=clock)
     assert _loss(index, clock) == 0.25
 
     storage.append_log_entry(APP, V, "new", _rewind(4, 1))
@@ -61,7 +63,7 @@ def test_the_index_forgets_what_a_rewind_hides(storage, clock):
 
 
 def test_a_rewound_old_writer_that_appends_later_still_counts(storage, clock):
-    index = ExperimentIndex(storage, APP, full_sweep_sec=300)
+    index = ExperimentIndex(storage, APP, full_sweep_sec=300, clock=clock)
     storage.append_log_entry(APP, V, "new", _rewind(4, 1))
     assert _loss(index, clock) == 1.0
     storage.append_log_entry(APP, V, "old", _metric(6, 3, 0.1))

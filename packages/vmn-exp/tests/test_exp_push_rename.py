@@ -20,14 +20,16 @@ from push_helpers import (
 )
 from s3_helpers import mocked_bucket, s3_storage
 from vmn_exp._base import now_iso
-from vmn_exp.core import push_rename
+from vmn_exp.cli.pushing import push_rename
 from vmn_exp.core.code_store import drop_unused_code, stored_code
-from vmn_exp.core.push_code import CodePusher
-from vmn_exp.core.push_ledger import PushLedger
-from vmn_exp.core.push_rename import SKIPPED, push_or_rename
-from vmn_exp.core.push_run import FAILED, NEW, UP_TO_DATE, UPDATE, push_run
+from vmn_exp.cli.pushing.push_code import CodePusher
+from vmn_exp.cli.pushing.push_ledger import PushLedger
+from vmn_exp.cli.pushing.push_rename import SKIPPED, push_or_rename
+from vmn_exp.cli.pushing.push_run import FAILED, NEW, UP_TO_DATE, UPDATE, push_run
 from vmn_exp.core.status import RUN_STATE_FILE
 from vmn_exp.core.writer import own_stream
+from vmn_exp.core.real_io import RealClock
+from writer_args import process_writer
 
 FOREIGN = "2025-05-05T00:00:00Z"
 CHILD = X + ".2"
@@ -49,9 +51,9 @@ def _foreign(target, verstr=X):
 
 
 def _push(local, target, verstr=X, **kw):
-    ledger = PushLedger.for_target(local, APP, target)
+    ledger = PushLedger.for_target(local, APP, target, os.environ)
     return push_or_rename(local, target, APP, verstr, ledger,
-                          CodePusher(local, target, APP), **kw)
+                          CodePusher(local, target, APP), now=RealClock().now(), env=os.environ, **kw)
 
 
 def test_collision_renames_both_sides(local, target, tmp_path):
@@ -158,17 +160,17 @@ def test_rename_ledger_entry_moves(local, target, tmp_path):
     make_run(local, tmp_path)
     _foreign(target)
     new = _push(local, target).verstr
-    ledger = PushLedger.for_target(local, APP, target)
+    ledger = PushLedger.for_target(local, APP, target, os.environ)
     assert ledger.get(X) is None
     entry = ledger.get(new)
     assert entry["complete"] and entry["remote_verstr"] == new
     assert "pending_target" not in entry
-    assert push_run(local, target, APP, new, ledger).status == UP_TO_DATE
+    assert push_run(local, target, APP, new, ledger, env=os.environ).status == UP_TO_DATE
 
 
 def test_a_renamed_run_pushes_its_own_log_and_metric_streams(local, target, tmp_path):
     make_run(local, tmp_path)
-    own = own_stream(local, APP, X)
+    own = own_stream(local, APP, X, writer=process_writer())
     local.append_log_entry(APP, X, own, {"type": "tags", "set": {"k": "v"},
                                          "timestamp": "2026-01-01T00:00:09Z"})
     assert local.append_metric_block(APP, X, own, block(1.0))

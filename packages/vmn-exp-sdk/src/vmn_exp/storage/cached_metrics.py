@@ -50,6 +50,7 @@ from vmn_exp.core.metric_files import (
 )
 from vmn_exp.core.streams import display_writer, owned_by, owner_of, stream_key
 from vmn_exp.storage import metric_rollup, ship_state
+from vmn_exp.storage.stream_listing import StreamListing
 
 LOCAL, REMOTE = "local", "remote"
 LIVE_ROLLUP_SEGMENTS = 32
@@ -91,7 +92,7 @@ class CachedMetrics:
         """Append to the local copy's stream: one named for an owner the copy
         does not own (a one-off one, named while the record could not be
         fetched) is the copy's own stream of its writer."""
-        if not self._ensure_local_record(app_name, verstr):
+        if not self.ensure_local_record(app_name, verstr):
             return False
         writer_id = self._owned_stream(app_name, verstr, writer_id)
         return self._local.append_metric_block(app_name, verstr, writer_id, data)
@@ -141,7 +142,7 @@ the copy's ship lock."""
         the remote has; it goes to the remote, then here. One built from the
         remote's objects goes to the remote only. A stream the copy inherited
         is compacted only by its owner."""
-        if not self._ensure_local_record(app_name, verstr):
+        if not self.ensure_local_record(app_name, verstr):
             return False
         if owner_of(writer_id) in self._local.inherited_owners(app_name, verstr):
             return False
@@ -189,7 +190,7 @@ the copy's ship lock."""
         note_missing_inherited(self._local, remote, app_name, verstr)
         owns, rollups = self._stream_owned(app_name, verstr), []
         with self._ship_state(app_name, verstr, "metrics") as state:
-            listing = _Listing(remote, app_name, verstr)
+            listing = StreamListing(lambda: remote.metric_objects(app_name, verstr))
             for stream, objects in sorted(local.items()):
                 if owns(stream):
                     shipped = self._ship_own(state, listing, remote, app_name, verstr, stream,
@@ -280,18 +281,3 @@ the copy's ship lock."""
 
         compact_writer(self, app_name, verstr, stream,
                        record_rewinds(self, app_name, verstr), rebuild=True)
-
-
-class _Listing:
-    """One remote listing of a record's metric streams, taken when first needed."""
-
-    def __init__(self, remote, app_name, verstr):
-        self._remote, self._where, self._groups = remote, (app_name, verstr), None
-
-    def objects(self, stream):
-        if self._groups is None:
-            self._groups = self._remote.metric_objects(*self._where)
-        return self._groups.get(stream, [])
-
-    def refresh(self):
-        self._groups = None

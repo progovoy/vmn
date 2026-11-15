@@ -105,7 +105,7 @@ export function useLeaderboardRows(ws: string, app: string, filter: RowsFilter, 
 
   // While a new filter loads, the view's previous rows stay on screen,
   // marked stale (a hook instance only ever serves one app: the page is keyed by it).
-  const { data, stale, queryError, pageError, staleError, missing } = useShownList(query, enabled, client, key);
+  const { data, stale, counting, queryError, pageError, staleError, missing } = useShownList(query, enabled, client, key);
 
   const [moreError, setMoreError] = useState<string | null>(null);
   const loadingMore = useRef(false);
@@ -134,7 +134,8 @@ export function useLeaderboardRows(ws: string, app: string, filter: RowsFilter, 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [client, keyHash]);
 
-  const refresh = useCallback(() => query.refetch().then((r) => r.data), [query.refetch]);
+  const { refetch } = query;
+  const refresh = useCallback(() => refetch().then((r) => r.data), [refetch]);
 
   const showNew = useCallback(async () => {
     try {
@@ -158,7 +159,7 @@ export function useLeaderboardRows(ws: string, app: string, filter: RowsFilter, 
     main: data?.main,
     hints: data?.hints,
     indexing: data?.indexing,
-    stale, queryError, pageError, staleError, missing, moreError,
+    stale, counting, queryError, pageError, staleError, missing, moreError,
     loadMore, refresh, visibleRef, viewportRef, showNew,
     hasMore: data ? hasMoreOf(data) : false,
     /** What a held refresh kept off screen, null when nothing is waiting. */

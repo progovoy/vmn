@@ -5,11 +5,10 @@ field."""
 import random
 
 import pytest
+from fakes.clock import FakeClock
 from leaderboard_fleet import T0, Fleet
 from vmn_exp.ui.leaderboard_cache import LeaderboardCache
 from vmn_exp.ui.leaderboard_group_fields import NONE
-
-from vmn_exp.core import status as status_mod
 
 SCHEMA = {"loss": {"goal": "min", "primary": True}}
 ABSENT = object()
@@ -32,8 +31,7 @@ class ParamFleet(Fleet):
 
 
 @pytest.fixture(params=[1, 2, 3])
-def fleet(monkeypatch, request):
-    monkeypatch.setattr(status_mod, "_now", lambda now=None: now or T0)
+def fleet(request):
     fleet = ParamFleet(request.param)
     jobs = fleet.seed_jobs(3, 60, T0, live=5)
     for _ in range(40):
@@ -52,7 +50,7 @@ def _verstrs(rows):
 @pytest.mark.parametrize("group", GROUPS)
 def test_a_groups_clause_selects_exactly_its_rows(fleet, group):
     fleet, jobs = fleet
-    snap, cache = fleet.snapshot(), LeaderboardCache()
+    snap, cache = fleet.snapshot(), LeaderboardCache(now=FakeClock(T0).now)
     for view in _views(jobs):
         out = cache.groups(snap, SCHEMA, group, limit=50, **view)
         for g in out["groups"]:
@@ -67,7 +65,7 @@ def test_a_groups_clause_selects_exactly_its_rows(fleet, group):
 
 def test_clauses_quote_keys_and_values_per_the_query_language(fleet):
     fleet, _ = fleet
-    snap, cache = fleet.snapshot(), LeaderboardCache()
+    snap, cache = fleet.snapshot(), LeaderboardCache(now=FakeClock(T0).now)
     clauses = {g["key"]: g["clause"] for g in
                cache.groups(snap, SCHEMA, "params.lr", limit=50)["groups"]}
     assert clauses["0.01"] == "params.lr = 0.01"
@@ -83,7 +81,7 @@ def test_clauses_quote_keys_and_values_per_the_query_language(fleet):
 
 def test_failed_runs_group_by_their_failure_signature(fleet):
     fleet, jobs = fleet
-    snap, cache = fleet.snapshot(), LeaderboardCache()
+    snap, cache = fleet.snapshot(), LeaderboardCache(now=FakeClock(T0).now)
     groups = cache.groups(snap, SCHEMA, "failure_sig", scope=jobs[1], limit=50)["groups"]
     signed = [g for g in groups if g["key"] != NONE]
     assert signed and all(r["failure_sig"] == g["key"] for g in signed for r in g["rows"])

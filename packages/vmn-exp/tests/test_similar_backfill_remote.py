@@ -17,6 +17,7 @@ from backfill_helpers import (
 from exp_helpers import _bootstrap, _exp, _storage
 from moto import mock_aws
 from s3_helpers import BUCKET, PREFIX, cached_host, mocked_bucket, s3_storage
+from vmn_exp.core.real_io import real_io
 from vmn_exp.storage import buffered
 from vmn_exp.storage.uri import s3_uri
 
@@ -93,7 +94,7 @@ def test_backfill_works_git_free_on_s3(container, capfd):
     capfd.readouterr()
 
     store = ["--store", f"s3://{GIT_FREE_BUCKET}/cli"]
-    assert vmn_exp_run(["exp", "similar-backfill", APP, *store])[0] == 0
+    assert vmn_exp_run(["exp", "similar-backfill", APP, *store], real_io())[0] == 0
 
     assert capfd.readouterr().out.splitlines()[-1] == \
         "backfilled 1, partial 0, skipped 0, failed 0"

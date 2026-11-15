@@ -3,10 +3,10 @@ running, waiting or stuck (its Jobs view rollup's counts), readable by
 ``top_query`` — so the Live preset keeps a container outer run whose
 ``tree_status`` reads ``failed`` while the rest of its runs still run."""
 import pytest
+from fakes.clock import FakeClock
 from leaderboard_fleet import T0, Fleet, finished, running
 from vmn_exp.ui.leaderboard_cache import LeaderboardCache
 
-from vmn_exp.core import status as status_mod
 
 SCHEMA = {"loss": {"goal": "min", "primary": True}}
 # The web's presets (webui/src/pages/Experiments/presets.ts).
@@ -17,8 +17,7 @@ REVIEW_QUERY = f"not ({IN_FLIGHT})"
 
 
 @pytest.fixture
-def board(monkeypatch):
-    monkeypatch.setattr(status_mod, "_now", lambda now=None: now or T0)
+def board():
     fleet = Fleet(7)
     container = fleet.append()  # never ran itself: own status created
     failed = fleet.append(parent=container, state=finished(1))
@@ -26,7 +25,7 @@ def board(monkeypatch):
     done = fleet.append(state=finished(0))
     old_done = fleet.append()
     fleet.append(parent=old_done, state=finished(0))
-    return fleet, (container, failed, live, done, old_done), LeaderboardCache()
+    return fleet, (container, failed, live, done, old_done), LeaderboardCache(now=FakeClock(T0).now)
 
 
 def _top(cache, snap, top_query, **params):

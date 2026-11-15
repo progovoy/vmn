@@ -91,7 +91,7 @@ def test_migrations_run_once_across_three_replicas_starting_together(pg_dsn, mon
     replicas = [
         lambda: PostgresStore(pg_dsn).generation("app"),
         lambda: PostgresControlPlane(pg_dsn).list("workspace"),
-        lambda: PgRowSearch(pg_dsn).search(["ws"], "", 10),
+        lambda: PgRowSearch(pg_dsn).search(["ws"], "", 10, False, None),
     ]
     threads = [in_thread(fn) for fn in replicas]
     for thread, out in threads:

@@ -49,9 +49,9 @@ def fs_calls(monkeypatch):
 
 
 @pytest.fixture
-def offloaded(live_store, tmp_path):
+def offloaded(live_store, tmp_path, clock):
     index = ExperimentIndex(live_store.st, APP, cache_path=str(tmp_path / "idx.sqlite"),
-                            full_sweep_sec=FULL_SWEEP_SEC)
+                            full_sweep_sec=FULL_SWEEP_SEC, clock=clock)
     assert index.use_io_process()
     yield index
     index.close()
@@ -66,7 +66,7 @@ def test_a_refresh_makes_no_filesystem_calls_in_the_index_process(
         fs_calls["on"] = False
         _churn(live_store, cycle)
         new = live_store.add(N + M + cycle, f"state: running\nheartbeat: '{_now_iso()}'\n")
-        clock.now += 1 if cycle < 3 else FULL_SWEEP_SEC + 1  # the last one sweeps fully
+        clock.advance(1 if cycle < 3 else FULL_SWEEP_SEC + 1)  # the last one sweeps fully
         fs_calls["on"] = True
         offloaded.refresh()
         fs_calls["on"] = False
@@ -82,7 +82,7 @@ def test_the_rows_match_a_direct_read(offloaded, live_store, clock):
         _churn(live_store, cycle)
         live_store.st.delete(APP, live_store.live.pop())
         live_store.add(N + M + cycle, "state: finished\nexit_code: 1\n")
-        clock.now += 1 if cycle < 3 else FULL_SWEEP_SEC + 1
+        clock.advance(1 if cycle < 3 else FULL_SWEEP_SEC + 1)
         offloaded.refresh()
     rows, states = experiment_index.direct_rows(live_store.st, APP)
     snap = offloaded.snapshot()
@@ -93,12 +93,12 @@ def test_the_rows_match_a_direct_read(offloaded, live_store, clock):
 def test_the_helper_persists_what_a_restart_loads(offloaded, live_store, clock, tmp_path):
     offloaded.refresh()
     _churn(live_store, 1)
-    clock.now += 1
+    clock.advance(1)
     offloaded.refresh()
     offloaded.close()
 
     warm = ExperimentIndex(live_store.st, APP, cache_path=str(tmp_path / "idx.sqlite"),
-                           full_sweep_sec=FULL_SWEEP_SEC)
+                           full_sweep_sec=FULL_SWEEP_SEC, clock=clock)
     warm_records = warm._store.load(APP)
     assert len(warm_records) == N + M
     assert all(warm_records[v]["fold"]["metrics"]["loss"][0] == 1 for v in live_store.live)
@@ -108,7 +108,7 @@ def test_unchanged_records_keep_their_row_and_run_state_objects(offloaded, live_
     offloaded.refresh()
     before = offloaded.snapshot()
     _churn(live_store, 1)
-    clock.now += 1
+    clock.advance(1)
     offloaded.refresh()
     after = offloaded.snapshot()
     quiet = [r["verstr"] for r in before.rows if r["verstr"] not in live_store.live]
@@ -121,7 +121,7 @@ def test_a_dead_helper_is_replaced(offloaded, live_store, clock):
     offloaded.refresh()
     offloaded._io.kill_for_tests()
     _churn(live_store, 1)
-    clock.now += 1
+    clock.advance(1)
     with pytest.raises(experiment_index.IOProcessError):
         offloaded.refresh()  # the refresh that meets the dead helper fails whole
     offloaded.refresh()
@@ -155,7 +155,7 @@ def test_the_helper_sweeps_a_slice_per_refresh_never_everything_at_once(
 
     step = FULL_SWEEP_SEC / 10
     for _ in range(11):
-        clock.now += step
+        clock.advance(step)
         offloaded.refresh()
 
     assert fulls == []
@@ -175,6 +175,6 @@ def test_a_slow_refresh_does_not_make_the_next_one_sweep_everything(
     slices = []
     real = watch.slice_changes
     monkeypatch.setattr(watch, "slice_changes", lambda keys: slices.append(keys) or real(keys))
-    clock.now += 5 * FULL_SWEEP_SEC
+    clock.advance(5 * FULL_SWEEP_SEC)
     offloaded.refresh()
     assert slices and all(len(keys) <= (N + M) / 10 + 1 for keys in slices)

@@ -14,6 +14,7 @@ first use.
 import hashlib
 import threading
 
+from vmn_exp.core.status import MIN_STALE_SEC
 from vmn_exp.ui.tenancy import current_org, org_context
 
 POSTGRES_SCHEMES = ("postgresql://", "postgres://")
@@ -54,13 +55,14 @@ class WorkspaceScopedCache:
 
 
 class PgIndexes:
-    def __init__(self, dsn, refresher):
+    def __init__(self, dsn, refresher, min_stale_sec=MIN_STALE_SEC):
         from vmn_exp.ui.cache_pg import PostgresStore
         from vmn_exp.ui.pg_election import AdvisoryElection
 
         self._store = PostgresStore(dsn)
         self.election = AdvisoryElection(dsn)
         self._indexes = {}  # (org, workspace name, app) -> ElectedIndex
+        self._min_stale_sec = min_stale_sec  # their stuck floor
         self._lock = threading.Lock()
         self._listener = None
         if refresher.background:
@@ -79,7 +81,8 @@ class PgIndexes:
                 ws_id = workspace_id(ws)
                 cache = WorkspaceScopedCache(self._store, ws_id, org_id)
                 self._indexes[key] = ElectedIndex(
-                    storage, app_name, cache, self.election, workspace_id=ws_id, org_id=org_id)
+                    storage, app_name, cache, self.election, workspace_id=ws_id, org_id=org_id,
+                    min_stale_sec=self._min_stale_sec)
             return self._indexes[key]
 
     def forget(self, ws_name):

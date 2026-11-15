@@ -3,6 +3,8 @@ live, 10k single runs) a Jobs view page searching every run
 (``match_subtree``, the board's free-text clause, a new text each time)
 answers in <= 100 ms. Timed, so serial; ``-s`` prints the numbers."""
 import pytest
+from bench_timing import fastest_each
+from fakes.clock import FakeClock
 from leaderboard_fleet import T0, finished
 from test_ui_search_index_bench import (
     SCHEMA,
@@ -13,10 +15,10 @@ from test_ui_search_index_bench import (
     _timed,
 )
 
-from vmn_exp.core import status as status_mod
 from vmn_exp.ui import leaderboard_cache as lb
 
 JOBS, TRIALS, LIVE, SINGLES = 20, 4500, 4000, 10_000
+SEARCH_SEC = 0.100  # p95
 
 
 @pytest.fixture(scope="module")
@@ -29,24 +31,26 @@ def fleet():
     return fleet
 
 
-@pytest.fixture(autouse=True)
-def _frozen(monkeypatch):
-    monkeypatch.setattr(status_mod, "_now", lambda now=None: now or T0)
-
-
 @pytest.mark.serial
 def test_jobs_view_search_over_every_run_at_100k(fleet):
     snap = fleet.snapshot()
-    cache = lb.LeaderboardCache()
-    cache.page(snap, SCHEMA, limit=50, top=True)  # the base and the Jobs view order
-    cache.search(snap, "warm", 20)  # the search index, as the refresher warms it
     texts = [f"{t}{suffix}" for suffix in ("", "0", "1") for t in TEXTS]
     pages = []
-    timed = [_timed(lambda t=t: pages.append(cache.page(
-        snap, SCHEMA, query=_board_clause(t), limit=50, top=True, match_subtree=True)))
-        for t in texts]
-    print(f"\nS8b jobs view search: p95 {_p95(timed) * 1000:.1f} ms, "
-          f"max {max(timed) * 1000:.1f} ms; runs matched up to "
+
+    def searches():
+        """Every text once on a fresh board the refresher warmed: its p95 and max."""
+        cache = lb.LeaderboardCache(now=FakeClock(T0).now)
+        cache.page(snap, SCHEMA, limit=50, top=True)  # the base and the Jobs view order
+        cache.search(snap, "warm", 20)  # the search index, as the refresher warms it
+        pages.clear()
+        timed = [_timed(lambda t=t: pages.append(cache.page(
+            snap, SCHEMA, query=_board_clause(t), limit=50, top=True, match_subtree=True)))
+            for t in texts]
+        return {"p95": _p95(timed), "max": max(timed)}
+
+    took = fastest_each(searches, {"p95": SEARCH_SEC})
+    print(f"\nS8b jobs view search: p95 {took['p95'] * 1000:.1f} ms, "
+          f"max {took['max'] * 1000:.1f} ms; runs matched up to "
           f"{max(p['runs_matched'] for p in pages)}")
-    assert _p95(timed) <= 0.100
+    assert took["p95"] <= SEARCH_SEC
     assert any(p["runs_matched"] >= TRIALS for p in pages)

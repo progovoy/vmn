@@ -6,8 +6,6 @@ with ``timestamp``/``started_at``/``finished_at`` as strings do. Pure."""
 import datetime
 import re
 
-import vmn_exp.core.status as experiment_status
-
 UNITS = {"m": 60, "h": 3600, "d": 86400}
 _DURATION = re.compile(r"(\d+)([mhd])")
 # The comparisons an ``ago()`` may stand on the right of.
@@ -20,7 +18,7 @@ def duration_sec(text):
     return int(match[1]) * UNITS[match[2]] if match else None
 
 
-def iso_before(seconds, now=None):
-    """The UTC ISO time *seconds* before *now* (default the clock)."""
-    now = (now or experiment_status._now()).astimezone(datetime.timezone.utc)
+def iso_before(seconds, now):
+    """The UTC ISO time *seconds* before *now*."""
+    now = now.astimezone(datetime.timezone.utc)
     return (now - datetime.timedelta(seconds=seconds)).strftime("%Y-%m-%dT%H:%M:%SZ")

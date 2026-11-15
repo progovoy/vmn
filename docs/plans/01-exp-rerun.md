@@ -1,5 +1,7 @@
 # Plan 1: `vmn-exp rerun <app> -v <ref>`
 
+Status: **done** (2026-09-29; confirmed in code 2026-11-11).
+
 Inspired by MLflow Projects `mlflow run` / W&B Launch "re-run". vmn is the only tool
 that has all three ingredients per run: the exact tree (dirty included), the command,
 and the captured env.

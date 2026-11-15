@@ -1,7 +1,9 @@
 """What a similar-runs answer reads besides its FTS match: the shown runs'
 facts and run states in one query each from the persisted index, and a
 snapshot sync skips the runs whose row and command did not move."""
+import os
 import pytest
+from fakes.clock import FakeClock
 from similar_seed import features, finished, seed, verstr
 from vmn_exp.core import similar_filing, similar_fts
 from vmn_exp.core.index import ExperimentIndex
@@ -9,6 +11,7 @@ from vmn_exp.core.similar_corpus import file_scope, memory_conn
 from vmn_exp.core.similar_filing import SnapshotFiler
 from vmn_exp.core.similar_search import search, snapshot_scope, text_target
 from vmn_exp.snapshot import open_storage
+from vmn_exp.core.real_io import RealClock
 
 APP = "trainer"
 RUNS = 8
@@ -19,13 +22,13 @@ pytestmark = pytest.mark.skipif(not similar_fts.fts5_available(),
 
 @pytest.fixture
 def indexed(tmp_path):
-    storage = open_storage(root=str(tmp_path / "store"), area="runs")
+    storage = open_storage(root=str(tmp_path / "store"), area="runs", clock=RealClock(), env=os.environ)
     for n in range(RUNS):
         seed(storage, APP, verstr(n), intent={"text": f"focal loss try {n}"},
              changes=features([f"f{n}.py"]), goal=("loss", "min"), metrics={"loss": n})
         finished(storage, APP, verstr(n))
     path = str(tmp_path / "index.sqlite")
-    index = ExperimentIndex(storage, APP, path, full_sweep_sec=0)
+    index = ExperimentIndex(storage, APP, path, full_sweep_sec=0, clock=FakeClock())
     yield storage, index, path
     index.close()
 
@@ -34,12 +37,12 @@ def test_the_shown_runs_facts_are_read_in_one_query_each(indexed):
     storage, index, path = indexed
     snapshot = index.refresh().snapshot()
     expected = search(storage, APP, snapshot_scope(APP, snapshot), text_target("focal"),
-                      top=RUNS)
+                      top=RUNS, clock=FakeClock())
     scope = file_scope(APP, path)
     statements = []
     scope.conn.set_trace_callback(statements.append)
     try:
-        got = search(storage, APP, scope, text_target("focal"), top=RUNS)
+        got = search(storage, APP, scope, text_target("focal"), top=RUNS, clock=FakeClock())
     finally:
         scope.conn.set_trace_callback(None)
     assert len(got) == RUNS and got == expected

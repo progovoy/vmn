@@ -1,5 +1,6 @@
 """``vmn-exp migrate`` converts v1 ``metrics`` log entries to compacted
 ``metrics/<writer>.vmx`` files (docs/plans/12-columnar-metrics.md §9)."""
+import os
 import json
 import math
 
@@ -18,6 +19,7 @@ from vmn_exp.core.metric_time import us_to_iso
 from vmn_exp.core.rewind import drop_rewound
 from vmn_exp.storage.open import open_storage
 from vmn_exp.storage.store_marker import forget_checked
+from vmn_exp.core.real_io import RealClock, real_io
 
 T0 = 1_700_000_000_000_001
 
@@ -115,12 +117,12 @@ def _v1_local(tmp_path, **kw):
 
 def _local_storage(tmp_path):
     forget_checked()
-    return open_storage(None, str(tmp_path), area="runs")
+    return open_storage(None, str(tmp_path), area="runs", clock=RealClock(), env=os.environ)
 
 
 def test_metrics_entries_leave_the_jsonl_for_a_vmx_per_writer(tmp_path):
     raw = _v1_local(tmp_path)
-    assert run_migrate(["--dir", str(tmp_path)]) == 0
+    assert run_migrate(["--dir", str(tmp_path)], real_io()) == 0
     rec = "runs/my-app/r1"
     names = {k for k in raw.keys() if k.startswith(rec + "/")}
     assert {f"{rec}/{indexed_name('w1')}", f"{rec}/{indexed_name('v1')}"} <= names
@@ -135,28 +137,28 @@ def test_metrics_entries_leave_the_jsonl_for_a_vmx_per_writer(tmp_path):
 
 def test_every_reader_returns_the_v1_values(tmp_path):
     _v1_local(tmp_path)
-    assert run_migrate(["--dir", str(tmp_path)]) == 0
+    assert run_migrate(["--dir", str(tmp_path)], real_io()) == 0
     _assert_readers_match(_local_storage(tmp_path))
 
 
 def test_file_uri_store_converts_metrics(tmp_path):
     _v1_local(tmp_path)
-    assert run_migrate(["--store", f"file://{tmp_path}"]) == 0
+    assert run_migrate(["--store", f"file://{tmp_path}"], real_io()) == 0
     _assert_readers_match(_local_storage(tmp_path))
 
 
 def test_format_version_1_records_become_2(tmp_path):
     raw = _v1_local(tmp_path, meta_extra={"format_version": 1})
-    assert run_migrate(["--dir", str(tmp_path)]) == 0
+    assert run_migrate(["--dir", str(tmp_path)], real_io()) == 0
     meta = yaml.safe_load(raw.get("runs/my-app/r1/metadata.yml"))
     assert meta["format_version"] == 2
 
 
 def test_metrics_migration_is_idempotent(tmp_path):
     raw = _v1_local(tmp_path)
-    assert run_migrate(["--dir", str(tmp_path)]) == 0
+    assert run_migrate(["--dir", str(tmp_path)], real_io()) == 0
     before = {k: raw.get(k) for k in raw.keys()}
-    assert run_migrate(["--dir", str(tmp_path)]) == 0
+    assert run_migrate(["--dir", str(tmp_path)], real_io()) == 0
     assert {k: raw.get(k) for k in raw.keys()} == before
 
 
@@ -172,10 +174,10 @@ def test_a_kill_mid_record_resumes(tmp_path, monkeypatch):
 
     monkeypatch.setattr(migrate_mod, "_put", dying)
     with pytest.raises(KeyboardInterrupt):
-        run_migrate(["--dir", str(tmp_path)])
+        run_migrate(["--dir", str(tmp_path)], real_io())
     assert "runs/my-app/r1/metadata.yml" not in raw.keys()
     monkeypatch.undo()
-    assert run_migrate(["--dir", str(tmp_path)]) == 0
+    assert run_migrate(["--dir", str(tmp_path)], real_io()) == 0
     _assert_readers_match(_local_storage(tmp_path))
 
 
@@ -183,7 +185,7 @@ def test_live_runs_keep_their_metrics_entries(tmp_path):
     from migrate_fixtures import live_state
 
     raw = _v1_local(tmp_path, state=live_state())
-    assert run_migrate(["--dir", str(tmp_path), "--skip-live"]) == 0
+    assert run_migrate(["--dir", str(tmp_path), "--skip-live"], real_io()) == 0
     old = local_key(("run",), "r1")
     assert raw.get(f"{old}/log.w1.jsonl") == _jsonl(W1)
     assert not any(k.startswith("runs/") for k in raw.keys())
@@ -203,13 +205,13 @@ def s3(monkeypatch):
 def test_s3_store_converts_metrics(s3):
     for name, data in _run_files().items():
         s3.put(f"{object_key(('run',), 'r1', 'team')}/{name}", data)
-    assert run_migrate(["--store", "s3://bkt/team"]) == 0
+    assert run_migrate(["--store", "s3://bkt/team"], real_io()) == 0
     assert f"team/runs/my-app/r1/{indexed_name('w1')}" in s3.keys()
     before = {k: s3.get(k) for k in s3.keys()}
-    assert run_migrate(["--store", "s3://bkt/team"]) == 0
+    assert run_migrate(["--store", "s3://bkt/team"], real_io()) == 0
     assert {k: s3.get(k) for k in s3.keys()} == before
     forget_checked()
-    _assert_readers_match(open_storage("s3://bkt/team", None, area="runs"))
+    _assert_readers_match(open_storage("s3://bkt/team", None, area="runs", clock=RealClock(), env=os.environ))
 
 
 def test_log_files_a_compacted_log_supersedes_are_dropped(tmp_path):
@@ -217,7 +219,7 @@ def test_log_files_a_compacted_log_supersedes_are_dropped(tmp_path):
     old = local_key(("run",), "r1")
     raw.put(f"{old}/log.w1@000000-000001.jsonl", _jsonl(W1 + W1_SEG))
     raw.put(f"{old}/log.w1.jsonl", _jsonl(W1[:3]))
-    assert run_migrate(["--dir", str(tmp_path)]) == 0
+    assert run_migrate(["--dir", str(tmp_path)], real_io()) == 0
     logs = {k for k in raw.keys() if k.startswith("runs/my-app/r1/log/")}
     assert logs == {"runs/my-app/r1/log/w1@000000-000001.jsonl"}
     _assert_readers_match(_local_storage(tmp_path))

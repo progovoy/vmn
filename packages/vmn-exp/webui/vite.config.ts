@@ -2,6 +2,8 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 
+const VENDOR = /\/node_modules\/(react|react-dom|react-router|react-router-dom|@remix-run\/router|scheduler|@tanstack\/[^/]+)\//;
+
 export default defineConfig({
   plugins: [react()],
   test: {
@@ -22,6 +24,9 @@ export default defineConfig({
         entryFileNames: "assets/[name].js",
         chunkFileNames: "assets/[name].js",
         assetFileNames: "assets/[name].[ext]",
+        // Library code changes only on a dependency bump, so vendor.js stays
+        // byte-identical across app releases and revalidates to a 304.
+        manualChunks: (id) => (VENDOR.test(id) ? "vendor" : undefined),
       },
     },
   },

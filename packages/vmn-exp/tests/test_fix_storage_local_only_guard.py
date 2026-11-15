@@ -30,6 +30,8 @@ from vmn_exp.core.writer import append_to_log, flush_log, save_artifact, save_ru
 from vmn_exp.sdk.media_uploads import MediaUploads, staging_dir
 from vmn_exp.sdk.state_publisher import RunStatePublisher
 from vmn_exp.storage.local import LocalSnapshotStorage
+import time
+from writer_args import process_writer
 
 APP = "app"
 X = "0.0.1-dev.abc1234.0000001"
@@ -61,7 +63,7 @@ def _artifact(tmp_path, name="model.bin", body=b"weights"):
 
 def test_tag_on_local_only_run_writes_nothing_to_remote(tmp_path):
     host = _local_only(tmp_path)
-    assert tag_run(host, APP, X, tags={"k": "v"})
+    assert tag_run(host, APP, X, tags={"k": "v"}, writer=process_writer())
     assert _remote_keys_of(X) == []
     assert any(e["type"] == "tags" for e in host.load_merged_log(APP, X))
 
@@ -82,7 +84,7 @@ def test_artifact_on_local_only_run_stays_local(tmp_path):
 
 def test_output_log_on_local_only_run_stays_local(tmp_path):
     host = _local_only(tmp_path)
-    output = OutputArtifact(host, APP, X, cap_bytes=1024)
+    output = OutputArtifact(host, APP, X, cap_bytes=1024, clock=time.monotonic)
     output.write(b"hello\n")
     output.seal()
     assert output.upload()
@@ -136,8 +138,8 @@ def test_state_publisher_still_uploads_a_record_the_remote_holds(tmp_path):
 
 def test_other_host_claim_does_not_inherit_offline_log(tmp_path):
     offline = _local_only(tmp_path, "a")
-    append_to_log(offline, APP, X, entry(0))
-    flush_log(offline, APP, X)
+    append_to_log(offline, APP, X, entry(0), writer=process_writer())
+    flush_log(offline, APP, X, writer=process_writer())
     save_run_state(offline, APP, X, dict(FINISHED))
 
     other = cached_host(tmp_path, "b")
@@ -155,7 +157,7 @@ def test_local_only_run_colliding_with_foreign_remote_record_does_not_write_into
     host = _local_only(tmp_path)  # opening as a writer may adopt the store (store.yml)
     before = raw_keys()
 
-    assert tag_run(host, APP, X, tags={"k": "v"})
+    assert tag_run(host, APP, X, tags={"k": "v"}, writer=process_writer())
     save_run_state(host, APP, X, dict(FINISHED))
     save_artifact(host, APP, X, _artifact(tmp_path))
     host.save_file(APP, X, ALERTS_FILE, "sent: {}\n")
@@ -169,7 +171,7 @@ def test_run_created_through_cache_still_syncs_without_extra_head(tmp_path):
     assert host.create_exclusive(APP, X, meta(X), {})
     calls = record_calls(host._remote._s3)
 
-    assert tag_run(host, APP, X, tags={"k": "v"})
+    assert tag_run(host, APP, X, tags={"k": "v"}, writer=process_writer())
 
     metadata_reads = [
         op for op, params in calls
@@ -183,7 +185,7 @@ def test_record_mirrored_by_an_earlier_process_is_written_through(tmp_path):
     assert cached_host(tmp_path, "a").create_exclusive(APP, X, meta(X), {})
 
     later = cached_host(tmp_path, "a")  # a new process, same host
-    assert tag_run(later, APP, X, tags={"k": "v"})
+    assert tag_run(later, APP, X, tags={"k": "v"}, writer=process_writer())
     assert any(e["type"] == "tags" for e in s3_storage().load_merged_log(APP, X))
 
 
@@ -191,7 +193,7 @@ def test_remote_only_record_is_still_written_through(tmp_path):
     s3_storage().save(APP, X, meta(X), {})
     host = cached_host(tmp_path, "a")
 
-    assert tag_run(host, APP, X, tags={"k": "v"})
+    assert tag_run(host, APP, X, tags={"k": "v"}, writer=process_writer())
     save_run_state(host, APP, X, dict(FINISHED))
 
     remote = s3_storage()

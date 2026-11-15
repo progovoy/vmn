@@ -32,7 +32,7 @@ export function useBoardRows(ws: string, app: string, filter: RowsFilter, groupi
       return data && groupItems(data, shut, groups.more, keep, filterOver);
     }
     return flat.rows && (keep ? flat.rows.filter(keep) : flat.rows);
-  }, [grouped, data, group, collapsed, collapseAll, groups.more, keep, filterOver, flat.rows]);
+  }, [grouped, data, collapsed, collapseAll, groups.more, keep, filterOver, flat.rows]);
 
   if (!grouped) {
     const remaining = flat.total - (flat.rows?.length ?? 0);
@@ -49,7 +49,7 @@ export function useBoardRows(ws: string, app: string, filter: RowsFilter, groupi
     matches: undefined,
     groups: data?.groups, main: data?.main, jobAgg: data?.job_agg, hints: data?.hints, indexing: data?.indexing,
     aggregate: data?.aggregate, defaultAggregate: groups.defaultAggregate, running: data?.running ?? 0,
-    stale: groups.stale, staleError: groups.staleError,
+    stale: groups.stale, counting: groups.counting, staleError: groups.staleError,
     queryError: groups.queryError, pageError: groups.pageError, missing: false, moreError: groups.moreError,
     loadMore: groups.loadMore, loadGroup: groups.loadGroup, refresh: groups.refresh,
     visibleRef: flat.visibleRef, viewportRef: flat.viewportRef, updatedAt: groups.updatedAt,

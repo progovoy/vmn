@@ -25,6 +25,8 @@ def no_code_reason(meta):
         return "its patches predate the code store; run vmn-exp migrate"
     if meta.get("base_commit"):
         return None
+    if meta.get("codeless"):
+        return "recorded with code=False; no code snapshot"
     imported_from = meta.get("imported_from")
     if imported_from:
         tool = imported_from.get("tool") or "unknown"

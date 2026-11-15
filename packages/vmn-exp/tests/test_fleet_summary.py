@@ -87,7 +87,7 @@ def test_fleet_summary_basic():
         children_of,
         read_state=lambda v: states.get(v),
         observed_at=None,
-        expected=5,
+        expected=5, now=datetime.datetime.now(datetime.timezone.utc),
     )
 
     assert result is not None
@@ -115,7 +115,7 @@ def test_fleet_summary_no_children():
     result = fleet_summary(
         "parent",
         children_of,
-        read_state=lambda v: None,
+        read_state=lambda v: None, now=datetime.datetime.now(datetime.timezone.utc),
     )
     assert result is None
 
@@ -134,7 +134,7 @@ def test_fleet_summary_no_expected():
     result = fleet_summary(
         "parent",
         children_of,
-        read_state=lambda v: states.get(v),
+        read_state=lambda v: states.get(v), now=datetime.datetime.now(datetime.timezone.utc),
     )
 
     assert result is not None
@@ -165,7 +165,7 @@ def test_fleet_summary_with_progress():
         "parent",
         children_of,
         read_state=lambda v: states.get(v),
-        read_child_row=lambda v: rows.get(v),
+        read_child_row=lambda v: rows.get(v), now=datetime.datetime.now(datetime.timezone.utc),
     )
 
     by_v = {c["verstr"]: c for c in result["children"]}
@@ -187,7 +187,7 @@ def test_fleet_summary_progress_missing():
         "parent",
         children_of,
         read_state=lambda v: states.get(v),
-        read_child_row=lambda v: rows.get(v),
+        read_child_row=lambda v: rows.get(v), now=datetime.datetime.now(datetime.timezone.utc),
     )
 
     assert result["children"][0]["progress"] is None
@@ -204,7 +204,7 @@ def test_fleet_summary_progress_non_numeric():
         "parent",
         children_of,
         read_state=lambda v: states.get(v),
-        read_child_row=lambda v: rows.get(v),
+        read_child_row=lambda v: rows.get(v), now=datetime.datetime.now(datetime.timezone.utc),
     )
 
     assert result["children"][0]["progress"] is None
@@ -225,7 +225,7 @@ def test_fleet_summary_cap_children_detail():
     result = fleet_summary(
         "parent",
         children_of,
-        read_state=lambda v: states.get(v),
+        read_state=lambda v: states.get(v), now=datetime.datetime.now(datetime.timezone.utc),
     )
 
     assert len(result["children"]) == FLEET_MAX_CHILDREN_DETAIL
@@ -245,7 +245,7 @@ def test_fleet_summary_negative_expected():
         "parent",
         children_of,
         read_state=lambda v: states.get(v),
-        expected=-1,
+        expected=-1, now=datetime.datetime.now(datetime.timezone.utc),
     )
 
     assert result["expected"] == 1
@@ -262,7 +262,7 @@ def test_fleet_summary_expected_less_than_children():
         "parent",
         children_of,
         read_state=lambda v: states.get(v),
-        expected=5,
+        expected=5, now=datetime.datetime.now(datetime.timezone.utc),
     )
 
     assert result["expected"] == 8
@@ -284,7 +284,7 @@ def test_fleet_summary_with_observed_at():
         "parent",
         children_of,
         read_state=lambda v: states.get(v),
-        observed_at=lambda v: recent,
+        observed_at=lambda v: recent, now=datetime.datetime.now(datetime.timezone.utc),
     )
 
     assert result["counts"][RUNNING] == 1
@@ -302,7 +302,7 @@ def test_fleet_summary_read_child_row_returns_none():
         "parent",
         children_of,
         read_state=lambda v: states.get(v),
-        read_child_row=lambda v: None,
+        read_child_row=lambda v: None, now=datetime.datetime.now(datetime.timezone.utc),
     )
 
     assert result["children"][0]["progress"] is None

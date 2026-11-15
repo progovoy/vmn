@@ -1,4 +1,4 @@
-"""``version_stamp.store.config``: which store a command uses (plan 37 P4c).
+"""``version_stamp.store.config``: which store a command uses (plan 45 P4c).
 
 Pure: params, env and conf are plain dicts. Mirrors the SDK's resolution
 (``vmn_exp.core.writer.merge_conf_into_params`` + ``storage_resolve.store_uri``):

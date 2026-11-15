@@ -22,6 +22,9 @@ def add_similar_flags(parser):
     parser.add_argument("--text-only", dest="text_only", action="store_true", default=False,
                         help="similar: match the --context text alone (no code, params, "
                              "inputs or other facts; needs no working tree)")
+
+
+def add_similar_hint_flag(parser):
     parser.add_argument("--no-similar", dest="similar_hint", action="store_false", default=None,
                         help="create/run: don't print the similar past runs after the claim "
                              "(also: conf experiment.similar.hint: false)")

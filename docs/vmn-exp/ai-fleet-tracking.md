@@ -27,7 +27,7 @@ its lifecycle. The one exception is the bar's lead number: an outer run can
 Under a filter, a group's counts cover only its inner runs that match.
 
 Status is derived from `run_state.yml`; a run is `stuck` once its heartbeat is
-older than `max(3 × heartbeat interval, 60s)` with no exit code (see
+past its stuck window with no exit code (see
 [experiments.md](experiments.md#run-status-did-my-job-die)).
 
 **total** on the group header is the number of inner runs. The run detail's
@@ -101,7 +101,9 @@ vmn-exp run my_app --parent <outer verstr> -- python train.py
 
 Any experiment created while `VMN_EXPERIMENT_ID` is set is parented to that run
 automatically. That includes every `start_run()` and `vmn-exp` call inside
-`vmn-exp run my_app -- ./sweep.sh`.
+`vmn-exp run my_app -- ./sweep.sh`, except the first plain `start_run()` in
+the process `vmn-exp run` started itself, which records into that run
+(`--no-adopt` turns that off).
 
 ## Declaring the outer run's own progress
 
@@ -150,7 +152,7 @@ Over HTTP, `GET /api/v1/workspaces/{ws}/apps/{app}/experiments` returns the same
 `children`/`child_counts`. The detail endpoint `.../experiments/{verstr}` adds
 `fleet`: `expected`, `counts` (per status, plus `waiting`) and, once the outer
 run ended, `never_started` (its never-started pods and slots) and `lost`. See
-[ui.md](ui.md#api).
+[ui-api.md](ui-api.md#api).
 
 ## Checklist for an agent
 

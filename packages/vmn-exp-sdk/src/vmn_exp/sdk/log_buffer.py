@@ -9,8 +9,10 @@ reaches ``MAX_PENDING_ENTRIES``, and on an explicit :meth:`LogBuffer.flush` —
 which the run calls on each heartbeat, at ``finish()``, on SIGTERM and at
 interpreter exit — so nothing logged before the run ends is lost.
 
-Each batch is a single write of whole lines, so a reader sees an entry
-entirely or not at all. A write after :meth:`LogBuffer.close` goes straight
+Each batch is written as a few parts (the run's: its metric block, then its
+log lines), each a single write of whole lines, so a reader sees an entry
+entirely or not at all and a failed part is retried without re-sending the
+parts already stored. A write after :meth:`LogBuffer.close` goes straight
 to storage; after :meth:`LogBuffer.discard` (a detached run) nothing is
 written at all. A forked child that inherited the buffer writes nothing — not
 its own entries, nor the parent's queued ones: only the parent ships them.
@@ -32,8 +34,13 @@ MAX_PENDING_ENTRIES = 1000
 class LogBuffer:
     """Queue entries for ``write(entries)`` and hand them over in order."""
 
-    def __init__(self, write, gate=None):
+    def __init__(self, write, gate=None, split=None, on_refused=None):
         self._write = write
+        # A batch is written as split(batch)'s parts, in order, so a failure
+        # re-sends only the parts not yet stored. A part write() refuses
+        # (returns False) is gone for good: dropped and reported, not re-queued.
+        self._split = split or (lambda batch: [batch])
+        self._on_refused = on_refused or (lambda count: None)
         # The run's background gate: a paused run neither flushes periodically
         # nor eagerly (entries keep queueing until it resumes).
         self._gate = gate or BackgroundGate()
@@ -78,18 +85,23 @@ class LogBuffer:
         self._reset_locks()
 
     def flush(self):
-        """Write what is queued. On failure the batch is kept for the next try."""
+        """Write what is queued, part by part. On failure the failing part and
+        the parts after it are kept for the next try; a refused part is dropped."""
         if not self._in_owner():
             return
         with self._write_lock:
             batch = self._take()
             if not batch:
                 return
-            try:
-                self._write(batch)
-            except BaseException:
-                self._pending.extendleft(reversed(batch))
-                raise
+            parts = self._split(batch)
+            for i, part in enumerate(parts):
+                try:
+                    written = self._write(part)
+                except BaseException:
+                    self._pending.extendleft(reversed([e for p in parts[i:] for e in p]))
+                    raise
+                if written is False:
+                    self._on_refused(len(part))
 
     def _take(self):
         batch = []

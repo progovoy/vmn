@@ -10,16 +10,22 @@ import os
 import signal
 import subprocess
 import sys
+import tempfile
+import threading
 import time
 
 import pytest
+from deferred_ship_fakes import WAIT_SEC, FakeBucket
 from exp_helpers import _SRC_PATH, _PY
 
 from vmn_exp.core.metric_block import read_headers
+from vmn_exp.core.real_io import RealClock, RealHost, RealRandom
 from vmn_exp.snapshot import LocalSnapshotStorage
+from vmn_exp.storage import buffered
+from vmn_exp.storage.buffered import BufferedRemoteStorage
 from vmn_exp.storage.cached import CachedSnapshotStorage
 from vmn_exp.sdk import log_buffer
-from vmn_exp.sdk.run import Run
+from vmn_exp.sdk.run import Run, _real_process_hooks
 
 APP = "app"
 VERSTR = "0.0.1-dev.aaaaaaa.bbbbbbb"
@@ -55,7 +61,7 @@ def storage(tmp_path):
 
 
 def _open_run(storage, heartbeat=60):
-    run = Run(storage, APP, VERSTR, heartbeat)
+    run = Run(storage, APP, VERSTR, heartbeat, clock=RealClock(), host=RealHost(), random=RealRandom(), env=os.environ, install_hooks=_real_process_hooks())
     run._open()
     return run
 
@@ -136,10 +142,12 @@ from vmn_exp.core.metric_block import read_headers
 from vmn_exp.snapshot import LocalSnapshotStorage
 from vmn_exp.storage.cached import CachedSnapshotStorage
 from vmn_exp.sdk import log_buffer
-from vmn_exp.sdk.run import Run
+from vmn_exp.sdk.run import Run, _real_process_hooks
+from vmn_exp.core.real_io import RealClock, RealHost, RealRandom
 log_buffer.FLUSH_INTERVAL_SEC = 3600
 st = CachedSnapshotStorage(LocalSnapshotStorage(sys.argv[1], area="runs"))
-run = Run(st, "app", "0.0.1-dev.aaaaaaa.bbbbbbb", 3600)
+run = Run(st, "app", "0.0.1-dev.aaaaaaa.bbbbbbb", 3600, clock=RealClock(), host=RealHost(), random=RealRandom(),
+          env=os.environ, install_hooks=_real_process_hooks())
 run._open()
 for step in range(25):
     run.log_metric("loss", 0.5, step=step)
@@ -238,3 +246,96 @@ def test_the_log_flusher_thread_is_not_named_like_the_run_heartbeat():
         assert "vmn-heartbeat" not in names
     finally:
         buf.close()
+
+
+class _LogFailsOnceStorage(_CountingStorage):
+    """The metric block lands, then the log append that follows raises once."""
+
+    def __init__(self, root):
+        super().__init__(root)
+        self.log_failures = 1
+
+    def append_log_entries(self, app_name, verstr, writer_id, entries):
+        if self.log_failures:
+            self.log_failures -= 1
+            raise OSError("disk full")
+        return super().append_log_entries(app_name, verstr, writer_id, entries)
+
+
+def test_a_log_append_failure_does_not_duplicate_the_metric_block(tmp_path, monkeypatch):
+    monkeypatch.setattr(log_buffer, "FLUSH_INTERVAL_SEC", 3600)
+    storage = _LogFailsOnceStorage(str(tmp_path))
+    storage.save(APP, VERSTR, {"verstr": VERSTR, "timestamp": "2026-01-01T00:00:00Z"}, {})
+    run = _open_run(storage, heartbeat=3600)
+    run.log_metric("loss", 0.5, step=3)
+    run.log_note("checkpoint")
+
+    with pytest.raises(OSError):
+        run._log_buffer.flush()
+    run.finish()
+
+    assert storage.blocks == [1]
+    assert _logged_steps(storage) == [3]
+
+
+def test_logging_to_a_deleted_run_warns_once(storage, monkeypatch, caplog):
+    monkeypatch.setattr(log_buffer, "FLUSH_INTERVAL_SEC", 3600)
+    run = _open_run(storage, heartbeat=3600)
+    storage.delete(APP, VERSTR)
+
+    with caplog.at_level("WARNING", logger="vmn_exp.sdk.run"):
+        run.log_metric("loss", 0.5, step=1)
+        run.log_note("lost")
+        run._log_buffer.flush()
+        run.log_metric("loss", 0.4, step=2)
+        run._log_buffer.flush()
+
+    warnings = [r.getMessage() for r in caplog.records if "no longer exists" in r.getMessage()]
+    assert warnings == [f"vmn: run {run.id} no longer exists in the store; "
+                        "1 entries were not recorded"]
+    run._log_buffer.discard()
+
+
+@pytest.fixture
+def hung_bucket(tmp_path, monkeypatch):
+    """A direct-to-bucket store whose segment creates hang until released."""
+    monkeypatch.setattr(tempfile, "tempdir", str(tmp_path))
+    hold = threading.Event()
+    bucket = FakeBucket(str(tmp_path / "bucket"), hold=hold)
+    bucket.save(APP, VERSTR, {"verstr": VERSTR, "timestamp": "2026-01-01T00:00:00Z"}, {})
+    yield BufferedRemoteStorage(bucket, str(tmp_path), area="runs", clock=RealClock()), hold
+    hold.set()
+    buffered.close_all()
+
+
+def test_log_metric_does_not_block_on_a_hung_bucket(hung_bucket):
+    storage, hold = hung_bucket
+    run = _open_run(storage, heartbeat=3600)
+    done = threading.Event()
+
+    def log_and_beat():
+        for step in range(1500):
+            run.log_metric("loss", 0.5, step=step)
+        run._beat()
+        done.set()
+
+    threading.Thread(target=log_and_beat, daemon=True).start()
+    try:
+        assert done.wait(WAIT_SEC)
+        assert storage._remote.creating.wait(WAIT_SEC)  # the worker is the one hung
+    finally:
+        hold.set()
+        run.finish()
+
+
+def test_a_finished_run_no_longer_receives_ship_requests(hung_bucket):
+    storage, hold = hung_bucket
+    hold.set()
+    run = _open_run(storage, heartbeat=3600)
+    run.log_metric("loss", 0.5, step=1)
+    run.finish()
+    shipped = storage._remote.creates
+
+    storage.append_log_entry(APP, VERSTR, "late", {"type": "note", "text": "late"})
+
+    assert storage._remote.creates == shipped + 1  # inline: no closed worker asked

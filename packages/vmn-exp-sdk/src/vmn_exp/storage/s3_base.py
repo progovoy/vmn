@@ -42,21 +42,23 @@ def parallel_map(fn, items):
     return fan_out(fn, items, S3_WORKERS, "vmn-s3-parallel")
 
 
-def boto3_client(endpoint_url=None, proxies=None):
+def boto3_client(endpoint_url=None, proxies=None, *, env):
     """A client of a session of its own that parses timestamps with
     :func:`parse_timestamp` (the default session's clients keep botocore's);
-    *proxies* given, botocore does not look them up."""
+    *proxies* given, botocore does not look them up. *env*: what its prefix
+    cap is read from (:mod:`~vmn_exp.storage.s3_prefix_cap`)."""
     session = boto3_client_module().session.Session()
     session._session.get_component("response_parser_factory").set_parser_defaults(
         timestamp_parser=parse_timestamp)
-    return _client(session, endpoint_url, **({} if proxies is None else {"proxies": proxies}))
+    return _client(session, endpoint_url, env, **({} if proxies is None else {"proxies": proxies}))
 
 
 def sigv4_client(endpoint_url=None):
     """A client that presigns with SigV4 (``X-Amz-Expires`` bounded URLs):
     one per presigned URL, so the default session's (no session to build)."""
     _DEFAULT_SESSION_OWNED.get()
-    return _client(boto3_client_module(), endpoint_url, signature_version="s3v4")
+    # Presigning sends nothing: the prefix cap's default never matters.
+    return _client(boto3_client_module(), endpoint_url, {}, signature_version="s3v4")
 
 
 def _forget_inherited_default_session():
@@ -70,7 +72,7 @@ def _forget_inherited_default_session():
 _DEFAULT_SESSION_OWNED = PerProcess(_forget_inherited_default_session, value=True)
 
 
-def _client(session, endpoint_url, **config):
+def _client(session, endpoint_url, env, **config):
     from botocore.config import Config
 
     # A pooled connection per concurrent reader (the index's and parallel_map's);
@@ -79,7 +81,7 @@ def _client(session, endpoint_url, **config):
                     read_timeout=READ_TIMEOUT_SEC, retries=dict(RETRIES), **config)
     kwargs = {"endpoint_url": endpoint_url} if endpoint_url else {}
     # Capped first: a call's wait for its prefix's slot is not its latency.
-    return instrument(cap_prefixes(session.client("s3", config=config, **kwargs)))
+    return instrument(cap_prefixes(session.client("s3", config=config, **kwargs), env))
 
 
 def parse_timestamp(value):
@@ -128,10 +130,13 @@ class S3Base(S3ObjectBase):
     pass an adapter (:mod:`vmn_exp.storage.object_client`)."""
 
     def __init__(self, bucket, prefix="vmn/snapshots", endpoint_url=None, client=None,
-                 client_factory=None, options=None):
+                 client_factory=None, options=None, *, env=None):
         """*client_factory* builds *client* again in a forked child; without
         one an injected *client* refuses use there. *options*: the store
-        URI's query options (:meth:`uri_options`).
+        URI's query options (:meth:`uri_options`). *env*: the host's
+        environment its per-host index cache dir and its own client's
+        prefix cap resolve from; None keeps no per-host cache and the
+        default cap.
 
         Not ``super().__init__``: core's assigns ``_s3``, a per-process
         property here."""
@@ -139,11 +144,13 @@ class S3Base(S3ObjectBase):
         self.prefix = prefix
         self.endpoint_url = endpoint_url
         self._options = dict(options or {})
+        self._env = env
         # Not another object store's adapter.
         self._own_client = client is None and client_factory is None
         if self._own_client:
-            client = boto3_client(endpoint_url)
-            client_factory = child_factory(boto3_client, endpoint_url, client)
+            build = functools.partial(boto3_client, env={} if env is None else env)
+            client = build(endpoint_url)
+            client_factory = child_factory(build, endpoint_url, client)
         elif client is None:
             client = client_factory()
         # Area clones share it: one client and connection pool per process.

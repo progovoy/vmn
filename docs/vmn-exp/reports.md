@@ -101,7 +101,7 @@ Types (`*` = single-run types, which take pinned `runs` only):
 | `lineage`* | `depth` |
 | `run`* | none |
 
-A `pivot` panel is the [pivot heatmap](ui.md#pivot-heatmap) of its runs (a
+A `pivot` panel is the [pivot heatmap](ui-api.md#pivot-heatmap) of its runs (a
 query as the pivot's `q`, pinned verstrs as `verstr in (...)`), each cell a
 link to the board (with `scope`: the outer run's Runs tab) filtered to its
 runs. Across launches, `rows: tags.trade_date` x `cols: root` compares them
@@ -157,8 +157,8 @@ with the storage flags of `vmn-exp model`: `--dir`, `--store`, `--bucket`,
 | `vmn-exp report put <rid> -f body.md [-m msg]` | save the next revision. A concurrent save makes it exit 1, so retry |
 | `vmn-exp report export <rid> ...` | see above |
 | `vmn-exp report delete <rid>` | delete the report, its revisions and comments |
-| `vmn-exp comment <app> -v <ref> "text"` | comment on a run and print the comment id |
-| `vmn-exp comments <app> -v <ref>` | print a run's thread: `<id>  <ts>  <author>[ (reply to <id>)]: <text>` |
+| `vmn-exp comment <app> -v <ref> "text" [--json]` | comment on a run and print the comment id (`--json`: `{"id": ...}`) |
+| `vmn-exp comments <app> -v <ref> [--json]` | print a run's thread: `<id>  <ts>  <author>[ (reply to <id>)]: <text>`; `--json` prints it as stored, a JSON array in posting order (`id`, `ts`, `writer`, `author`, `text`, `reply_to`, `anchor`, `resolved`, `deleted`; a deleted comment has no `text`) |
 
 ## Comments
 
@@ -191,7 +191,7 @@ All under `/api/v1/workspaces/{ws}`. Writes need `editor`, except delete
 (`admin`), and are refused with `403` on a `--read-only` server.
 
 ```
-GET    /reports[?archived=true]                list
+GET    /reports[?archived=true][&offset=&limit=]   list; with offset/limit one page plus "total"
 POST   /reports {"title", "body"}              create -> {"rid", "rev": 1}
 GET    /reports/{rid}                          header + latest revision
 GET    /reports/{rid}/revisions/{n}            one revision

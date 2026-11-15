@@ -97,11 +97,14 @@ class S3SnapshotStorage(
         None over another object store's client adapter."""
         if not getattr(self, "_own_client", False) or type(self) is not S3SnapshotStorage:
             return None
+        env = None if self._env is None else dict(self._env)
         return (__name__, "S3SnapshotStorage", (self.bucket,),
-                {"prefix": self.prefix, "endpoint_url": self.endpoint_url})
+                {"prefix": self.prefix, "endpoint_url": self.endpoint_url, "env": env})
 
     def index_cache_path(self, app_name):
-        return host_dirs.index_cache_path(self.cache_identity(), app_name)
+        if self._env is None:
+            return None
+        return host_dirs.index_cache_path(self.cache_identity(), app_name, self._env)
 
     def save_file(self, app_name, verstr, filename, data):
         self._put(f"{self._record_prefix(app_name, verstr)}/{filename}", data)

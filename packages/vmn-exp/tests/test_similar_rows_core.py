@@ -1,21 +1,25 @@
 """The runs a similar-runs query reads besides its FTS table
 (vmn_exp.core.similar_rows): from an index snapshot, or point reads on the
 persisted index — the same answers either way."""
+import os
 import sqlite3
 
 import pytest
+from fakes.clock import FakeClock
 from similar_fixtures import FakeSnapshot, run
 from similar_seed import features, finished, seed, verstr
 from vmn_exp.core.index import ExperimentIndex
 from vmn_exp.core.similar_rows import SnapshotRows, StoreRows
 from vmn_exp.snapshot import open_storage
+from vmn_exp.core.real_io import RealClock
 
 APP = "trainer"
+NOW = FakeClock().now()
 
 
 @pytest.fixture
 def both(tmp_path):
-    storage = open_storage(root=str(tmp_path / "store"), area="runs")
+    storage = open_storage(root=str(tmp_path / "store"), area="runs", clock=RealClock(), env=os.environ)
     outer = seed(storage, APP, verstr(1), name="outer", note="sweep")
     inner = seed(storage, APP, verstr(2), parent=outer, intent={"text": "focal"},
                  changes=features(["a.py"]), goal=("loss", "min"), metrics={"loss": 1.0})
@@ -23,7 +27,7 @@ def both(tmp_path):
     seed(storage, APP, verstr(4))
     finished(storage, APP, inner, exit_code=1)
     path = str(tmp_path / "index.sqlite")
-    index = ExperimentIndex(storage, APP, path, full_sweep_sec=0)
+    index = ExperimentIndex(storage, APP, path, full_sweep_sec=0, clock=FakeClock())
     snapshot = index.refresh().snapshot()
     conn = sqlite3.connect(path, isolation_level=None)
     return (SnapshotRows(snapshot), StoreRows(conn, APP)), (outer, inner, deeper, verstr(4))
@@ -39,7 +43,7 @@ def test_both_sources_answer_alike(both):
             [rows.root(got[v]) for v in (outer, inner, deeper, single)],
             rows.root({"verstr": "new", "parent": deeper}),
             rows.parents_among([outer, inner, deeper, single]),
-            rows.status_of(inner), rows.status_of(single),
+            rows.status_of(inner, NOW), rows.status_of(single, NOW),
             rows.facts(got[inner])[:2], rows.declared_schema(),
         ))
     assert answers[0] == answers[1]
@@ -54,7 +58,7 @@ def test_both_sources_answer_alike(both):
 def test_a_snapshot_without_side_tables_reads_none():
     rows = SnapshotRows(FakeSnapshot([run("a")]))
     assert rows.facts(rows.row("a")) == (None, None, None, None, None)
-    assert rows.row("missing") is None and rows.status_of("a") == "created"
+    assert rows.row("missing") is None and rows.status_of("a", NOW) == "created"
 
 
 def test_a_run_state_command_stands_in_for_the_rows():

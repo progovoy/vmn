@@ -39,8 +39,9 @@ import { boardIndexingText, soFar } from "../../util/indexing";
 
 /** `20 jobs`, `19,580 single runs`; listing every top-level run, `14 jobs ·
  *  3 single runs` once every row is loaded, else the total. */
-function countText(loading: boolean, rows: { job?: unknown }[], total: number, kind: JobsKind | null): string {
+function countText(loading: boolean, counting: boolean, rows: { job?: unknown }[], total: number, kind: JobsKind | null): string {
   if (loading) return `loading ${kindNoun(kind ?? "jobs")}s…`;
+  if (counting) return `counting ${kindNoun(kind ?? "jobs")}s…`;
   if (kind) return plural(total, kindNoun(kind));
   if (rows.length < total) return `${fmtCount(total)} top-level runs`;
   const jobs = rows.filter((r) => r.job).length;
@@ -113,7 +114,9 @@ export default function JobsView({ ws, app, views, kind, preset, onAll, onTotal 
     onArchived: data.refresh,
   });
   const loading = data.items === undefined;
-  useEffect(() => onTotal?.(loading ? undefined : data.total), [onTotal, loading, data.total]);
+  // The rows of the filter before, while this one's answer loads: not its count.
+  const counting = !loading && data.counting;
+  useEffect(() => onTotal?.(loading || counting ? undefined : data.total), [onTotal, loading, counting, data.total]);
 
   if (data.pageError) return <div className="error">{data.pageError}</div>;
   // With the switch shown the app has jobs: an empty side is no empty app.
@@ -124,8 +127,8 @@ export default function JobsView({ ws, app, views, kind, preset, onAll, onTotal 
     <>
       <BoardHead
         title={appName}
-        count={[board.collapseAll && !loading && data.totalGroups !== undefined && plural(data.totalGroups, "group"),
-          countText(loading, rows, data.total, kind.kind) + (loading ? "" : soFar({ indexing })),
+        count={[board.collapseAll && !loading && !counting && data.totalGroups !== undefined && plural(data.totalGroups, "group"),
+          countText(loading, counting, rows, data.total, kind.kind) + (loading || counting ? "" : soFar({ indexing })),
           boardIndexingText(data.indexing, status?.indexing), freshnessShort(status?.freshness)]
           .filter(Boolean).join(" · ")}
         views={views}

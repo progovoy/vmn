@@ -25,7 +25,11 @@ _LOGGER = logging.getLogger(__name__)
 
 
 class ReportIndexes:
-    def __init__(self, db_dir=None, background=False, journal_of=lambda ws_name: None):
+    def __init__(self, db_dir=None, background=False, journal_of=lambda ws_name: None, *, clock,
+                 index_clock=None):
+        """*clock* (epoch seconds) is what each workspace's report index reads;
+        *index_clock* their caches' (see :class:`SqliteStore`)."""
+        self._clock, self._index_clock = clock, index_clock
         self._db_dir = db_dir
         self._background = background
         self._journal_of = journal_of
@@ -72,7 +76,8 @@ class ReportIndexes:
 
     def _new(self, ws, storage):
         sweep = FULL_SWEEP_SEC if self._background else 0
-        return ReportIndex(storage, cache=self._cache(ws), full_sweep_sec=sweep, name=ws.name)
+        return ReportIndex(storage, cache=self._cache(ws), clock=self._clock, full_sweep_sec=sweep,
+                           name=ws.name)
 
     def _cache(self, ws):
         if self._db_dir is None:
@@ -80,4 +85,5 @@ class ReportIndexes:
         os.makedirs(self._db_dir, exist_ok=True)
         source = ws.store or os.path.abspath(ws.path)
         slug = hashlib.sha256(source.encode()).hexdigest()[:16]
-        return SqliteStore(os.path.join(self._db_dir, f"reports-{slug}.sqlite"))
+        return SqliteStore(os.path.join(self._db_dir, f"reports-{slug}.sqlite"),
+                           clock=self._index_clock)

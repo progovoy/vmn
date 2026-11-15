@@ -23,7 +23,6 @@ file and the reason), then debug.
 import logging
 import math
 import sqlite3
-import time
 
 from vmn_exp.core import sqlite_files
 from vmn_exp.core.best_effort import warn_once
@@ -33,14 +32,15 @@ from vmn_exp.core.sqlite_conn import checkpoint, wal_oversized
 
 FIRST_BACKOFF_SEC = 1.0
 MAX_BACKOFF_SEC = 60.0
-_monotonic = time.monotonic
 _LOGGER = logging.getLogger(__name__)
 
 
 class StoreConnection:
-    """*path*'s connection, opened through *connect_file(file)*."""
+    """*path*'s connection, opened through *connect_file(file)*; a failed
+    open is retried after a backoff on *monotonic*."""
 
-    def __init__(self, path, connect_file):
+    def __init__(self, path, connect_file, monotonic):
+        self._monotonic = monotonic
         self.path = path
         self._connect = connect_file
         self.conn = None
@@ -55,7 +55,7 @@ class StoreConnection:
             return None
         if self.conn is not None and sqlite_files.pointer_stamp(self.path) == self._stamp:
             return self.conn
-        if self.conn is None and self._retry_at is not None and _monotonic() < self._retry_at:
+        if self.conn is None and self._retry_at is not None and self._monotonic() < self._retry_at:
             return None
         self.close()
         self._open()
@@ -104,7 +104,7 @@ class StoreConnection:
 
     def _failed(self, file, exc):
         self.conn = None
-        self._retry_at = _monotonic() + self._backoff
+        self._retry_at = self._monotonic() + self._backoff
         self._backoff = min(self._backoff * 2, MAX_BACKOFF_SEC)
         warn_once((file, "open"), f"Experiment index {file} unavailable ({exc}); "
                   "running without it, retrying later")

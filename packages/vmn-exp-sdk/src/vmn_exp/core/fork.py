@@ -19,7 +19,7 @@ import operator
 
 from vmn_exp.core.resolve_ref import _resolve_verstr
 from vmn_exp.core.rewind import create_rewind_entry, entry_step
-from vmn_exp.core.status import RUNNING, derive_status, run_state_observed_at
+from vmn_exp.core.status import MIN_STALE_SEC, RUNNING, derive_status, run_state_observed_at
 from vmn_exp.core.metric_entries import split_metric_entries
 from vmn_exp.core.writer import append_entries_to_log, append_metric_entries
 
@@ -91,17 +91,18 @@ def inherited_entries(log, step=None):
     return entries, step if step is not None else (max(steps) if steps else None)
 
 
-def seed_fork(storage, app_name, verstr, source, step=None):
-    """Make the new run *verstr* a fork of *source*; returns ``forked_from``."""
+def seed_fork(storage, app_name, verstr, source, step=None, *, writer):
+    """Make the new run *verstr* a fork of *source*, its inherited entries in
+    *writer*'s streams; returns ``forked_from``."""
     log = storage.load_merged_log(app_name, source)
     entries, step = inherited_entries(log, step)
     forked_from = {"verstr": source, "step": step}
     storage.update_metadata(app_name, verstr, {"forked_from": forked_from})
     metrics, others = split_metric_entries(entries)
     if metrics:  # blocks marked inherited (plan 12 §5.4)
-        append_metric_entries(storage, app_name, verstr, metrics, inherited=True)
+        append_metric_entries(storage, app_name, verstr, metrics, writer, inherited=True)
     if others:
-        append_entries_to_log(storage, app_name, verstr, others)
+        append_entries_to_log(storage, app_name, verstr, others, writer)
     return forked_from
 
 
@@ -120,17 +121,21 @@ def _rewind_step(step):
     return operator.index(step)
 
 
-def rewind_run(storage, app_name, verstr, step, prior_state):
-    """Hide *verstr*'s history past *step* (*prior_state*: its ``run_state``).
+def rewind_run(storage, app_name, verstr, step, prior_state, now, min_stale_sec=MIN_STALE_SEC, *,
+               writer):
+    """Hide *verstr*'s history past *step* (*prior_state*: its ``run_state``),
+    with an entry in *writer*'s stream.
 
-    Refused while the run is live elsewhere: its writer would keep logging
-    steps the rewind is about to hide.
+    Refused while the run is live elsewhere (its status derived at *now* on
+    *min_stale_sec*):
+    its writer would keep logging steps the rewind is about to hide.
     """
     step = _rewind_step(step)
     observed = run_state_observed_at(storage, app_name, verstr)
-    if prior_state and derive_status(prior_state, observed_at=observed) == RUNNING:
+    if prior_state and derive_status(prior_state, now=now, observed_at=observed,
+                                     min_stale_sec=min_stale_sec) == RUNNING:
         raise RuntimeError(
             f"Run '{verstr}' is running (host {prior_state.get('host')}, pid "
             f"{prior_state.get('pid')}); finish it before rewinding it."
         )
-    append_entries_to_log(storage, app_name, verstr, [create_rewind_entry(step)])
+    append_entries_to_log(storage, app_name, verstr, [create_rewind_entry(step)], writer)

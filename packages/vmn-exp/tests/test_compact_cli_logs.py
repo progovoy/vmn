@@ -4,15 +4,18 @@ cold index load paid a GET for each. A running run's segments are left alone
 (its writer still appends)."""
 import datetime
 import json
+import os
 import time
 
 import pytest
 import yaml
+from vmn_exp.core.real_io import RealClock
 
 moto = pytest.importorskip("moto")
 import boto3  # noqa: E402
 
 from vmn_exp.cli.compact import DEAD, compact_runs, runs_with_status  # noqa: E402
+from vmn_exp.core import status  # noqa: E402
 from vmn_exp.core.status import RUN_STATE_FILE  # noqa: E402
 from vmn_exp.storage.s3 import S3SnapshotStorage  # noqa: E402
 
@@ -58,7 +61,8 @@ def test_compact_merges_dead_runs_log_segments_and_leaves_a_running_one(s3, capf
     _run(s3, "0.0.2", exit_code=None, interval=0.1)  # stuck once its window passes
     time.sleep(1.5)
     _run(s3, "0.0.3", exit_code=None)
-    dead = runs_with_status(s3, APP, DEAD)
+    dead = runs_with_status(s3, APP, DEAD, clock=RealClock(),
+                            min_stale_sec=status.min_stale_sec(os.environ))
     assert dead == ["0.0.1", "0.0.2"]
 
     assert compact_runs(s3, APP, dead) == 0

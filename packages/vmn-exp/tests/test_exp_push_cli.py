@@ -11,6 +11,7 @@ from vmn_exp.storage.local import LocalSnapshotStorage
 from vmn_exp.storage.s3 import S3SnapshotStorage
 from vmn_exp.storage.uri import s3_uri
 from vmn_exp.storage.areas import local_store_root
+from vmn_exp.core.real_io import real_io
 
 URI = s3_uri(BUCKET, PREFIX)
 FOREIGN = "2025-05-05T00:00:00Z"
@@ -221,9 +222,9 @@ def test_push_works_git_free(tmp_path, monkeypatch, capfd):
     monkeypatch.setenv("VMN_EXPERIMENT_DIR", str(tmp_path / "exps"))
     monkeypatch.setenv("VMN_EXPERIMENT_STORE", URI)
     monkeypatch.setenv("VMN_EXP_OFFLINE", "1")
-    assert vmn_exp_run(["exp", "create", "trainer"])[0] == 0
+    assert vmn_exp_run(["exp", "create", "trainer"], real_io())[0] == 0
     assert raw_keys() == []
     capfd.readouterr()
-    assert vmn_exp_run(["exp", "push", "trainer"])[0] == 0
+    assert vmn_exp_run(["exp", "push", "trainer"], real_io())[0] == 0
     assert _lines(capfd)[-1].startswith("pushed 1,")
     assert len(s3_storage().list_snapshots("trainer")) == 1

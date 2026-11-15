@@ -8,13 +8,14 @@ import pytest
 pytest.importorskip("fastapi")
 from fastapi.testclient import TestClient  # noqa: E402
 from vmn_exp.storage import fanout  # noqa: E402
+from vmn_exp.core.real_io import real_io  # noqa: E402
 
 
 def test_a_sync_route_reads_in_the_request_lane(tmp_path):
     from vmn_exp.ui.server import create_app
     from vmn_exp.ui.workspaces import WorkspaceManager
 
-    app = create_app(WorkspaceManager(os.path.join(tmp_path, "ui")))
+    app = create_app(WorkspaceManager(os.path.join(tmp_path, "ui")), io=real_io())
     seen = []
 
     def probe():

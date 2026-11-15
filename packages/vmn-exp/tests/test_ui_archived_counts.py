@@ -3,25 +3,24 @@ status counts, progress), its status summary and its attention counts —
 an archived job takes its whole subtree out of the jobs above it, and
 archiving a run moves the counts already served."""
 import pytest
+from fakes.clock import FakeClock
 from leaderboard_fleet import T0, Fleet, finished, running
 from vmn_exp.ui.attention import AttentionQuery
 from vmn_exp.ui.leaderboard_cache import LeaderboardCache
 
-from vmn_exp.core import status as status_mod
-
+CLOCK = FakeClock(start=T0)
 WAITING = (AttentionQuery("waiting", 'status = "created" and timestamp < ago("1h")', "warn"),)
 
 
 @pytest.fixture
-def tree(monkeypatch):
+def tree():
     """Driver D (running) -> outer O (running) -> 4 waiting runs; D -> 2 waiting runs."""
-    monkeypatch.setattr(status_mod, "_now", lambda now=None: now or T0)
     fleet = Fleet(7)
     driver = fleet.append(state=running(T0))
     outer = fleet.append(parent=driver, state=running(T0))
     under_outer = [fleet.append(parent=outer) for _ in range(4)]
     beside = [fleet.append(parent=driver) for _ in range(2)]
-    return fleet, driver, outer, under_outer, beside, LeaderboardCache()
+    return fleet, driver, outer, under_outer, beside, LeaderboardCache(now=CLOCK.now)
 
 
 def _archive(fleet, *verstrs):

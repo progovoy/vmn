@@ -30,11 +30,13 @@ from multi_clone_helpers import (
 )
 from s3_helpers import cached_host, meta, s3_storage
 from vmn_exp.core.metric_compact import compact_record, compact_writer
-from vmn_exp.core.push_metrics import push_metrics
+from vmn_exp.cli.pushing.push_metrics import push_metrics
 from vmn_exp.core.writer import own_stream
 from vmn_exp.storage import stream_owner
 from vmn_exp.storage.buffered import BufferedRemoteStorage
 from vmn_exp.storage.local import LocalSnapshotStorage
+from vmn_exp.core.real_io import RealClock
+from writer_args import process_writer
 
 
 @pytest.fixture(autouse=True)
@@ -119,7 +121,7 @@ def test_an_offline_copy_compacts_no_stream_it_inherited(tmp_path):
     s3_storage().create_exclusive(APP, V, meta(V), {})
     a = LocalSnapshotStorage(str(tmp_path / "a"), "runs")
     assert a.create_exclusive(APP, V, meta(V), {})
-    own = own_stream(a, APP, V)
+    own = own_stream(a, APP, V, writer=process_writer())
     a.append_metric_block(APP, V, own, block(1.0, start=1))
     shutil.copytree(tmp_path / "a", tmp_path / "b")
     a.append_metric_block(APP, V, own, block(2.0, start=2))
@@ -231,7 +233,7 @@ def test_roots_copies_prunes_and_a_buffer_in_any_mix_converge(tmp_path, seed):
     rng = random.Random(seed)
     assert cached_host(tmp_path, "a").create_exclusive(APP, V, meta(V), {})
     roots, live, keys, values = ["a", "b", "c"], {}, [], []
-    buf = BufferedRemoteStorage(s3_storage())
+    buf = BufferedRemoteStorage(s3_storage(), str(tmp_path / "buffers"), clock=RealClock())
     for step in range(30):
         _mixed_turn(rng, tmp_path, step, roots, live, buf, keys, values)
     buf.close()

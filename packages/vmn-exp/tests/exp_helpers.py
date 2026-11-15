@@ -5,6 +5,7 @@ import os
 import helpers
 from version_stamp.core.logging import reset_logger
 from vmn_exp.cli.main import vmn_exp_run
+from vmn_exp.core.real_io import RealClock, real_io
 
 # Every helpers name, private ones too (``import *`` would skip those).
 globals().update({k: v for k, v in vars(helpers).items() if not k.startswith("__")})
@@ -22,7 +23,7 @@ def _storage(app_layout, area="runs"):
 
     from vmn_exp.storage.areas import local_store_root
 
-    return open_storage(root=local_store_root(app_layout.repo_path), area=area)
+    return open_storage(root=local_store_root(app_layout.repo_path), area=area, clock=RealClock(), env=os.environ)
 
 
 def _experiment(
@@ -87,7 +88,7 @@ def _experiment(
         args_list.extend(run_cmd)
 
     reset_logger()
-    return vmn_exp_run(args_list)[0]
+    return vmn_exp_run(args_list, real_io())[0]
 
 
 def _exp(app_name, **kwargs):

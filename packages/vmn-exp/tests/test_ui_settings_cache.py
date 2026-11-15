@@ -1,9 +1,12 @@
 """Plan 28 A0: the server's cache of apps' store settings re-reads them
 after its window, or at once when the journal says they changed."""
+import time
+
 from vmn_exp.core.app_settings import parse_settings
 from vmn_exp.core.app_settings_store import write_settings
 from vmn_exp.storage.local import LocalSnapshotStorage
 from vmn_exp.ui.settings_cache import SettingsCache
+from vmn_exp.core.real_io import real_io
 
 APP = "root_app/svc"
 TEXT = "metrics: {loss: {goal: min}}\nui: {group_aggregate: best}\n"
@@ -16,20 +19,20 @@ def _store(tmp_path):
 def test_the_cache_rereads_after_its_window_or_when_told(tmp_path):
     storage, now = _store(tmp_path), [0.0]
     cache = SettingsCache(recheck_sec=60, clock=lambda: now[0])
-    write_settings(storage, APP, "ui: {stale_after_min: 1}\n")
+    write_settings(storage, APP, "ui: {stale_after_min: 1}\n", env=real_io().env, host=real_io().host)
     assert cache.get("ws", storage, APP) == {"ui": {"stale_after_min": 1}}
-    write_settings(storage, APP, "ui: {stale_after_min: 2}\n")
+    write_settings(storage, APP, "ui: {stale_after_min: 2}\n", env=real_io().env, host=real_io().host)
     assert cache.get("ws", storage, APP)["ui"]["stale_after_min"] == 1
     cache.forget("ws", "root_app-svc")
     assert cache.get("ws", storage, APP)["ui"]["stale_after_min"] == 2
-    write_settings(storage, APP, "ui: {stale_after_min: 3}\n")
+    write_settings(storage, APP, "ui: {stale_after_min: 3}\n", env=real_io().env, host=real_io().host)
     now[0] = 61.0
     assert cache.get("ws", storage, APP)["ui"]["stale_after_min"] == 3
 
 
 def test_a_zero_window_cache_reads_every_time(tmp_path):
     storage = _store(tmp_path)
-    cache = SettingsCache(recheck_sec=0)
+    cache = SettingsCache(recheck_sec=0, clock=time.monotonic)
     assert cache.get("ws", storage, APP) == {}
-    write_settings(storage, APP, TEXT)
+    write_settings(storage, APP, TEXT, env=real_io().env, host=real_io().host)
     assert cache.get("ws", storage, APP) == parse_settings(TEXT)

@@ -8,6 +8,7 @@ import dataclasses
 import logging
 import os
 import re
+import time
 
 from version_stamp.api import VMN_LOGGER
 from vmn_exp.ui.security import LOOPBACK_HOSTS
@@ -124,7 +125,7 @@ def seed_workspaces(manager, seeds):
                               reconcile_sec=seed.reconcile_sec)
 
 
-def build_server(args, env=None):
+def build_server(args, env):
     """``(manager, config, control_plane)``; config and control plane are
     ``None`` without ``--config``/``--db`` (the standalone server)."""
     from vmn_exp.ui.config import resolve_config
@@ -145,16 +146,19 @@ def build_server(args, env=None):
     return manager, cfg, control_plane
 
 
-def _oidc_chain(cfg, control_plane, env):
+def _oidc_chain(cfg, control_plane, env, random):
     from vmn_exp.ui.auth import AuthenticatorChain
+    from vmn_exp.ui.auth.jwks import JwksVerifier
     from vmn_exp.ui.auth.oidc import OIDCAuthenticator, OIDCConfig
-    from vmn_exp.ui.config import ConfigError
+    from vmn_exp.ui.auth.oidc_http import UrllibHttp
+    from vmn_exp.ui.config import ConfigError, checked_https
 
     oidc = cfg.auth.oidc
     if oidc is None:
         return None
     if not cfg.server.public_url:
         raise ConfigError("auth.oidc needs server.public_url for its redirect URI")
+    checked_https(cfg.server.public_url, "server.public_url")
     config = OIDCConfig(
         issuer=oidc.issuer,
         client_id=oidc.client_id,
@@ -163,27 +167,30 @@ def _oidc_chain(cfg, control_plane, env):
         groups_claim=oidc.groups_claim,
         role_mappings=[dataclasses.asdict(m) for m in cfg.auth.role_mappings],
     )
-    return AuthenticatorChain([OIDCAuthenticator(config, control_plane)])
+    http = UrllibHttp()
+    return AuthenticatorChain([OIDCAuthenticator(
+        config, control_plane, JwksVerifier(http, time.time), http=http, clock=time.time,
+        random=random, session_ttl_sec=oidc.session_ttl_hours * 3600,
+        login_token_ttl_sec=oidc.login_token_ttl_days * 24 * 3600)])
 
 
-def server_app(manager, cfg, control_plane, args, env=None, token=None, **kwargs):
+def server_app(manager, cfg, control_plane, args, *, io, token=None, **kwargs):
     """The FastAPI app for *manager*, with *cfg*'s auth wired in."""
     from vmn_exp.core.writer import set_default_writer_id
     from vmn_exp.ui.config import DEFAULT_AUDIT_RETENTION_DAYS, DEFAULT_METRICS_ENDED_HOURS
     from vmn_exp.ui.onboarding import SERVER_WRITER_ID
     from vmn_exp.ui.server import create_app
 
-    env = os.environ if env is None else env
     # The server's own log writes match the edit policy's log/vmn-server*.
-    set_default_writer_id(SERVER_WRITER_ID)
+    set_default_writer_id(io.env, SERVER_WRITER_ID)
     dsn = postgres_dsn(cfg)
-    auth = _oidc_chain(cfg, control_plane, env) if cfg else None
+    auth = _oidc_chain(cfg, control_plane, io.env, io.random) if cfg else None
     host = cfg.server.host if cfg else args.host
     keep_warm = cfg.server.keep_warm if cfg else getattr(args, "keep_warm", None)
     ended_hours = (cfg.server.metrics_ended_hours if cfg
                    else getattr(args, "metrics_ended_hours", None) or DEFAULT_METRICS_ENDED_HOURS)
     app = create_app(
-        manager,
+        manager, io=io,
         token=token,
         read_only=args.read_only,
         use_index=not args.no_index,
@@ -233,7 +240,30 @@ def _server_log_level(debug):
         logging.getLogger().setLevel(logging.INFO)
 
 
-def handle_ui(args):
+def bind_refusal(host, has_token, has_oidc, read_only):
+    """``("error"|"warning", message)`` for binding *host* with this auth, or None.
+
+    Beyond localhost a request must be authenticated: a static token or
+    auth.oidc. A control plane alone does not count, since API tokens cannot
+    be minted without a first admin.
+    """
+    if host in LOOPBACK_HOSTS or has_token or has_oidc:
+        return None
+    if read_only:
+        return ("warning",
+                "Binding beyond localhost without --token or auth.oidc: --read-only "
+                "keeps mutations blocked, but the Host-header allowlist is not "
+                "authentication for reads.")
+    return ("error",
+            f"Refusing to bind {host} beyond localhost without authentication: "
+            "the Host-header allowlist is not authentication, so any host that "
+            "can reach this port could forge it and get full read-write access. "
+            "Pass --token (or set VMN_UI_TOKEN), configure auth.oidc in the "
+            "server config, pass --read-only to serve reads only, or bind --host "
+            "to 127.0.0.1/localhost.")
+
+
+def handle_ui(args, io):
     if getattr(args, "ui_args", None):
         if args.ui_args[0] == "onboarding":
             from vmn_exp.ui.onboarding_cli import handle_onboarding
@@ -242,18 +272,18 @@ def handle_ui(args):
         if args.ui_args[0] == "backup":
             from vmn_exp.ui import backup_cli
 
-            return backup_cli.handle_backup(args)
+            return backup_cli.handle_backup(args, io.env)
         if args.ui_args[0] == "diag":
             from vmn_exp.ui import diag_cli
 
-            return diag_cli.handle_diag(args)
+            return diag_cli.handle_diag(args, io.env)
         if args.ui_args[0] != "cache":
             VMN_LOGGER.error(
                 f"Unknown ui action {args.ui_args[0]!r} (use: backup, cache, diag, onboarding)")
             return 2
-        from vmn_exp.ui.cache_cli import handle_cache
+        from vmn_exp.ui import cache_cli
 
-        return handle_cache(args)
+        return cache_cli.handle_cache(args, io.env)
     try:
         import uvicorn  # noqa: F401
 
@@ -266,12 +296,12 @@ def handle_ui(args):
         return 1
 
     from vmn_exp.ui import server_logging
-    from vmn_exp.ui.config import ConfigError
+    from vmn_exp.ui.config import ConfigError, static_token
     from vmn_exp.ui.workspace_uri import missing_storage_extra
 
     server_logging.install()
     try:
-        manager, cfg, control_plane = build_server(args)
+        manager, cfg, control_plane = build_server(args, io.env)
     except ConfigError as e:
         VMN_LOGGER.error(str(e))
         return 1
@@ -281,24 +311,18 @@ def handle_ui(args):
         return 1
     host = cfg.server.host if cfg else args.host
     port = cfg.server.port if cfg else args.port
-    token = cfg.token() if cfg else args.token or os.environ.get("VMN_UI_TOKEN")
-    if host not in LOOPBACK_HOSTS and not token and not args.read_only:
-        VMN_LOGGER.error(
-            f"Refusing to bind {host} beyond localhost without --token: "
-            "the Host-header allowlist is not authentication, so any host that "
-            "can reach this port could forge it and get full read-write access. "
-            "Pass --token (or set VMN_UI_TOKEN), pass --read-only to serve reads "
-            "only, or bind --host to 127.0.0.1/localhost."
-        )
-        return 1
-    if host not in LOOPBACK_HOSTS and not token:
-        VMN_LOGGER.warning(
-            "Binding beyond localhost without --token — --read-only keeps mutations "
-            "blocked, but the Host-header allowlist is not authentication for reads."
-        )
+    token = static_token(cfg, args, io.env)
+    refusal = bind_refusal(host, has_token=bool(token), read_only=args.read_only,
+                           has_oidc=cfg is not None and cfg.auth.oidc is not None)
+    if refusal:
+        level, message = refusal
+        if level == "error":
+            VMN_LOGGER.error(message)
+            return 1
+        VMN_LOGGER.warning(message)
 
     try:
-        app = server_app(manager, cfg, control_plane, args, token=token,
+        app = server_app(manager, cfg, control_plane, args, io=io, token=token,
                          background_refresh=True)
     except ConfigError as e:
         VMN_LOGGER.error(str(e))

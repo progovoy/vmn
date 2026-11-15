@@ -1,14 +1,16 @@
 """The ui API's histograms: names + totals in the detail, steps per name."""
+import os
 import pytest
 
 pytest.importorskip("fastapi")
 from fastapi.testclient import TestClient
 
 from vmn_exp.core.media import MAX_HISTOGRAM_STEPS
-from vmn_exp.sdk.run import Run
+from vmn_exp.sdk.run import Run, _real_process_hooks
 from vmn_exp.snapshot import open_storage
 from vmn_exp.ui.readers.histograms import INLINE_HISTOGRAM_ITEMS
 from vmn_exp.storage.areas import local_store_root
+from vmn_exp.core.real_io import RealClock, RealHost, RealRandom, real_io
 
 APP = "app"
 V = "1.0.0-dev.hist"
@@ -19,14 +21,14 @@ BASE = f"/api/v1/workspaces/ws/apps/{APP}/experiments/{V}"
 def storage(tmp_path):
     root = tmp_path / "repo"
     (root / ".git").mkdir(parents=True)
-    st = open_storage(root=local_store_root(str(root)), area="runs")
+    st = open_storage(root=local_store_root(str(root)), area="runs", clock=RealClock(), env=os.environ)
     st.save(APP, V, {"verstr": V, "timestamp": "2026-01-01T00:00:00Z"}, {})
     return st
 
 
 @pytest.fixture
 def run(storage):
-    run = Run(storage, APP, V, 60)
+    run = Run(storage, APP, V, 60, clock=RealClock(), host=RealHost(), random=RealRandom(), env=os.environ, install_hooks=_real_process_hooks())
     run._open()
     yield run
     run.finish()
@@ -39,7 +41,7 @@ def client(tmp_path, storage):
 
     manager = WorkspaceManager(str(tmp_path / "data"))
     manager.attach_path("ws", str(tmp_path / "repo"))
-    return TestClient(create_app(manager))
+    return TestClient(create_app(manager, io=real_io()))
 
 
 def _log_many(run, names, steps):

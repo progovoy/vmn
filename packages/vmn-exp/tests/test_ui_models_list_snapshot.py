@@ -97,3 +97,9 @@ def test_the_lineage_snapshot_reads_versions_concurrently(tmp_path, monkeypatch)
     snapshot = RegistrySnapshot.read(storage)
     assert snapshot.version("m000", 6)["n"] == 6
     assert reads.peak > 1
+
+
+def test_the_list_route_pages_with_offset_and_limit(served):
+    _, client = served
+    page = client.get(MODELS, params={"offset": 1, "limit": 1}).json()
+    assert [r["name"] for r in page["models"]] == ["m001"] and page["total"] == 3

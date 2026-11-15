@@ -12,10 +12,10 @@ import os
 import signal
 import sys
 import threading
-import time
 
 from vmn_exp.core.background import Coalescing
 from vmn_exp.core.best_effort import BestEffort
+from vmn_exp.core.final_retry import FinalRetry
 from version_stamp.api import VMN_LOGGER
 
 # Signals a scheduler, a terminal or an operator uses to stop a job.
@@ -84,45 +84,75 @@ def supervision_guard():
     )
 
 
+class Abandonable:
+    """The pause between a final upload's retries: *wait(delay)* (a
+    ``threading.Event().wait`` in production), cut short once :meth:`set`
+    gave the retries up."""
+
+    def __init__(self, wait):
+        self._wait = wait
+        self.abandoned = False
+
+    def wait(self, delay):
+        return self._wait(delay) or self.abandoned
+
+    def set(self):
+        self.abandoned = True
+
+
 class BackgroundSync:
     """Remote log syncs off the supervise loop, one at a time, newest wins.
 
     A sync uploads the log; on a slow link that takes longer than a heartbeat
     interval, and doing it inline starved the heartbeat until the run read
-    ``stuck``.
+    ``stuck``. Periodic syncs (*sync*) are caught up by the next one; the
+    final one (*final_sync*, which raises on failure) is the last, so it is
+    retried, pausing with *wait*, until it lands or :meth:`final` gives up.
     """
 
     _FINAL = "final"
 
-    def __init__(self, sync):
+    def __init__(self, sync, final_sync=None, wait=None):
         self._sync = sync
         self._worker = Coalescing(self._run, "vmn-exp-sync")
         self._lock = threading.Lock()
         self._final_started = False
-        self._final_abandoned = False
+        self._abandon = Abandonable(wait)
+        self._retry = None
+        if final_sync is not None:
+            self._retry = FinalRetry(lambda _: final_sync(), self._abandon.wait)
 
     def request(self):
         self._worker.submit()
 
     def final(self, timeout):
-        """One last sync, waiting at most *timeout* seconds for everything."""
+        """One last sync, waiting at most *timeout* seconds for everything.
+        Whether it landed; a warning says why not."""
         self._worker.submit(self._FINAL)
-        if self._worker.close(timeout):
-            return
+        joined = self._worker.close(timeout)
         with self._lock:
-            self._final_abandoned = True
+            self._abandon.set()
             started = self._final_started
-        if started:
+        error = self._retry.error if self._retry is not None else None
+        if joined and (self._retry is None or self._retry.landed):
+            return True
+        if error is not None:
+            VMN_LOGGER.warning(f"Experiment run: the final log sync was not uploaded: {error}")
+        elif started:
             VMN_LOGGER.warning(f"Experiment run: final sync timed out after {timeout}s")
         else:
             VMN_LOGGER.warning("Experiment run: final sync skipped, a sync hangs")
+        return False
 
     def _run(self, item):
         if item is self._FINAL:
             with self._lock:
-                if self._final_abandoned:
+                if self._abandon.abandoned:
                     return
                 self._final_started = True
+            if self._retry is not None:
+                self._retry.run(item)
+                return
         self._sync()
 
 
@@ -141,14 +171,20 @@ class SignalForwarder:
 
     The first signal is forwarded — unless a terminal already delivered it to
     the child's foreground group, which would make it arrive twice — and starts
-    a grace period, after which a child that is still alive is killed. A second
-    signal kills it at once. Handlers are only installable from the main thread;
-    elsewhere the forwarder is inert.
+    a grace period (*signal_grace_sec*; *grace_sec* for a stop the supervisor
+    requests itself), after which a child that is still alive is killed. A
+    second signal kills it at once. Handlers are only installable from the
+    main thread; elsewhere the forwarder is inert. *clock* is a monotonic
+    callable that times the grace.
     """
 
-    def __init__(self, grace_sec):
+    def __init__(self, grace_sec, signal_grace_sec, clock):
         self.received = None
-        self._grace_sec = grace_sec
+        self._clock = clock
+        # When the first signal arrived (on *clock*), None before one.
+        self.signalled_at = None
+        self.grace_sec = grace_sec
+        self.signal_grace_sec = signal_grace_sec
         self._kill_at = None
         self._proc = None
         self._previous = {}
@@ -177,19 +213,22 @@ class SignalForwarder:
             self._forward(getattr(signal, self.received))
 
     def request_stop(self):
-        """Send the child SIGTERM on the supervisor's own initiative, with the
-        same grace period before SIGKILL as a forwarded signal."""
-        self._start_grace()
+        """Send the child SIGTERM on the supervisor's own initiative, with
+        *grace_sec* before SIGKILL."""
+        self._start_grace(self.grace_sec)
         self._forward(signal.SIGTERM)
 
-    def _start_grace(self):
-        """Start the grace period; one already running is never extended."""
-        deadline = time.monotonic() + self._grace_sec
+    def _start_grace(self, grace_sec):
+        """Start a grace period; one already running is never extended.
+        Returns when it started."""
+        now = self._clock()
+        deadline = now + grace_sec
         self._kill_at = deadline if self._kill_at is None else min(self._kill_at, deadline)
+        return now
 
     def enforce_grace(self):
         """Kill a child that outlived the grace period of a forwarded signal."""
-        if self._kill_at is not None and time.monotonic() >= self._kill_at:
+        if self._kill_at is not None and self._clock() >= self._kill_at:
             self._kill()
 
     def _handle(self, signum, _frame):
@@ -197,7 +236,7 @@ class SignalForwarder:
             self._kill()
             return
         self.received = signal_name(signum)
-        self._start_grace()
+        self.signalled_at = self._start_grace(self.signal_grace_sec)
         self._forward(signum)
 
     def _forward(self, signum):

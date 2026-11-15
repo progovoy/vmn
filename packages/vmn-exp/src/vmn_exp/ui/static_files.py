@@ -14,6 +14,7 @@ import os
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
+from vmn_exp.ui.api_errors import error_body
 from vmn_exp.ui.security import within
 
 REVALIDATE = "no-cache"
@@ -31,7 +32,7 @@ def _is_api(full_path):
 
 
 def _api_not_found():
-    return JSONResponse({"detail": "Not Found"}, status_code=404)
+    return JSONResponse(error_body("Not Found", "not_found"), status_code=404)
 
 
 def mount_static(app, static_dir):

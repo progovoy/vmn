@@ -10,6 +10,8 @@ from vmn_exp.reports import log as rlog
 from vmn_exp.reports import store as rstore
 from vmn_exp.storage.areas import REPORTS
 from vmn_exp.storage.local import LocalSnapshotStorage
+from vmn_exp.core.real_io import RealRandom
+from vmn_exp.core.real_io import real_io
 
 
 @pytest.fixture
@@ -24,7 +26,7 @@ def s3(monkeypatch):
 
 
 def test_create_claims_header_and_v1(storage, tmp_path):
-    rid = rstore.create(storage, "My report", "# hi")
+    rid = rstore.create(storage, "My report", "# hi", random=RealRandom(), env=real_io().env, host=real_io().host)
     assert re.fullmatch(r"r[a-z2-7]{12}", rid)
     reports = storage.in_area(REPORTS)
     header = reports.load_metadata(rid, "header")
@@ -41,8 +43,8 @@ def test_create_claims_header_and_v1(storage, tmp_path):
 
 
 def test_save_appends_next_revision(storage):
-    rid = rstore.create(storage, "t", "one")
-    assert rstore.save(storage, rid, 1, "two", "edit") == 2
+    rid = rstore.create(storage, "t", "one", random=RealRandom(), env=real_io().env, host=real_io().host)
+    assert rstore.save(storage, rid, 1, "two", "edit", env=real_io().env, host=real_io().host) == 2
     assert rstore.get(storage, rid)["body"] == "two"
     rev = rstore.revision(storage, rid, 2)
     assert rev["base"] == 1 and rev["message"] == "edit" and rev["body"] == "two"
@@ -50,9 +52,9 @@ def test_save_appends_next_revision(storage):
 
 
 def test_stale_base_returns_conflict_with_newer_revision(storage):
-    rid = rstore.create(storage, "t", "one")
-    rstore.save(storage, rid, 1, "two", "a")
-    result = rstore.save(storage, rid, 1, "mine", "b")
+    rid = rstore.create(storage, "t", "one", random=RealRandom(), env=real_io().env, host=real_io().host)
+    rstore.save(storage, rid, 1, "two", "a", env=real_io().env, host=real_io().host)
+    result = rstore.save(storage, rid, 1, "mine", "b", env=real_io().env, host=real_io().host)
     assert isinstance(result, rstore.Conflict)
     assert result.rev == 2 and result.body == "two"
     assert result.author["writer"]
@@ -65,7 +67,7 @@ def _race(storage, rid, n=8):
 
     def worker(i):
         barrier.wait()
-        results.append(rstore.save(storage, rid, 1, f"body{i}", ""))
+        results.append(rstore.save(storage, rid, 1, f"body{i}", "", env=real_io().env, host=real_io().host))
 
     threads = [threading.Thread(target=worker, args=(i,)) for i in range(n)]
     for t in threads:
@@ -76,7 +78,7 @@ def _race(storage, rid, n=8):
 
 
 def test_racing_saves_exactly_one_wins_local(storage):
-    rid = rstore.create(storage, "t", "one")
+    rid = rstore.create(storage, "t", "one", random=RealRandom(), env=real_io().env, host=real_io().host)
     results = _race(storage, rid)
     assert results.count(2) == 1
     losers = [r for r in results if r != 2]
@@ -85,7 +87,7 @@ def test_racing_saves_exactly_one_wins_local(storage):
 
 
 def test_racing_saves_exactly_one_wins_s3(s3):
-    rid = rstore.create(s3, "t", "one")
+    rid = rstore.create(s3, "t", "one", random=RealRandom(), env=real_io().env, host=real_io().host)
     results = _race(s3, rid, n=4)
     assert results.count(2) == 1
     assert sum(isinstance(r, rstore.Conflict) for r in results) == 3
@@ -107,20 +109,20 @@ def test_header_fold_last_writer_wins():
 
 
 def test_header_writes_fold(storage):
-    rid = rstore.create(storage, "t", "x")
-    rlog.set_title(storage, rid, "new")
-    rlog.set_archived(storage, rid, True)
-    rlog.set_pinned(storage, rid, True)
-    rlog.set_published(storage, rid, 1)
+    rid = rstore.create(storage, "t", "x", random=RealRandom(), env=real_io().env, host=real_io().host)
+    rlog.set_title(storage, rid, "new", env=real_io().env, host=real_io().host)
+    rlog.set_archived(storage, rid, True, env=real_io().env, host=real_io().host)
+    rlog.set_pinned(storage, rid, True, env=real_io().env, host=real_io().host)
+    rlog.set_published(storage, rid, 1, env=real_io().env, host=real_io().host)
     report = rstore.get(storage, rid)
     assert (report["title"], report["archived"], report["pinned"],
             report["published_rev"]) == ("new", True, True, 1)
 
 
 def test_list_and_delete(storage):
-    a = rstore.create(storage, "a", "x")
-    b = rstore.create(storage, "b", "y")
-    rstore.save(storage, b, 1, "z", "")
+    a = rstore.create(storage, "a", "x", random=RealRandom(), env=real_io().env, host=real_io().host)
+    b = rstore.create(storage, "b", "y", random=RealRandom(), env=real_io().env, host=real_io().host)
+    rstore.save(storage, b, 1, "z", "", env=real_io().env, host=real_io().host)
     rows = {r["rid"]: r for r in rstore.list_reports(storage)}
     assert set(rows) == {a, b}
     assert rows[b]["rev"] == 2 and rows[b]["title"] == "b"
@@ -131,7 +133,7 @@ def test_list_and_delete(storage):
 
 
 def test_list_and_delete_s3(s3):
-    rid = rstore.create(s3, "a", "x")
+    rid = rstore.create(s3, "a", "x", random=RealRandom(), env=real_io().env, host=real_io().host)
     assert [r["rid"] for r in rstore.list_reports(s3)] == [rid]
     rstore.delete(s3, rid)
     assert rstore.list_reports(s3) == []

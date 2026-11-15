@@ -10,7 +10,7 @@ Archived runs are left out unless asked for.
 import re
 from itertools import islice
 
-from vmn_exp.core.status import derive_status
+from vmn_exp.core.status import MIN_STALE_SEC
 from vmn_exp.ui.search_index import FIELDS, SEP, needle_of
 
 _AT_N = re.compile(r"@?(\d+)")
@@ -67,8 +67,9 @@ def _root(snapshot, verstr):
     return root
 
 
-def results(snapshot, hits):
-    """The route's payload rows for *hits* ``[(slot, field)]``."""
+def results(snapshot, hits, now, min_stale_sec=MIN_STALE_SEC):
+    """The route's payload rows for *hits* ``[(slot, field)]``, their
+    statuses as of *now* on *min_stale_sec*."""
     out = []
     for slot, field in hits:
         row = snapshot.rows[slot]
@@ -76,8 +77,7 @@ def results(snapshot, hits):
         root = _root(snapshot, verstr)
         out.append({
             "verstr": verstr, "idx": row.get("idx"), "name": row.get("name"),
-            "status": derive_status(snapshot.run_states.get(verstr),
-                                    observed_at=snapshot.run_state_observed_at.get(verstr)),
+            "status": snapshot.status_of(verstr, now, min_stale_sec),
             "root": root, "root_name": root and snapshot.row(root).get("name"),
             "match": field,
         })

@@ -31,6 +31,7 @@ from vmn_exp.storage.files import (
     log_writer_and_seq,
     merged_log,
 )
+from vmn_exp.storage.stream_listing import StreamListing
 
 LOCAL, REMOTE = "local", "remote"
 _SHIP_ATTEMPTS = 5
@@ -134,7 +135,7 @@ class CachedLogs:
         )
 
     def _append_locally(self, append, app_name, verstr, writer_id, payload):
-        if not self._ensure_local_record(app_name, verstr):
+        if not self.ensure_local_record(app_name, verstr):
             return False
         return append(app_name, verstr, self._owned_stream(app_name, verstr, writer_id), payload)
 
@@ -206,7 +207,7 @@ class CachedLogs:
         if not local_sizes:
             return
         with self._ship_state(app_name, verstr, "log") as state:
-            listing = _Listing(self._remote, app_name, verstr)
+            listing = StreamListing(lambda: _groups(self._remote, app_name, verstr))
             finished = self._run_finished(app_name, verstr)
             for stream, size in sorted(local_sizes.items()):
                 shipped = self._ship_stream(state, listing, app_name, verstr, stream, size)
@@ -273,21 +274,6 @@ class CachedLogs:
                 VMN_LOGGER.debug("Log compaction failed", exc_info=True)
                 return False
         return True
-
-
-class _Listing:
-    """One remote listing of a record's log streams, taken when first needed."""
-
-    def __init__(self, remote, app_name, verstr):
-        self._remote, self._where, self._groups = remote, (app_name, verstr), None
-
-    def objects(self, stream):
-        if self._groups is None:
-            self._groups = _groups(self._remote, *self._where)
-        return self._groups.get(stream, [])
-
-    def refresh(self):
-        self._groups = None
 
 
 def _groups(remote, app_name, verstr):

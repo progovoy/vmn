@@ -43,10 +43,11 @@ export default function SinglesView({ ws, app, views, onJobs, onTotal }: {
     onArchived: board.refresh,
   });
   const loading = rows === undefined;
-  useEffect(() => onTotal?.(loading ? undefined : data.total), [onTotal, loading, data.total]);
+  const counting = !loading && data.counting;
+  useEffect(() => onTotal?.(loading || counting ? undefined : data.total), [onTotal, loading, counting, data.total]);
 
   if (data.pageError) return <div className="error">{data.pageError}</div>;
-  const count = loading ? `loading ${NOUN}s…` : plural(data.total, NOUN);
+  const count = loading ? `loading ${NOUN}s…` : counting ? `counting ${NOUN}s…` : plural(data.total, NOUN);
 
   return (
     <>

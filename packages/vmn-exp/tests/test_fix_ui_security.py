@@ -18,6 +18,7 @@ from starlette.testclient import TestClient
 from vmn_exp.ui import jobs as jobs_mod
 from vmn_exp.ui.server import create_app
 from vmn_exp.ui.workspaces import WorkspaceManager
+from vmn_exp.core.real_io import RealClock, real_io
 
 SECRET = "db_password=hunter2"
 
@@ -96,7 +97,7 @@ def queued(monkeypatch):
 )
 def test_spa_fallback_never_serves_files_outside_static(layout, raw):
     _, manager = layout
-    app = create_app(manager, token="s3cret")
+    app = create_app(manager, io=real_io(), token="s3cret")
     status, body = _asgi_get(app, raw)
     assert b"root:" not in body and b"User Database" not in body
     assert status in (200, 404)
@@ -104,7 +105,7 @@ def test_spa_fallback_never_serves_files_outside_static(layout, raw):
 
 def test_spa_fallback_cannot_reach_data_dir_files(layout):
     tmp_path, manager = layout
-    app = create_app(manager, token="s3cret")
+    app = create_app(manager, io=real_io(), token="s3cret")
     target = str(tmp_path / "secret" / "passwd")
     status, body = _asgi_get(app, "/" + target)
     assert SECRET.encode() not in body
@@ -112,7 +113,7 @@ def test_spa_fallback_cannot_reach_data_dir_files(layout):
 
 def test_spa_fallback_still_serves_client_routes(layout):
     _, manager = layout
-    client = TestClient(create_app(manager))
+    client = TestClient(create_app(manager, io=real_io()))
     static_index = os.path.join(
         os.path.dirname(create_app.__code__.co_filename), "static", "index.html"
     )
@@ -133,7 +134,7 @@ ACTION = "/api/v1/workspaces/ws/apps/my_app/actions/{}"
 @pytest.mark.parametrize("action", ["release", "goto"])
 def test_empty_cross_site_post_does_not_queue_a_job(layout, queued, action):
     _, manager = layout
-    client = TestClient(create_app(manager))
+    client = TestClient(create_app(manager, io=real_io()))
     r = client.post(ACTION.format(action), headers={"Origin": "https://evil.example"})
     assert r.status_code in (403, 415)
     assert queued == []
@@ -141,7 +142,7 @@ def test_empty_cross_site_post_does_not_queue_a_job(layout, queued, action):
 
 def test_post_without_json_content_type_is_rejected(layout, queued):
     _, manager = layout
-    client = TestClient(create_app(manager))
+    client = TestClient(create_app(manager, io=real_io()))
     r = client.post(ACTION.format("release"), content=b"", headers={})
     assert r.status_code == 415
     r = client.post(
@@ -155,7 +156,7 @@ def test_post_without_json_content_type_is_rejected(layout, queued):
 
 def test_same_origin_json_post_is_accepted(layout, queued):
     _, manager = layout
-    client = TestClient(create_app(manager))
+    client = TestClient(create_app(manager, io=real_io()))
     r = client.post(
         ACTION.format("release"), json={}, headers={"Origin": "http://testserver"}
     )
@@ -165,7 +166,7 @@ def test_same_origin_json_post_is_accepted(layout, queued):
 
 def test_json_post_from_foreign_origin_is_forbidden(layout, queued):
     _, manager = layout
-    client = TestClient(create_app(manager))
+    client = TestClient(create_app(manager, io=real_io()))
     r = client.post(
         ACTION.format("release"), json={}, headers={"Origin": "https://evil.example"}
     )
@@ -175,7 +176,7 @@ def test_json_post_from_foreign_origin_is_forbidden(layout, queued):
 
 def test_foreign_referer_counts_when_origin_is_absent(layout, queued):
     _, manager = layout
-    client = TestClient(create_app(manager))
+    client = TestClient(create_app(manager, io=real_io()))
     r = client.post(
         ACTION.format("release"),
         json={},
@@ -187,7 +188,7 @@ def test_foreign_referer_counts_when_origin_is_absent(layout, queued):
 
 def test_delete_from_foreign_origin_is_forbidden(layout):
     _, manager = layout
-    client = TestClient(create_app(manager))
+    client = TestClient(create_app(manager, io=real_io()))
     r = client.delete("/api/v1/workspaces/ws", headers={"Origin": "https://evil.example"})
     assert r.status_code == 403
     assert manager.get("ws") is not None
@@ -195,22 +196,30 @@ def test_delete_from_foreign_origin_is_forbidden(layout):
 
 def test_rebound_host_is_rejected_without_a_token(layout):
     _, manager = layout
-    client = TestClient(create_app(manager))
+    client = TestClient(create_app(manager, io=real_io()))
     r = client.get("/api/v1/workspaces", headers={"Host": "attacker.example"})
     assert r.status_code == 403
 
 
-@pytest.mark.parametrize("host", ["localhost:8265", "127.0.0.1:8265", "[::1]:8265"])
+def test_metrics_403_for_rebound_host(layout):
+    _, manager = layout
+    client = TestClient(create_app(manager, io=real_io()))
+    assert client.get("/metrics").status_code == 200
+    r = client.get("/metrics", headers={"Host": "attacker.example"})
+    assert r.status_code == 403
+
+
+@pytest.mark.parametrize("host",["localhost:8265", "127.0.0.1:8265", "[::1]:8265"])
 def test_loopback_hosts_are_allowed(layout, host):
     _, manager = layout
-    client = TestClient(create_app(manager))
+    client = TestClient(create_app(manager, io=real_io()))
     r = client.get("/api/v1/workspaces", headers={"Host": host})
     assert r.status_code == 200
 
 
 def test_allowed_hosts_extend_the_allowlist(layout):
     _, manager = layout
-    client = TestClient(create_app(manager, allowed_hosts=["vmn.internal"]))
+    client = TestClient(create_app(manager, io=real_io(), allowed_hosts=["vmn.internal"]))
     r = client.get("/api/v1/workspaces", headers={"Host": "vmn.internal:8265"})
     assert r.status_code == 200
     r = client.get("/api/v1/workspaces", headers={"Host": "other.internal"})
@@ -220,7 +229,7 @@ def test_allowed_hosts_extend_the_allowlist(layout):
 def test_origin_matching_an_allowed_host_is_accepted(layout, queued):
     """A reverse proxy may rewrite Host; an allowlisted Origin still passes."""
     _, manager = layout
-    client = TestClient(create_app(manager, allowed_hosts=["vmn.company.com"]))
+    client = TestClient(create_app(manager, io=real_io(), allowed_hosts=["vmn.company.com"]))
     r = client.post(
         ACTION.format("release"),
         json={},
@@ -231,7 +240,7 @@ def test_origin_matching_an_allowed_host_is_accepted(layout, queued):
 
 def test_token_mode_does_not_restrict_host(layout):
     _, manager = layout
-    client = TestClient(create_app(manager, token="t"))
+    client = TestClient(create_app(manager, io=real_io(), token="t"))
     r = client.get(
         "/api/v1/workspaces",
         headers={"Host": "vmn.company.com", "Authorization": "Bearer t"},
@@ -256,7 +265,7 @@ def test_allowed_host_cli_flag_is_repeatable():
 
 def test_app_name_traversal_is_rejected(layout):
     _, manager = layout
-    client = TestClient(create_app(manager, token="t", read_only=True))
+    client = TestClient(create_app(manager, io=real_io(), token="t", read_only=True))
     r = client.get(
         "/api/v1/workspaces/ws/apps/..-..-secret/config",
         headers={"Authorization": "Bearer t"},
@@ -270,14 +279,14 @@ def test_app_name_traversal_is_rejected(layout):
 )
 def test_invalid_app_names_are_400(layout, app_tag):
     _, manager = layout
-    client = TestClient(create_app(manager))
+    client = TestClient(create_app(manager, io=real_io()))
     r = client.get(f"/api/v1/workspaces/ws/apps/{app_tag}/experiments")
     assert r.status_code == 400
 
 
 def test_valid_nested_app_name_still_works(layout):
     _, manager = layout
-    client = TestClient(create_app(manager))
+    client = TestClient(create_app(manager, io=real_io()))
     r = client.get("/api/v1/workspaces/ws/apps/root_app-svc/experiments")
     assert r.status_code == 200
 
@@ -287,7 +296,7 @@ def test_unsafe_verstr_is_400(layout, raw_verstr):
     # Raw ASGI, not TestClient: httpx strips a literal ``..`` segment client-side,
     # but uvicorn hands ``%2E%2E`` to the app decoded and un-normalized.
     _, manager = layout
-    app = create_app(manager)
+    app = create_app(manager, io=real_io())
     status, _ = _asgi_get(app, f"/api/v1/workspaces/ws/apps/app/experiments/{raw_verstr}")
     assert status == 400
 
@@ -295,7 +304,7 @@ def test_unsafe_verstr_is_400(layout, raw_verstr):
 @pytest.mark.parametrize("name", ["..", "a\\b", "..%5Cx"])
 def test_unsafe_artifact_name_is_400(layout, name):
     _, manager = layout
-    client = TestClient(create_app(manager))
+    client = TestClient(create_app(manager, io=real_io()))
     r = client.get(
         f"/api/v1/workspaces/ws/apps/app/experiments/0.0.1-dev.a/artifacts/{name}"
     )
@@ -305,9 +314,72 @@ def test_unsafe_artifact_name_is_400(layout, name):
 
 def test_unsafe_diff_refs_are_400(layout):
     _, manager = layout
-    client = TestClient(create_app(manager))
+    client = TestClient(create_app(manager, io=real_io()))
     r = client.get(
         "/api/v1/workspaces/ws/apps/app/experiments-diff",
         params={"v": "../../secret", "to": "latest"},
     )
     assert r.status_code == 400
+
+
+SYMLINK_V = "1.0.0-dev.link"
+SYMLINK_BASE = f"/api/v1/workspaces/ws/apps/app/experiments/{SYMLINK_V}"
+
+
+@pytest.fixture
+def symlinked(tmp_path):
+    """A file:// store with one run, plus a secret file outside it; returns
+    (client, the run's record dir, the secret's dir)."""
+    from vmn_exp.snapshot import open_storage
+    from vmn_exp.storage.areas import local_store_root
+
+    root = tmp_path / "repo"
+    (root / ".git").mkdir(parents=True)
+    storage = open_storage(root=local_store_root(str(root)), area="runs", clock=RealClock(), env=os.environ)
+    storage.save("app", SYMLINK_V, {"verstr": SYMLINK_V, "timestamp": "2026-01-01T00:00:00Z"}, {})
+    src = tmp_path / "real.txt"
+    src.write_text("real bytes")
+    storage.save_artifact_file("app", SYMLINK_V, str(src), name="artifacts/real.txt")
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (outside / "secret").write_text(SECRET)
+    (outside / "table.json").write_text(f'{{"columns": [{{"name": "{SECRET}"}}], "data": [[1]], "rows": 1}}')
+    manager = WorkspaceManager(str(tmp_path / "data"))
+    manager.attach_path("ws", str(root))
+    record = storage.local_record_dir("app", SYMLINK_V)
+    return TestClient(create_app(manager, io=real_io())), record, outside
+
+
+def test_artifact_symlink_leaving_record_dir_is_404(symlinked):
+    client, record, outside = symlinked
+    os.symlink(outside / "secret", os.path.join(record, "artifacts", "leak.txt"))
+    r = client.get(f"{SYMLINK_BASE}/artifacts/leak.txt")
+    assert r.status_code == 404
+    assert SECRET not in r.text
+
+
+def test_artifact_under_symlinked_parent_dir_is_404(symlinked):
+    client, record, outside = symlinked
+    os.symlink(outside, os.path.join(record, "artifacts", "dir"))
+    r = client.get(f"{SYMLINK_BASE}/artifacts/dir/secret")
+    assert r.status_code == 404
+    assert SECRET not in r.text
+
+
+def test_symlink_inside_record_dir_is_still_served(symlinked):
+    client, record, _ = symlinked
+    artifacts = os.path.join(record, "artifacts")
+    os.symlink(os.path.join(artifacts, "real.txt"), os.path.join(artifacts, "alias.txt"))
+    r = client.get(f"{SYMLINK_BASE}/artifacts/alias.txt")
+    assert r.status_code == 200
+    assert r.content == b"real bytes"
+
+
+def test_table_symlink_leaving_record_dir_is_404(symlinked):
+    client, record, outside = symlinked
+    tables = os.path.join(record, "outputs", "tables", "t")
+    os.makedirs(tables)
+    os.symlink(outside / "table.json", os.path.join(tables, "0.json"))
+    r = client.get(f"{SYMLINK_BASE}/table/outputs/tables/t/0.json")
+    assert r.status_code == 404
+    assert SECRET not in r.text

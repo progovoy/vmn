@@ -1,6 +1,7 @@
 """``subtree_rows_direct``: an outer run's rows found through its child
 markers — no listing of the app's records, so an outer run's page answers
 while the index of a 46k-run store is still loading."""
+from datetime import datetime, timezone
 import threading
 import time
 
@@ -12,6 +13,7 @@ from vmn_exp.core.subtree_direct import subtree_rows_direct
 from vmn_exp.core.tree import annotate_rows
 from vmn_exp.core.writer import create_run, save_run_state
 from vmn_exp.storage.local import LocalSnapshotStorage
+from writer_args import process_suffix, process_writer
 
 APP = "my_app"
 OUTER = "0.0.1-dev.abc.def"
@@ -106,7 +108,7 @@ def test_by_default_each_child_is_probed_for_children_in_the_same_wave(outer24):
 
 def test_rows_are_the_index_rows_of_the_metadata_and_states_feed_status(outer24):
     found = subtree_rows_direct(outer24, APP, OUTER)
-    rows = annotate_rows(found.rows, found.run_states)
+    rows = annotate_rows(found.rows, found.run_states, now=datetime.now(timezone.utc))
     by = {r["verstr"]: r for r in rows}
 
     outer = by[OUTER]
@@ -164,8 +166,8 @@ def test_a_missing_outer_has_no_rows(outer24):
 def test_a_real_local_store(tmp_path):
     storage = LocalSnapshotStorage(str(tmp_path / "root"), area="runs")
     template = {"timestamp": "2026-01-01T00:00:00Z"}
-    outer = create_run(storage, APP, OUTER, template, {})
-    kids = [create_run(storage, APP, OUTER, template, {}, parent=outer) for _ in range(3)]
+    outer = create_run(storage, APP, OUTER, template, {}, writer=process_writer(), suffix=process_suffix())
+    kids = [create_run(storage, APP, OUTER, template, {}, parent=outer, writer=process_writer(), suffix=process_suffix()) for _ in range(3)]
     save_run_state(storage, APP, kids[0], {"state": "finished"}, exit_code=1)
 
     found = subtree_rows_direct(storage, APP, outer)

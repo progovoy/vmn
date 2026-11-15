@@ -18,7 +18,7 @@ from vmn_exp.ui.auth.authz import require
 from vmn_exp.ui.auth.principal import VIEWER
 from vmn_exp.ui.readers.baselines import baselines
 from vmn_exp.ui.readers.patch_files import patch_files
-from vmn_exp.ui.readers.patches import patch_presence
+from vmn_exp.ui.readers.patches import has_own_code, patch_presence
 from vmn_exp.ui.responses import json_response, not_modified
 from vmn_exp.ui.slow_reads import slow_read
 
@@ -82,11 +82,11 @@ def register(app, prefix, run_storage, leaderboard_inputs, leaderboards, segment
             _metadata(storage, app_name, verstr)
             return json_response({}, request=request)  # not indexed yet
         metadata = _metadata(storage, app_name, verstr)
-        presence = patch_presence(storage, app_name, verstr, metadata)
-        has_patch = presence["working_tree"] or presence["local_commits"]
+        has_patch = has_own_code(patch_presence(storage, app_name, verstr, metadata))
 
         def ordered_by(metric):
             return leaderboards.ordered(snapshot, schema, sort=metric)
 
-        found = baselines(snapshot, verstr, has_patch, schema, ordered_by)
+        found = baselines(snapshot, verstr, has_patch, schema, ordered_by, leaderboards.now(),
+                          leaderboards.min_stale_sec)
         return json_response(found, request=request)

@@ -4,6 +4,7 @@ then about what a plain field costs per run."""
 import time
 
 import pytest
+from bench_timing import fastest_each
 from vmn_exp.core.index_snapshot import IndexSnapshot
 from vmn_exp.core.query import filter_rows
 from vmn_exp.core.query_extra import lean_extra
@@ -11,6 +12,8 @@ from vmn_exp.core.query_extra import lean_extra
 DATES, STUDIES, TRIALS, PODS = 20, 25, 20, 9  # 20 x 25 x 20 x 10 ≈ 100k runs
 UP_QUERY = 'up(tags.kind = "study").params.group = "g3" and up.params.trade_date = "d7"'
 PLAIN_QUERY = 'params.group = "g3" and params.trade_date = "d7"'
+# Seconds: an up query on a fresh snapshot, and a repeat's excess over 4 plain ones.
+BUDGETS = {"cold": 3.0, "warm over 4 plain": 0.2}
 
 
 def _row(verstr, parent, kind, **params):
@@ -39,14 +42,22 @@ def _timed(snap, text):
     return time.perf_counter() - start, kept
 
 
-@pytest.mark.serial
-def test_an_up_query_costs_about_a_plain_one():
+def _attempt(kept):
+    """One pass on a fresh snapshot (no ancestor read made yet)."""
     snap = _fleet()
     assert len(snap.rows) > 100_000
-    cold, kept = _timed(snap, UP_QUERY)
-    assert len(kept) == STUDIES // 5 * TRIALS * (PODS + 1)
+    cold, rows = _timed(snap, UP_QUERY)
+    kept.append(rows)
     warm, _ = _timed(snap, UP_QUERY)
     plain = min(_timed(snap, PLAIN_QUERY)[0] for _ in range(3))
-    print(f"\nup cold {cold:.3f}s, warm {warm:.3f}s, plain {plain:.3f}s")
-    assert cold < 3.0
-    assert warm < 4 * plain + 0.2
+    return {"cold": cold, "warm": warm, "plain": plain, "warm over 4 plain": warm - 4 * plain}
+
+
+@pytest.mark.serial
+def test_an_up_query_costs_about_a_plain_one():
+    kept = []
+    took = fastest_each(lambda: _attempt(kept), BUDGETS)
+    assert len(kept[-1]) == STUDIES // 5 * TRIALS * (PODS + 1)
+    print(f"\nup cold {took['cold']:.3f}s, warm {took['warm']:.3f}s, plain {took['plain']:.3f}s")
+    assert took["cold"] < 3.0
+    assert took["warm over 4 plain"] < 0.2  # warm < 4 * plain + 0.2

@@ -3,16 +3,20 @@ direct children, each with children carrying its ``job`` (attention from
 the app's settings, its split counts), an ``open`` hint, and the app's
 ``tree_columns``; ETag/304 like the board, 404/400 for unknown/malformed."""
 import datetime
+import os
 
 import pytest
 import yaml
 
 pytest.importorskip("fastapi")
-import vmn_exp.core.status as status_mod
+from fakes.clock import FakeClock
 from fastapi.testclient import TestClient
+from unit_deps import fake_deps
 from vmn_exp.core.app_settings_store import write_settings
+from vmn_exp.core.real_io import RealClock
 from vmn_exp.storage.areas import RUNS
 from vmn_exp.storage.open import open_storage
+from vmn_exp.core.real_io import real_io
 
 APP = "app"
 BASE = f"/api/v1/workspaces/ws/apps/{APP}"
@@ -61,19 +65,18 @@ def _tree(storage):
 
 
 @pytest.fixture
-def client(tmp_path, monkeypatch):
-    from vmn_exp.ui.server import create_app
+def client(tmp_path):
+    from vmn_exp.ui.server import build_app
     from vmn_exp.ui.workspaces import WorkspaceManager
 
-    monkeypatch.setattr(status_mod, "_now",
-                        lambda now=None: now or T0 + datetime.timedelta(minutes=90))
+    clock = FakeClock(T0 + datetime.timedelta(minutes=90))
     uri = f"file://{tmp_path}/store"
-    storage = open_storage(uri, area=RUNS)
+    storage = open_storage(uri, area=RUNS, clock=RealClock(), env=os.environ)
     _tree(storage)
-    write_settings(storage, APP, SETTINGS)
+    write_settings(storage, APP, SETTINGS, env=real_io().env, host=real_io().host)
     manager = WorkspaceManager(str(tmp_path / "data"))
     manager.add_store("ws", uri)
-    test_client = TestClient(create_app(manager))
+    test_client = TestClient(build_app(manager, fake_deps(clock)))
     test_client.storage = storage
     return test_client
 

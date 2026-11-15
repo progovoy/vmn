@@ -1,13 +1,13 @@
 """Admin routes on the control plane: API tokens and the audit log."""
 from dataclasses import asdict
 
-from fastapi import HTTPException, Request
+from fastapi import HTTPException, Request, Response
 from fastapi.responses import StreamingResponse
 
 from vmn_exp.ui.auth.authz import require
 from vmn_exp.ui.auth.principal import ADMIN
-from vmn_exp.ui.auth.tokens import TokenService
-from vmn_exp.ui.http_params import clamp_page
+from vmn_exp.ui.auth.sessions import SessionService
+from vmn_exp.ui.http_params import clamp_page, page_of
 
 
 def public_record(record):
@@ -34,13 +34,18 @@ def _token_body(body):
     return name.strip(), roles, ttl
 
 
-def register(app, api_prefix):
+def register(app, api_prefix, wall_clock, random):
+    """The routes; *wall_clock* (epoch seconds) times the sessions they close."""
     def _tokens():
-        return TokenService(_control_plane(app))
+        _control_plane(app)
+        return app.state.token_service
 
     @app.get(f"{api_prefix}/tokens", dependencies=[require(ADMIN)])
-    def list_tokens():
-        return [public_record(r) for r in _tokens().list()]
+    def list_tokens(response: Response, offset: int = 0, limit: int = None):
+        page, total = page_of(_tokens().list(), offset, limit)
+        if total is not None:
+            response.headers["X-Total-Count"] = str(total)
+        return [public_record(r) for r in page]
 
     @app.post(f"{api_prefix}/tokens", status_code=201, dependencies=[require(ADMIN)])
     def create_token(request: Request, body: dict):
@@ -58,6 +63,14 @@ def register(app, api_prefix):
     def revoke_token(token_id: str):
         if not _tokens().revoke(token_id):
             raise HTTPException(404, f"Unknown token {token_id!r}")
+
+    @app.delete(f"{api_prefix}/tokens", dependencies=[require(ADMIN)])
+    def revoke_owner(owner: str = ""):
+        """Cut one user off: every token they own and every browser session."""
+        if not owner:
+            raise HTTPException(422, "Query parameter 'owner' is required")
+        return {"tokens": _tokens().revoke_owner(owner),
+                "sessions": SessionService(_control_plane(app), wall_clock, random).close_principal(owner)}
 
     @app.get(f"{api_prefix}/audit", dependencies=[require(ADMIN)])
     def audit_page(offset: int = 0, limit: int = 100):

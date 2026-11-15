@@ -11,12 +11,14 @@ import time
 import pytest
 import yaml
 from exp_helpers import _bootstrap, _exp, _storage, extract_dev_verstr
+from fakes.clock import FakeClock
 from similar_seed import TRAIN_STEP, WRITER, features, seed, verstr
 from vmn_exp.cli import similar_hint
 from vmn_exp.core.status import RUN_STATE_FILE
 from vmn_exp.storage.areas import local_store_root
 from vmn_exp.storage.cached import CachedSnapshotStorage
 from vmn_exp.storage.local import LocalSnapshotStorage
+from vmn_exp.core.real_io import RealClock
 
 TRAIN = "def train_step():\n    a = 1\n    b = 2\n    c = 3\n    d = 4\n    return {}\n"
 CHANGES = features(["train.py"], [TRAIN_STEP], author="alice@x.io")
@@ -72,10 +74,11 @@ def test_the_hint_reads_the_new_run_from_the_local_side_only(app_layout, capfd):
     assert _exp(app, extra_args=["--no-similar"]) == 0
     new = extract_dev_verstr(capfd.readouterr().out)
     remote = _UnreachableRemote()
-    local = LocalSnapshotStorage(local_store_root(app_layout.repo_path), "runs")
+    local = LocalSnapshotStorage(local_store_root(app_layout.repo_path), "runs", env=os.environ)
     storage = CachedSnapshotStorage(local, remote)
 
-    similar_hint.print_hint(storage, app, new, argparse.Namespace(), {})
+    similar_hint.print_hint(storage, app, new, argparse.Namespace(), {}, clock=FakeClock(),
+                            env=os.environ)
 
     line = _head(capfd.readouterr().err)
     assert line.startswith(f"1 similar run: closest — {prior} by alice@x.io, ")
@@ -99,16 +102,17 @@ def test_over_a_direct_remote_store_the_hint_reads_the_new_run_from_its_log_buff
     from vmn_exp.snapshot import open_storage
     from vmn_exp.storage.uri import s3_uri
 
-    storage = open_storage(s3_uri(BUCKET, PREFIX), area="runs", buffer_logs=True)
+    storage = open_storage(s3_uri(BUCKET, PREFIX), area="runs", buffer_logs=True, clock=RealClock(), env=os.environ)
     prior = seed(storage, "app", verstr(1), changes=CHANGES)
     storage.sync_log_to_remote("app", prior, WRITER)
-    indexed_snapshot(storage, "app", wait=True)
+    indexed_snapshot(storage, "app", wait=True, clock=FakeClock())
     # Its features entry is not shipped yet: only the buffer holds it.
     new = seed(storage, "app", verstr(2), changes=CHANGES)
     calls = record_calls(storage._remote._s3)
     capfd.readouterr()
 
-    similar_hint.print_hint(storage, "app", new, argparse.Namespace(), {})
+    similar_hint.print_hint(storage, "app", new, argparse.Namespace(), {}, clock=FakeClock(),
+                            env=os.environ)
 
     line = _head(capfd.readouterr().err)
     assert line.startswith(f"1 similar run: closest — {prior} by alice@x.io, ")

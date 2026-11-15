@@ -15,9 +15,9 @@ TRUNCATEs the cache tables, never the control-plane ones.
 import json
 import logging
 
-from vmn_exp.core import index_store
 from vmn_exp.core.cache_store import FULL_LOAD
-from vmn_exp.core.index_store import _state_of, _without_state
+from vmn_exp.core.index_store import TOMBSTONE_TTL_SEC, _state_of, _without_state
+from vmn_exp.core.real_io import real_io
 from vmn_exp.core.index_store_schema import (
     RECORDS_VERSION,
     SCHEMA_VERSION,
@@ -75,10 +75,16 @@ def _ensure_cache_version(conn):
 
 
 class PostgresStore(DefaultOrg):
-    def __init__(self, dsn, org_id=0):
+    def __init__(self, dsn, org_id=0, *, clock=None):
+        """*clock* (a :class:`~vmn_exp.core.ports.Clock`) stamps tombstones
+        (None: ``real_io().clock``, as :class:`~vmn_exp.core.index_store.SqliteStore`'s)."""
+        self._clock = clock or real_io().clock
         self._dsn = dsn
         self._default_org = org_id
         self._version_checked = False
+
+    def _wall(self):
+        return self._clock.now().timestamp()
 
     def _run(self, op, default, what):
         try:
@@ -126,7 +132,8 @@ class PostgresStore(DefaultOrg):
         states = states or {}
         if not (changed or removed or states):
             return
-        self._run(lambda c: _save(c, self._key(scope), changed, removed, states), None, "write")
+        self._run(lambda c: _save(c, self._key(scope), changed, removed, states, self._wall()),
+                  None, "write")
 
     def cache_meta(self):
         """The ``vmn_cache_meta`` ``schema_version`` and ``records`` values
@@ -142,7 +149,8 @@ class PostgresStore(DefaultOrg):
         """Make *records* the scope's whole content in one transaction, under
         a generation past *floor*: followers see the new set at once, never a
         half-built one (the rebuild's shadow generation)."""
-        self._run(lambda c: _replace(c, self._key(scope), records, floor), None, "write")
+        self._run(lambda c: _replace(c, self._key(scope), records, floor, self._wall()),
+                  None, "write")
 
     def kv_get(self, scope, fingerprint):
         def query(conn):
@@ -209,7 +217,7 @@ def _delta(conn, key, generation):
         return changed, removed, gen
 
 
-def _save(conn, key, changed, removed, states):
+def _save(conn, key, changed, removed, states, wall):
     with conn.transaction():
         (seq,) = conn.execute(
             "INSERT INTO vmn_scope_gen (org_id, workspace_id, app, gen) VALUES (%s, %s, %s, 1)"
@@ -219,12 +227,12 @@ def _save(conn, key, changed, removed, states):
         ).fetchone()
         _upsert(conn, "vmn_records", key, seq, changed, _without_state)
         _upsert(conn, "vmn_run_states", key, seq, states, _state_of)
-        _forget(conn, key, seq, removed)
-        _trim_tombstones(conn, key)
+        _forget(conn, key, seq, removed, wall)
+        _trim_tombstones(conn, key, wall)
         conn.execute("SELECT pg_notify('vmn_gen', %s)", (f"{key[1]}:{key[2]}",))
 
 
-def _replace(conn, key, records, floor):
+def _replace(conn, key, records, floor, wall):
     with conn.transaction():
         (seq,) = conn.execute(
             "INSERT INTO vmn_scope_gen (org_id, workspace_id, app, gen) VALUES (%s, %s, %s, %s)"
@@ -236,7 +244,7 @@ def _replace(conn, key, records, floor):
             f"SELECT key FROM vmn_records WHERE {_SCOPE}", key)} - set(records)
         _upsert(conn, "vmn_records", key, seq, records, _without_state)
         _upsert(conn, "vmn_run_states", key, seq, records, _state_of)
-        _forget(conn, key, seq, stale)
+        _forget(conn, key, seq, stale, wall)
         conn.execute("SELECT pg_notify('vmn_gen', %s)", (f"{key[1]}:{key[2]}",))
 
 
@@ -258,7 +266,7 @@ def _upsert(conn, table, key, seq, records, shape):
             )
 
 
-def _forget(conn, key, seq, removed):
+def _forget(conn, key, seq, removed, wall):
     if not removed:
         return
     gone = [key + (k,) for k in removed]
@@ -270,12 +278,12 @@ def _forget(conn, key, seq, removed):
             " VALUES (%s, %s, %s, %s, %s, %s)"
             " ON CONFLICT (org_id, workspace_id, app, key) DO UPDATE"
             " SET seq = EXCLUDED.seq, ts = EXCLUDED.ts",
-            [g + (seq, index_store._now()) for g in gone],
+            [g + (seq, wall) for g in gone],
         )
 
 
-def _trim_tombstones(conn, key):
-    cutoff = key + (index_store._now() - index_store.TOMBSTONE_TTL_SEC,)
+def _trim_tombstones(conn, key, wall):
+    cutoff = key + (wall - TOMBSTONE_TTL_SEC,)
     (newest,) = conn.execute(
         f"SELECT MAX(seq) FROM vmn_tombstones WHERE {_SCOPE} AND ts < %s", cutoff
     ).fetchone()

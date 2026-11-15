@@ -153,6 +153,13 @@ def launcher_experiment_id():
         return os.environ.get(EXPERIMENT_ID_ENV)
 
 
+def consume_env(names):
+    """Remove *names* from the process environment: a handoff read once (the
+    resume request), which subprocesses must not inherit."""
+    for name in names:
+        os.environ.pop(name, None)
+
+
 def _export(run):
     os.environ[EXPERIMENT_ID_ENV] = run.id
     os.environ[APP_NAME_ENV] = run.app_name

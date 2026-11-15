@@ -1,9 +1,11 @@
 """Series endpoints keyed by another metric (``x=``) and declared step metrics."""
+import os
+
 import pytest
 
 pytest.importorskip("fastapi")
 from fastapi.testclient import TestClient
-
+from vmn_exp.core.real_io import RealClock, real_io
 from vmn_exp.snapshot import open_storage
 from vmn_exp.storage.areas import local_store_root
 
@@ -36,14 +38,14 @@ def _run(storage, verstr=RUN, n=10, define=None):
 def ws(tmp_path):
     root = tmp_path / "repo"
     (root / ".git").mkdir(parents=True, exist_ok=True)
-    storage = open_storage(root=local_store_root(str(root)), area="runs")
+    storage = open_storage(root=local_store_root(str(root)), area="runs", clock=RealClock(), env=os.environ)
 
     from vmn_exp.ui.server import create_app
     from vmn_exp.ui.workspaces import WorkspaceManager
 
     manager = WorkspaceManager(str(tmp_path / "data"))
     manager.attach_path("ws", str(root))
-    return TestClient(create_app(manager)), storage, root
+    return TestClient(create_app(manager, io=real_io())), storage, root
 
 
 def test_detail_x_param_joins_every_series_on_the_x_metric(ws):

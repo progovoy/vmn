@@ -10,6 +10,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from vmn_exp.ui.diag.requests import DiagRequestsMiddleware, RequestTracker
+from vmn_exp.core.real_io import real_io
 
 
 def _app(tracker, release, entered):
@@ -110,7 +111,7 @@ def test_api_routes_record_their_queue_wait_and_worker_thread(tmp_path):
     from vmn_exp.ui.server import create_app
     from vmn_exp.ui.workspaces import WorkspaceManager
 
-    app = create_app(WorkspaceManager(str(tmp_path / "data")))
+    app = create_app(WorkspaceManager(str(tmp_path / "data")), io=real_io())
     seen = []
     app.state.diag_requests.add_listener(lambda event, entry: seen.append((event, entry)))
     with TestClient(app) as client:

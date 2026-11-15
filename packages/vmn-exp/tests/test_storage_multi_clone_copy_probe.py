@@ -27,6 +27,7 @@ from s3_helpers import cached_host, meta, s3_storage
 from vmn_exp.core.metric_compact import compact_record, compact_writer
 from vmn_exp.core.status import RUN_STATE_FILE
 from vmn_exp.storage.buffered import BufferedRemoteStorage
+from vmn_exp.core.real_io import RealClock
 
 FINISHED = "state: finished\nexit_code: 0\n"
 
@@ -47,7 +48,7 @@ class _Probe:
     def __init__(self, tmp_path, rng):
         self.tmp, self.rng = tmp_path, rng
         self.roots, self.live, self.keys, self.values = ["a", "b", "c"], {}, [], []
-        self.buf = BufferedRemoteStorage(s3_storage())
+        self.buf = BufferedRemoteStorage(s3_storage(), str(tmp_path / "buffers"), clock=RealClock())
 
     def step(self, step):
         op, root = self.rng.random(), self.rng.choice(self.roots)

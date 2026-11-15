@@ -6,6 +6,7 @@ makes the SDK's handler raise ``SystemExit(143)`` in the main thread once the
 runs are finalized, instead of re-killing the process, so the workload's
 ``finally`` blocks and context managers still run.
 """
+from datetime import datetime, timezone
 import os
 
 import pytest
@@ -97,7 +98,7 @@ def test_raise_exits_143_after_finally_blocks_and_releases_per_env(app_layout):
     assert rc == 143, out
     assert finally_ran, out
     assert state["state"] == "released" and state["signal"] == "SIGTERM", state
-    assert derive_status(state) == CREATED
+    assert derive_status(state, now=datetime.now(timezone.utc)) == CREATED
 
 
 def test_raise_from_the_argument_fails_the_run_with_143(app_layout):
@@ -105,4 +106,4 @@ def test_raise_from_the_argument_fails_the_run_with_143(app_layout):
     assert rc == 143, out
     assert finally_ran, out
     assert state["exit_code"] == 143 and state["signal"] == "SIGTERM", state
-    assert derive_status(state) == FAILED
+    assert derive_status(state, now=datetime.now(timezone.utc)) == FAILED

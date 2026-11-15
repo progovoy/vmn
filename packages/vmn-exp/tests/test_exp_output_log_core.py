@@ -11,6 +11,7 @@ import threading
 from exp_helpers import _bootstrap, _exp, _storage, extract_dev_verstr
 
 from vmn_exp.core import output_log as ol
+import time
 
 
 def test_small_output_is_kept_verbatim():
@@ -82,12 +83,12 @@ def test_concurrent_writers_lose_no_bytes():
 
 def test_cap_bytes_from_flag_then_env_then_default(monkeypatch):
     monkeypatch.delenv(ol.OUTPUT_CAP_ENV, raising=False)
-    assert ol.output_cap_bytes(None) == ol.DEFAULT_OUTPUT_CAP_MB * 1024 * 1024
+    assert ol.output_cap_bytes(None, os.environ) == ol.DEFAULT_OUTPUT_CAP_MB * 1024 * 1024
     monkeypatch.setenv(ol.OUTPUT_CAP_ENV, "2")
-    assert ol.output_cap_bytes(None) == 2 * 1024 * 1024
-    assert ol.output_cap_bytes(0.5) == 512 * 1024
+    assert ol.output_cap_bytes(None, os.environ) == 2 * 1024 * 1024
+    assert ol.output_cap_bytes(0.5, os.environ) == 512 * 1024
     monkeypatch.setenv(ol.OUTPUT_CAP_ENV, "junk")
-    assert ol.output_cap_bytes(None) == ol.DEFAULT_OUTPUT_CAP_MB * 1024 * 1024
+    assert ol.output_cap_bytes(None, os.environ) == ol.DEFAULT_OUTPUT_CAP_MB * 1024 * 1024
 
 
 def test_pump_tees_to_the_destination_and_the_sink(tmp_path):
@@ -123,7 +124,7 @@ def test_output_artifact_uploads_output_log_only_when_changed(app_layout, capfd)
     verstr = extract_dev_verstr(capfd.readouterr().out)
     storage = _storage(app_layout)
 
-    art = ol.OutputArtifact(storage, app_layout.app_name, verstr, cap_bytes=1000)
+    art = ol.OutputArtifact(storage, app_layout.app_name, verstr, cap_bytes=1000, clock=time.monotonic)
     assert art.upload() is False  # nothing written yet
     art.write(b"line 1\n")
     assert art.upload() is True

@@ -11,6 +11,7 @@ from vmn_exp.snapshot import open_storage
 from vmn_exp.ui.server import create_app
 from vmn_exp.ui.workspaces import WorkspaceManager
 from vmn_exp.storage.areas import local_store_root
+from vmn_exp.core.real_io import RealClock, real_io
 
 LIST = "/api/v1/workspaces/ws/apps/app/experiments"
 
@@ -18,7 +19,7 @@ LIST = "/api/v1/workspaces/ws/apps/app/experiments"
 def _workspace(root, runs):
     """A checkout with experiments ``{verstr: metrics_values_or_None}``."""
     os.makedirs(os.path.join(root, ".git"), exist_ok=True)
-    storage = open_storage(root=local_store_root(root), area="runs")
+    storage = open_storage(root=local_store_root(root), area="runs", clock=RealClock(), env=os.environ)
     for i, (verstr, values) in enumerate(runs.items()):
         storage.save(
             "app", verstr, {"verstr": verstr, "timestamp": f"2026-01-01T00:00:0{i}Z"}, {}
@@ -45,7 +46,7 @@ def test_non_finite_metric_does_not_break_the_leaderboard(tmp_path, manager, use
     root = str(tmp_path / "ws")
     _workspace(root, {"0.0.1-dev.a": {"acc": 0.9}, "0.0.1-dev.b": {"acc": bad}})
     manager.attach_path("ws", root)
-    client = TestClient(create_app(manager, use_index=use_index))
+    client = TestClient(create_app(manager, io=real_io(), use_index=use_index))
 
     r = client.get(LIST)
     assert r.status_code == 200
@@ -62,7 +63,7 @@ def test_non_finite_values_nested_in_lists_are_nulled(tmp_path, manager):
     root = str(tmp_path / "ws")
     _workspace(root, {"0.0.1-dev.a": {"loss": float("nan")}})
     manager.attach_path("ws", root)
-    client = TestClient(create_app(manager, use_index=False))
+    client = TestClient(create_app(manager, io=real_io(), use_index=False))
     r = client.get(LIST + "/0.0.1-dev.a")
     assert r.status_code == 200
     points = r.json()["series"]["loss"]
@@ -77,7 +78,7 @@ def test_large_responses_are_gzip_compressed(tmp_path, manager):
         root, {f"0.0.1-dev.r{i:03d}": {"loss": i / 100.0} for i in range(60)}
     )
     manager.attach_path("ws", root)
-    client = TestClient(create_app(manager, use_index=False))
+    client = TestClient(create_app(manager, io=real_io(), use_index=False))
     r = client.get(LIST, headers={"Accept-Encoding": "gzip"})
     assert r.status_code == 200
     assert r.headers.get("content-encoding") == "gzip"
@@ -89,7 +90,7 @@ def test_readding_a_workspace_name_serves_the_new_path(tmp_path, manager):
     _workspace(old, {"0.0.1-dev.old": {"acc": 0.1}})
     _workspace(new, {"0.0.1-dev.new": {"acc": 0.2}})
     manager.attach_path("ws", old)
-    client = TestClient(create_app(manager))  # index enabled
+    client = TestClient(create_app(manager, io=real_io()))  # index enabled
 
     assert [r["verstr"] for r in client.get(LIST).json()] == ["0.0.1-dev.old"]
     assert client.delete("/api/v1/workspaces/ws").status_code == 204

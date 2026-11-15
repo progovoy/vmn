@@ -15,8 +15,10 @@ from vmn_exp.core.writer import (
     flush_log,
     own_stream,
 )
-from vmn_exp.sdk.run import Run
+from vmn_exp.sdk.run import Run, _real_process_hooks
 from vmn_exp.snapshot import LocalSnapshotStorage
+from vmn_exp.core.real_io import RealClock, RealHost, RealRandom
+from writer_args import process_writer
 
 APP = "app"
 V = "0.0.1-dev.aaaaaaa.bbbbbbb"
@@ -59,8 +61,8 @@ def test_record_format_is_version_2():
 
 def test_append_to_log_sends_metrics_to_the_stream(tmp_path):
     storage = _storage(tmp_path)
-    append_to_log(storage, APP, V, create_log_entry("metrics", values={"x": 1.5}, step=3))
-    append_to_log(storage, APP, V, create_log_entry("note", text="hi"))
+    append_to_log(storage, APP, V, create_log_entry("metrics", values={"x": 1.5}, step=3), writer=process_writer())
+    append_to_log(storage, APP, V, create_log_entry("note", text="hi"), writer=process_writer())
     assert "metrics" not in _jsonl_types(storage)
     assert _stream_values(storage, "x") == [1.5]
     merged = _merged_metrics(storage)
@@ -71,7 +73,7 @@ def test_append_entries_to_log_splits_a_mixed_batch(tmp_path):
     storage = _storage(tmp_path)
     entries = [create_log_entry("metrics", values={"a": 1.0, "b": 2.0}, step=0),
                create_log_entry("params", params={"lr": 0.1})]
-    assert append_entries_to_log(storage, APP, V, entries)
+    assert append_entries_to_log(storage, APP, V, entries, writer=process_writer())
     assert _jsonl_types(storage) == ["params"]
     assert _merged_metrics(storage)[0]["values"] == {"a": 1.0, "b": 2.0}
 
@@ -87,13 +89,13 @@ def test_flush_log_ships_metric_blocks_too(tmp_path):
             calls.append(("metrics",) + a)
 
     spy = Spy()
-    flush_log(spy, APP, V)
-    assert calls == ["log", ("metrics", APP, V, own_stream(spy, APP, V))]
+    flush_log(spy, APP, V, writer=process_writer())
+    assert calls == ["log", ("metrics", APP, V, own_stream(spy, APP, V, writer=process_writer()))]
 
 
 def test_sdk_log_metrics_reach_the_stream_not_the_jsonl(tmp_path):
     storage = _storage(tmp_path)
-    run = Run(storage, APP, V, 60, system_metrics=False)
+    run = Run(storage, APP, V, 60, system_metrics=False, clock=RealClock(), host=RealHost(), random=RealRandom(), env=os.environ, install_hooks=_real_process_hooks())
     run._open()
     run.log_metrics({"loss": 0.5})
     run.log_metric("loss", 0.25)
@@ -129,8 +131,8 @@ def test_a_fork_copies_points_as_inherited_blocks(tmp_path):
     fork = "0.0.1-dev.aaaaaaa.ccccccc"
     storage.save(APP, fork, {"verstr": fork, "timestamp": "2026-01-01T00:00:01Z"}, {})
     for step in range(4):
-        append_to_log(storage, APP, V, create_log_entry("metrics", values={"x": step}, step=step))
-    assert seed_fork(storage, APP, fork, V, step=1) == {"verstr": V, "step": 1}
+        append_to_log(storage, APP, V, create_log_entry("metrics", values={"x": step}, step=step), writer=process_writer())
+    assert seed_fork(storage, APP, fork, V, step=1, writer=process_writer()) == {"verstr": V, "step": 1}
     objects = storage.metric_objects(APP, fork)
     (name, size), = next(iter(objects.values()))
     blocks = list(decode_blocks(storage.read_range(APP, fork, name, 0, size)))

@@ -4,6 +4,7 @@ from fastapi.testclient import TestClient
 
 from vmn_exp.ui.auth.principal import Principal
 from vmn_exp.ui.tenancy import install_org_middleware
+from vmn_exp.core.real_io import real_io
 
 
 def _app(principal, tenancy):
@@ -42,6 +43,6 @@ def test_create_app_binds_orgs_in_multi_tenancy(tmp_path):
     from vmn_exp.ui.workspaces import WorkspaceManager
 
     manager = WorkspaceManager(str(tmp_path), tenancy="multi")
-    client = TestClient(create_app(manager, token="t"))
+    client = TestClient(create_app(manager, io=real_io(), token="t"))
     r = client.get("/api/v1/workspaces", headers={"Authorization": "Bearer t"})
     assert r.status_code == 403

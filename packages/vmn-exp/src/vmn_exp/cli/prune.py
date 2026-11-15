@@ -104,7 +104,7 @@ def _read_state(storage, app_name, verstr):
     )
 
 
-def _live_runs(storage, app_name, candidates, snapshot):
+def _live_runs(storage, app_name, candidates, snapshot, now):
     """``{verstr: status}`` of the *candidates* that may still be running.
 
     The index *snapshot* supplies run states and their store write times when
@@ -118,18 +118,18 @@ def _live_runs(storage, app_name, candidates, snapshot):
         observed = snapshot.run_state_observed_at
         states = [(snapshot.run_states.get(v), observed.get(v)) for v in verstrs]
     statuses = zip(
-        verstrs, (derive_status(state, observed_at=at) for state, at in states)
+        verstrs, (derive_status(state, now=now, observed_at=at) for state, at in states)
     )
     return {v: status for v, status in statuses if status in _LIVE}
 
 
-def _apply_guards(storage, app_name, candidates, args, reg, snapshot, keep_parents):
+def _apply_guards(storage, app_name, candidates, args, reg, snapshot, keep_parents, now):
     """``(delete, {skipped live verstr: status}, {skipped tag-protected
     verstr: tag name})``: *candidates* less the live, tag-protected and
     registry-protected (*reg*) ones, less those *keep_parents* (doomed
     verstrs → the ones that may go) keeps for a surviving child."""
     force = getattr(args, "force", False)
-    live = {} if force else _live_runs(storage, app_name, candidates, snapshot)
+    live = {} if force else _live_runs(storage, app_name, candidates, snapshot, now)
     protect_tags = getattr(args, "protect_tag", None)
     protected = {} if force else tag_protected(candidates, protect_tags)
     doomed = {m["verstr"] for m in candidates} - set(live) - set(protected) - set(reg)
@@ -151,12 +151,12 @@ def _local_view(storage):
     return getattr(storage, "_local", None) or storage
 
 
-def _metas_and_snapshot(storage, app_name):
+def _metas_and_snapshot(storage, app_name, clock):
     """``(metas oldest first, index snapshot or None)`` — through the experiment
     index when the storage can be indexed, so selecting among 10k runs does not
     read every record's metadata and run state; directly otherwise."""
     if hasattr(storage, "list_files"):
-        snapshot = indexed_snapshot(storage, app_name, wait=True, fallback=None)
+        snapshot = indexed_snapshot(storage, app_name, wait=True, fallback=None, clock=clock)
         if snapshot is not None:
             metas = [
                 {"verstr": r["verstr"], "timestamp": r.get("timestamp"),
@@ -184,7 +184,7 @@ def _refuse_mixed_selection(args):
     return None
 
 
-def _select_candidates(storage, app_name, metas, args, schema):
+def _select_candidates(storage, app_name, metas, args, schema, clock):
     """Return ``(candidates, error_code)`` according to the policy flags.
 
     *error_code* is non-None when the caller should return it immediately.
@@ -199,7 +199,7 @@ def _select_candidates(storage, app_name, metas, args, schema):
         scope, noun = metas, "experiments"
     else:
         try:
-            scope = query_candidates(storage, app_name, metas, query, schema)
+            scope = query_candidates(storage, app_name, metas, query, schema, clock)
         except QueryError as e:
             VMN_LOGGER.error(f"Invalid --query: {e}")
             return None, 1
@@ -245,18 +245,18 @@ def _read_registry(storage, app_name, candidates):
         return None, 1
 
 
-def experiment_prune(vcs, params, storage, args, app_name):
+def experiment_prune(vcs, params, storage, args, app_name, clock):
     if getattr(args, "local_only", False):
         storage = _local_view(storage)
     rc = _refuse_mixed_selection(args)
     if rc is not None:
         return rc
     if getattr(args, "version", None):
-        return _prune_targeted(storage, app_name, args)
-    return _prune_by_policy(vcs, storage, app_name, args)
+        return _prune_targeted(storage, app_name, args, clock)
+    return _prune_by_policy(vcs, storage, app_name, args, clock)
 
 
-def _prune_targeted(storage, app_name, args):
+def _prune_targeted(storage, app_name, args, clock):
     with_tags = not getattr(args, "force", False) and bool(getattr(args, "protect_tag", None))
     metas, err = targeted_metas(storage, app_name, args.version, with_tags)
     if err:
@@ -265,30 +265,30 @@ def _prune_targeted(storage, app_name, args):
     reg, rc = _read_registry(storage, app_name, metas)
     if rc is not None:
         return rc
+    keep_parents = _targeted_keep_parents(storage, app_name, args, clock)
     to_delete, live, protected = _apply_guards(
-        storage, app_name, metas, args, reg, None, _targeted_keep_parents(storage, app_name, args))
+        storage, app_name, metas, args, reg, None, keep_parents, clock.now())
     return _finish(storage, app_name, args, to_delete, (live, protected, reg))
 
 
-def _targeted_keep_parents(storage, app_name, args):
+def _targeted_keep_parents(storage, app_name, args, clock):
     """The surviving-child guard of a targeted prune: by child markers, or —
     on a backend without them — from every run's parent."""
     if storage.has_child_markers:
         return partial(without_kept_parents, storage, app_name, dry_run=_is_dry_run(args))
-    return partial(_without_kept_ancestors, _metas_and_snapshot(storage, app_name)[0])
+    return partial(_without_kept_ancestors, _metas_and_snapshot(storage, app_name, clock)[0])
 
 
-def _prune_by_policy(vcs, storage, app_name, args):
+def _prune_by_policy(vcs, storage, app_name, args, clock):
     if not _is_dry_run(args) and not getattr(args, "no_trim_journal", False):
         _trim_journal(storage)
-    metas, snapshot = _metas_and_snapshot(storage, app_name)
+    metas, snapshot = _metas_and_snapshot(storage, app_name, clock)
     if not metas:
         print("No experiments to prune")
         return 0
 
-    candidates, rc = _select_candidates(
-        storage, app_name, metas, args, metrics_schema(vcs, storage, app_name)
-    )
+    candidates, rc = _select_candidates(storage, app_name, metas, args,
+                                        metrics_schema(vcs, storage, app_name), clock)
     if rc is not None:
         return rc
     if candidates is None:
@@ -300,7 +300,7 @@ def _prune_by_policy(vcs, storage, app_name, args):
 
     to_delete, live, protected = _apply_guards(
         storage, app_name, candidates, args, reg, snapshot,
-        partial(_without_kept_ancestors, metas))
+        partial(_without_kept_ancestors, metas), clock.now())
     return _finish(storage, app_name, args, to_delete, (live, protected, reg),
                    total=len(metas))
 

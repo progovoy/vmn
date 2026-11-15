@@ -6,6 +6,7 @@ import types
 import pytest
 from vmn_exp.core import identity
 from vmn_exp.gitmode.features import capture_features, rerun_features
+from vmn_exp.core.real_io import real_io
 
 DEP_DIFF = (
     "diff --git a/util.py b/util.py\n"
@@ -26,12 +27,12 @@ def vcs(tmp_path, monkeypatch):
 
 def test_a_captured_dep_patch_is_listed_under_the_dep_path(vcs):
     captured = types.SimpleNamespace(identity={"deps": {"../libs/dep": {"working_tree": DEP_DIFF}}})
-    entry = capture_features(vcs, captured)
+    entry = capture_features(vcs, captured, env=real_io().env, host=real_io().host)
     assert entry["changed"]["files"] == ["../libs/dep/util.py"]
 
 
 def test_a_stored_dep_patch_is_listed_under_the_dep_path_it_was_captured_from(vcs):
     metadata = {"dep_base_commits": {"../libs/dep": "abc1234"}}
     patches = {"deps": {".._libs_dep": {"working_tree": DEP_DIFF}}}
-    entry = rerun_features(vcs, [], metadata, patches)
+    entry = rerun_features(vcs, [], metadata, patches, env=real_io().env, host=real_io().host)
     assert entry["changed"]["files"] == ["../libs/dep/util.py"]

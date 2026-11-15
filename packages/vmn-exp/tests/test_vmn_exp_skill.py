@@ -10,6 +10,7 @@ from version_stamp.cli.skill import END_MARKER as VMN_END
 from version_stamp.core.logging import init_stamp_logger
 from vmn_exp.cli.main import vmn_exp_run
 from vmn_exp.cli.skill import BEGIN_MARKER, DESCRIPTION, END_MARKER
+from vmn_exp.core.real_io import real_io
 
 EXP_MARKER = "vmn-exp run"
 CLAUDE_PATH = (".claude", "skills", "vmn-exp", "SKILL.md")
@@ -21,7 +22,7 @@ def _init_logger():
 
 
 def _skill(*argv):
-    return vmn_exp_run(["skill", *argv])[0]
+    return vmn_exp_run(["skill", *argv], real_io())[0]
 
 
 def _project(tmp_path, monkeypatch):

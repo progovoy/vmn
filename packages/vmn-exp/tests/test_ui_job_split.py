@@ -6,12 +6,12 @@ snapshot answers; a parent keeps at most 12 values (the rest under
 import datetime
 
 import pytest
+from fakes.clock import FakeClock
 from job_rollup_reference import STATES, annotated, exact_quantile, jobs, members_of, settled_of
 from leaderboard_fleet import T0, Fleet
 from vmn_exp.ui.leaderboard_cache import LeaderboardCache
 from vmn_exp.ui.leaderboard_group_fields import key_of
 
-from vmn_exp.core import status as status_mod
 from vmn_exp.ui import job_rollup
 from vmn_exp.ui.job_split import MAX_VALUES, SplitSpec, SplitTallies, check_split
 
@@ -39,11 +39,6 @@ class KindFleet(Fleet):
         self.rows.append(self._fold(len(self.specs) - 1))
         self.states[verstr], self.observed[verstr] = state, None
         return verstr
-
-
-@pytest.fixture(autouse=True)
-def _clock(monkeypatch):
-    monkeypatch.setattr(status_mod, "_now", lambda now=None: now or T0)
 
 
 def reference(rows, verstr, field):
@@ -119,21 +114,22 @@ def _by_total(want):
 
 
 def _check_all(cache, snap, field="tags.kind"):
-    rows = annotated(snap)
+    rows = annotated(snap, cache.now())
     for verstr in jobs(rows):
         want = reference(rows, verstr, field)
         _check_split(cache.jobs.split_rollup(snap, field, verstr), want, _by_total(want))
 
 
 @pytest.mark.parametrize("seed", range(5))
-def test_split_rollups_match_a_brute_force_walk_across_generations(monkeypatch, seed):
+def test_split_rollups_match_a_brute_force_walk_across_generations(seed):
     fleet = KindFleet(seed)
     fleet.seed(240, T0, sweeps=4, live=12)
     for i in fleet.rng.sample(range(len(fleet.specs)), 100):
         fleet.set_state(i, fleet.ended(T0) if fleet.rng.random() < 0.8 else None)
-    cache, now = LeaderboardCache(), T0
+    clock = FakeClock(T0)
+    cache, now = LeaderboardCache(now=clock.now), T0
     for _ in range(12):
-        monkeypatch.setattr(status_mod, "_now", lambda when=None, at=now: when or at)
+        clock.advance((now - clock.now()).total_seconds())
         snap = fleet.snapshot()
         _check_all(cache, snap)
         _check_all(cache, snap, "params.opt")
@@ -146,7 +142,7 @@ def test_split_rollups_match_a_brute_force_walk_across_generations(monkeypatch, 
 def test_a_value_moved_by_a_tag_change_leaves_one_bucket_for_another():
     fleet = KindFleet(3, kinds=["trial"])
     (job,) = fleet.seed_jobs(1, 20, T0)
-    cache = LeaderboardCache()
+    cache = LeaderboardCache(now=FakeClock(T0).now)
     assert [e["key"] for e in cache.jobs.split_rollup(fleet.snapshot(), "tags.kind", job)] == ["trial"]
     for i in range(1, 6):
         fleet.edit(i, kind="refit")
@@ -167,11 +163,11 @@ def _single_parent(kinds):
 def test_a_parent_keeps_its_twelve_first_values_and_the_rest_as_other():
     kinds = [f"k{n:02d}" for n in range(20) for _ in range(1 + n % 3)]
     fleet, job = _single_parent(kinds)
-    cache = LeaderboardCache()
+    cache = LeaderboardCache(now=FakeClock(T0).now)
 
     def check():
         snap = fleet.snapshot()
-        want = reference(annotated(snap), job, "tags.kind")
+        want = reference(annotated(snap, T0), job, "tags.kind")
         kept = sorted(want)[:MAX_VALUES]
         _check_split(cache.jobs.split_rollup(snap, "tags.kind", job), want,
                      sorted(kept, key=lambda k: (-want[k]["total"], k)))
@@ -195,14 +191,14 @@ def test_a_value_another_parent_may_hold_under_other_is_never_named():
     for _ in range(3):
         fleet.add(b, "k12", fleet.ended(T0))
     snap = fleet.snapshot()
-    rows = annotated(snap)
-    got = LeaderboardCache().jobs.split_rollup(snap, "tags.kind", top)
+    rows = annotated(snap, T0)
+    got = LeaderboardCache(now=FakeClock(T0).now).jobs.split_rollup(snap, "tags.kind", top)
     want = reference(rows, top, "tags.kind")
     # a holds k12 under other, past its twelve: k12 (4 runs) and the
     # values after it ("zgroup") count under other.
     _check_split(got, want, [f"k{n:02d}" for n in range(12)])
     assert got[-1]["total"] == 6
-    sub = LeaderboardCache().jobs.split_rollup(snap, "tags.kind", b)
+    sub = LeaderboardCache(now=FakeClock(T0).now).jobs.split_rollup(snap, "tags.kind", b)
     assert [(e["key"], e["total"]) for e in sub] == [("k12", 3)]
 
 
@@ -215,9 +211,9 @@ def test_an_answer_names_its_twelve_largest_values():
             for _ in range(1 + (p * 6 + n) % 5):
                 fleet.add(parent, f"v{p}{n}", fleet.ended(T0))
     snap = fleet.snapshot()
-    want = reference(annotated(snap), top, "tags.kind")
+    want = reference(annotated(snap, T0), top, "tags.kind")
     assert len(want) == 19
-    got = LeaderboardCache().jobs.split_rollup(snap, "tags.kind", top)
+    got = LeaderboardCache(now=FakeClock(T0).now).jobs.split_rollup(snap, "tags.kind", top)
     _check_split(got, want, _by_total(want))
     assert sum(e["total"] for e in got) == sum(w["total"] for w in want.values())
 
@@ -227,7 +223,8 @@ def test_an_entry_carries_the_clause_selecting_its_runs():
     top = fleet.add(None, None, fleet.ended(T0))
     for kind in ["trial", "trial", "refit", None] + [f"x{n:02d}" for n in range(12)]:
         fleet.add(top, kind, fleet.ended(T0))
-    got = LeaderboardCache().jobs.split_rollup(fleet.snapshot(), "tags.kind", top)
+    got = LeaderboardCache(now=FakeClock(T0).now).jobs.split_rollup(
+        fleet.snapshot(), "tags.kind", top)
     by_key = {e["key"]: e for e in got}
     assert by_key["trial"]["clause"] == 'tags.kind = "trial"'
     assert by_key["trial"]["label"] == "trial"
@@ -270,7 +267,7 @@ def test_split_refuses_any_other_field(field):
 def test_a_generation_moves_the_split_rollups_on_instead_of_rebuilding(monkeypatch):
     fleet = KindFleet(8)
     fleet.seed_jobs(3, 80, T0, live=8)
-    cache = LeaderboardCache()
+    cache = LeaderboardCache(now=FakeClock(T0).now)
     cache.jobs.split_rollup(fleet.snapshot(), "tags.kind", fleet.specs[0]["verstr"])
     builds = []
     real = job_rollup.StaticRollups.build
@@ -286,7 +283,7 @@ def test_a_generation_moves_the_split_rollups_on_instead_of_rebuilding(monkeypat
 def test_split_answers_are_memoized_per_generation():
     fleet = KindFleet(9)
     fleet.seed_jobs(1, 10, T0, live=2)
-    cache, snap = LeaderboardCache(), fleet.snapshot()
+    cache, snap = LeaderboardCache(now=FakeClock(T0).now), fleet.snapshot()
     job = fleet.specs[0]["verstr"]
     assert cache.jobs.split_rollup(snap, "tags.kind", job) is cache.jobs.split_rollup(
         snap, "tags.kind", job)

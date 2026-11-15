@@ -48,7 +48,6 @@ the GIL behind busy request threads, which starved refreshes under load.
 """
 import logging
 import threading
-import time
 
 from vmn_exp.core.activity import activity
 from vmn_exp.core.gc_policy import POLICY
@@ -59,6 +58,7 @@ from vmn_exp.ui.latest_worker import LatestWorker
 from vmn_exp.ui.refresh_watch import Watch
 
 REFRESH_INTERVAL_SEC = 1.0
+WARM_THREAD = "vmn-ui-warm"  # the worker a published snapshot's board is warmed on
 IDLE_SEC = 60.0
 # Background refreshes list hinted (or new, by name) and live records, and
 # everything this often: the reconcile listing (plan 11 §5.2).
@@ -101,8 +101,7 @@ class InlineRefresher(_Listeners):
     a snapshot sees every write made before it (what ``create_app`` embeds
     without ``background_refresh``)."""
 
-    # False: a snapshot costs a refresh, and its run states are left to be
-    # read from storage.
+    # False: a snapshot costs a refresh; its run states are left to be read from storage.
     background = False
     # None leaves the sweep interval to snapshot(), whatever reconcile_sec says.
     full_sweep_sec = None
@@ -129,7 +128,7 @@ class Refresher(_Listeners):
     keep_warm = None
 
     def __init__(self, interval_sec=REFRESH_INTERVAL_SEC, idle_sec=IDLE_SEC, on_refresh=None,
-                 clock=time.monotonic, keep_warm=None):
+                 *, clock, keep_warm=None):
         self.interval_sec = interval_sec
         self.idle_sec = idle_sec
         self.keep_warm = keep_warm  # None: the indexes of a journal (a store's)
@@ -142,7 +141,7 @@ class Refresher(_Listeners):
         self._step_streaks = {}  # (index, post-refresh step) -> FailureStreak
         self._lock = TracedLock("refresher")
         self._stopped = threading.Event()
-        self._warmer = LatestWorker(self._warm, name="vmn-ui-warm")
+        self._warmer = LatestWorker(self._warm, name=WARM_THREAD)
         self.gil_hint = GilHint()
         self.gc_policy = POLICY  # process-wide, like the collector it schedules
 

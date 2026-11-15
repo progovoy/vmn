@@ -577,6 +577,9 @@ def pytest_configure(config):
     config.addinivalue_line(
         "markers", "serial: timing benchmark; run_pytest.sh runs it alone, after the parallel pass"
     )
+    config.addinivalue_line(
+        "markers", "emulator: needs a storage emulator container; only CI's tests_storage_emulators runs it"
+    )
 
 
 def pytest_generate_tests(metafunc):

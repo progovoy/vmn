@@ -21,6 +21,7 @@ from __future__ import annotations
 import os
 import shutil
 
+from vmn_exp.core.real_io import real_io
 from vmn_exp.registry.log import remove_alias as _log_remove_alias
 from vmn_exp.registry.log import set_alias as _log_set_alias
 from vmn_exp.registry.names import absolute_artifact_path, valid_model_name
@@ -44,8 +45,8 @@ def _resolve_storage(storage=None):
     """Resolve experiment storage from env or the current checkout."""
     if storage is not None:
         return storage
-    from vmn_exp.core.storage_resolve import resolve_experiment_storage
-    return resolve_experiment_storage()
+    from vmn_exp.sdk.store_resolve import resolve_storage
+    return resolve_storage()
 
 
 def _run_to_ref(run, app_name):
@@ -136,7 +137,8 @@ def register_model(
     )
 
     if alias:
-        _log_set_alias(storage, name, alias, n)
+        io = real_io()
+        _log_set_alias(storage, name, alias, n, env=io.env, host=io.host)
 
     return get_model_version(f"{name}@{n}", storage=storage)
 
@@ -150,13 +152,15 @@ def set_alias(model, alias, version, expect=None, *, storage=None) -> None:
     raises :class:`ValueError`.
     """
     storage = _resolve_storage(storage)
-    _log_set_alias(storage, model, alias, version, expect=expect)
+    io = real_io()
+    _log_set_alias(storage, model, alias, version, expect=expect, env=io.env, host=io.host)
 
 
 def remove_alias(model, alias, *, storage=None) -> None:
     """Remove *alias* from *model*'s registry."""
     storage = _resolve_storage(storage)
-    _log_remove_alias(storage, model, alias)
+    io = real_io()
+    _log_remove_alias(storage, model, alias, env=io.env, host=io.host)
 
 
 def get_model_version(ref, *, storage=None) -> dict:
@@ -219,7 +223,7 @@ def download_model(ref, dst=None, *, storage=None, record=True) -> str:
         )
 
     if absolute_artifact_path(artifact_path):
-        local = location_local_path(artifact_path, store=storage)
+        local = location_local_path(artifact_path, store=storage, env=real_io().env)
         if local is None:
             raise FileNotFoundError(f"Artifact {artifact_path!r} not found.")
     else:
@@ -227,7 +231,7 @@ def download_model(ref, dst=None, *, storage=None, record=True) -> str:
     if record:
         from vmn_exp.sdk.usage import record_current_use
 
-        record_current_use(storage, meta)
+        record_current_use(storage, meta, real_io())
 
     if dst is not None:
         os.makedirs(dst, exist_ok=True)

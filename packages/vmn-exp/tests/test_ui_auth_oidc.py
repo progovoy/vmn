@@ -1,18 +1,21 @@
 """OIDC authorization code + PKCE login against a minimal fake IdP."""
 import base64
 import hashlib
-import json
+import time
 from urllib.parse import parse_qs, urlsplit
 
 import pytest
 
 fastapi = pytest.importorskip("fastapi")
 from fastapi.testclient import TestClient
-
+from oidc_test_keys import JWKS_URI, jwks, signed_jwt
 from vmn_exp.ui.auth import AuthenticatorChain
+from vmn_exp.ui.auth.authz import effective_role
+from vmn_exp.ui.auth.jwks import JwksVerifier
 from vmn_exp.ui.auth.oidc import SESSION_COOKIE, OIDCAuthenticator, OIDCConfig
 from vmn_exp.ui.auth.principal import EDITOR, VIEWER
 from vmn_exp.ui.control_plane import SQLiteControlPlane
+from vmn_exp.core.real_io import RealRandom, real_io
 
 ISSUER = "https://idp.example"
 
@@ -22,8 +25,7 @@ def _b64(raw):
 
 
 def _jwt(claims):
-    head = _b64(json.dumps({"alg": "RS256"}).encode())
-    return f"{head}.{_b64(json.dumps(claims).encode())}.sig"
+    return signed_jwt(claims)
 
 
 class FakeIdP:
@@ -44,11 +46,14 @@ class FakeIdP:
         return code, q["state"]
 
     def get_json(self, url):
+        if url == JWKS_URI:
+            return jwks()
         assert url == f"{ISSUER}/.well-known/openid-configuration"
         return {
             "issuer": self.issuer,
             "authorization_endpoint": f"{ISSUER}/authorize",
             "token_endpoint": f"{ISSUER}/token",
+            "jwks_uri": JWKS_URI,
         }
 
     def post_form(self, url, data):
@@ -73,19 +78,23 @@ def _client(tmp_path, idp):
         client_id="vmn-exp",
         client_secret="shh",
         redirect_uri="https://testserver/auth/callback",
-        role_mappings=[
-            {"group": "ml-team", "workspace": "ml", "role": EDITOR},
-            {"group": "everyone", "workspace": "*", "role": VIEWER},
-        ],
     )
+    mappings = [
+        {"group": "ml-team", "workspace": "ml", "role": EDITOR},
+        {"group": "everyone", "workspace": "*", "role": VIEWER},
+    ]
     store = SQLiteControlPlane(str(tmp_path / "cp.sqlite3"))
-    oidc = OIDCAuthenticator(config, store, http=idp)
-    app = create_app(WorkspaceManager(str(tmp_path / "ui")), auth=AuthenticatorChain([oidc]))
+    oidc = OIDCAuthenticator(config, store, JwksVerifier(idp, lambda: 0.0), http=idp,
+                            clock=time.time, random=RealRandom())
+    app = create_app(WorkspaceManager(str(tmp_path / "ui")), io=real_io(), auth=AuthenticatorChain([oidc]),
+                     role_mappings=mappings)
 
     @app.get("/api/v1/_whoami")
     def _whoami(request: fastapi.Request):
         p = request.state.principal
-        return {"id": p.id, "name": p.name, "roles": p.roles}
+        roles = {ws: effective_role(p, ws, request.app.state.role_mappings)
+                 for ws in ("ml", "other")}
+        return {"id": p.id, "name": p.name, "roles": roles}
 
     # Ahead of the SPA/API catch-alls create_app registered last.
     app.router.routes.insert(0, app.router.routes.pop())
@@ -107,7 +116,8 @@ def test_login_flow_sets_session_and_principal(tmp_path):
     assert r.status_code in (302, 303, 307)
     r = client.get("/api/v1/_whoami")
     assert r.status_code == 200
-    assert r.json() == {"id": "oidc:u1", "name": "Alice", "roles": {"ml": EDITOR}}
+    assert r.json() == {"id": "oidc:u1", "name": "Alice",
+                        "roles": {"ml": EDITOR, "other": None}}
 
 
 def test_session_cookie_flags(tmp_path):
@@ -165,3 +175,70 @@ def test_discovery_issuer_mismatch_fails_login_cleanly(tmp_path):
     r = client.get("/auth/login", follow_redirects=False)
     assert r.status_code == 502
     assert "issuer" in r.json()["detail"]
+
+
+class _DiscoveryOverride(FakeIdP):
+    """FakeIdP whose discovery document carries *overrides*."""
+
+    def __init__(self, **overrides):
+        super().__init__()
+        self.overrides = overrides
+
+    def get_json(self, url):
+        return {**super().get_json(url), **self.overrides}
+
+
+def test_discovery_with_http_token_endpoint_is_refused(tmp_path):
+    idp = _DiscoveryOverride(token_endpoint="http://idp.example/token")
+    r = _client(tmp_path, idp).get("/auth/login", follow_redirects=False)
+    assert r.status_code == 502 and "token_endpoint" in r.json()["detail"]
+
+
+def test_discovery_with_http_authorization_endpoint_is_refused(tmp_path):
+    idp = _DiscoveryOverride(authorization_endpoint="http://idp.example/authorize")
+    r = _client(tmp_path, idp).get("/auth/login", follow_redirects=False)
+    assert r.status_code == 502 and "authorization_endpoint" in r.json()["detail"]
+
+
+def test_loopback_http_issuer_is_allowed():
+    issuer = "http://127.0.0.1:5556"
+
+    class LoopbackIdP:
+        def get_json(self, url):
+            assert url == f"{issuer}/.well-known/openid-configuration"
+            return {"issuer": issuer, "authorization_endpoint": f"{issuer}/authorize",
+                    "token_endpoint": f"{issuer}/token"}
+
+    config = OIDCConfig(issuer=issuer, client_id="vmn-exp",
+                        redirect_uri="http://localhost:8265/auth/callback")
+    idp = LoopbackIdP()
+    meta = OIDCAuthenticator(config, None, JwksVerifier(idp, lambda: 0.0), http=idp,
+                             clock=time.time, random=RealRandom()).metadata()
+    assert meta["token_endpoint"] == f"{issuer}/token"
+
+
+def _unsigned(token):
+    head, body, _ = token.split(".")
+    return f"{head}.{body}.sig"
+
+
+class _UnsignedIdP(FakeIdP):
+    """FakeIdP whose token endpoint answers an id_token with no valid signature."""
+
+    def post_form(self, url, data):
+        reply = super().post_form(url, data)
+        return {**reply, "id_token": _unsigned(reply["id_token"])}
+
+
+def test_complete_refuses_unsigned_id_token(tmp_path):
+    idp = _UnsignedIdP()
+    client = _client(tmp_path, idp)
+    r = _login(client, idp)
+    assert r.status_code == 400 and "signature" in r.json()["detail"]
+    assert client.get("/api/v1/_whoami").status_code == 401
+
+
+def test_discovery_with_http_jwks_uri_is_refused(tmp_path):
+    idp = _DiscoveryOverride(jwks_uri="http://idp.example/jwks")
+    r = _client(tmp_path, idp).get("/auth/login", follow_redirects=False)
+    assert r.status_code == 502 and "jwks_uri" in r.json()["detail"]

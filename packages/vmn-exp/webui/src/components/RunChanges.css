@@ -16,5 +16,6 @@
 .run-changes .changes-files .path { overflow-wrap: anywhere; min-width: 0; }
 .run-changes .changes-files .add { color: var(--good); font-family: var(--mono); }
 .run-changes .changes-files .del { color: var(--bad); font-family: var(--mono); }
+.run-changes .changes-untracked { margin-bottom: 8px; }
 .run-changes .changes-diff .diff { margin-top: 8px; max-height: 480px; overflow: auto; }
 .run-changes-foot { margin-top: 10px; display: flex; justify-content: flex-end; font-size: 13px; }

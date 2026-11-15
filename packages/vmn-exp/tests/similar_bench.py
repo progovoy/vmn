@@ -18,6 +18,7 @@ import subprocess
 import sys
 import tempfile
 import time
+from vmn_exp.core.real_io import RealClock
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.dirname(os.path.dirname(os.path.dirname(HERE)))
@@ -33,7 +34,7 @@ CONTEXT = " ".join(scale_store._VOCAB[100:120])
 def _storage(store):
     from vmn_exp.snapshot import open_storage
 
-    return open_storage(root=os.path.join(store, ".vmn", "store"), area="runs")
+    return open_storage(root=os.path.join(store, ".vmn", "store"), area="runs", clock=RealClock(), env=os.environ)
 
 
 def indexed_store(n):
@@ -82,7 +83,7 @@ def _query(store, path, kind, verstr):
     target = (text_target(CONTEXT) if kind == "text"
               else record_target(storage, APP, verstr))
     scope = file_scope(APP, path, repair=False)
-    items = search(storage, APP, scope, target, top=10)
+    items = search(storage, APP, scope, target, top=10, clock=RealClock())
     return time.perf_counter() - started, len(items)
 
 

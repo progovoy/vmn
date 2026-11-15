@@ -20,7 +20,6 @@ models from it.
 """
 import logging
 import threading
-import time
 import weakref
 
 from vmn_exp.core.activity import activity
@@ -145,8 +144,9 @@ class RegistrySnapshots:
     :class:`RegistryListings` the other snapshots of the server share), and
     a snapshot is as old as its listing."""
 
-    def __init__(self, background=False, read=RegistrySnapshot.read, listings=None):
-        self._background = background
+    def __init__(self, background=False, read=RegistrySnapshot.read, listings=None, *, clock):
+        """*clock*: monotonic seconds, the base of *listings*' times too."""
+        self._background, self._clock = background, clock
         self._read = read
         self._listings = listings if background else None
         self._entries = weakref.WeakKeyDictionary()  # storage -> _Entry
@@ -178,7 +178,7 @@ class RegistrySnapshots:
 
     def _refresh_when_due(self, storage, entry):
         with self._lock:
-            if entry.refreshing or time.monotonic() - entry.at < REFRESH_SEC:
+            if entry.refreshing or self._clock() - entry.at < REFRESH_SEC:
                 return
             entry.refreshing = True
         threading.Thread(target=self._refresh_later, args=(storage, entry), daemon=True,
@@ -190,14 +190,14 @@ class RegistrySnapshots:
                 self._refresh(storage, entry)
         except Exception:
             _LOGGER.warning("Refreshing the registry snapshot failed", exc_info=True)
-            entry.at = time.monotonic()
+            entry.at = self._clock()
         finally:
             with self._lock:
                 entry.refreshing = False
 
     def _refresh(self, storage, entry):
         if self._listings is None:
-            at, listing = time.monotonic(), None
+            at, listing = self._clock(), None
         else:
             at, listing = self._listings.get(storage)
         entry.snapshot = self._read(storage, entry.snapshot, listing)
@@ -216,7 +216,9 @@ class RegistryListings:
     reused, racing reads wait for one listing, and :meth:`forget` (a write
     through this server) drops it — and any listing in flight then."""
 
-    def __init__(self):
+    def __init__(self, clock):
+        """*clock*: monotonic seconds."""
+        self._clock = clock
         self._entries = weakref.WeakKeyDictionary()  # storage -> _Listing
         self._lock = threading.Lock()
 
@@ -225,10 +227,10 @@ class RegistryListings:
         entry = self._entry(storage)
         with entry.lock:
             with self._lock:
-                if entry.listing is not None and time.monotonic() - entry.at < REFRESH_SEC:
+                if entry.listing is not None and self._clock() - entry.at < REFRESH_SEC:
                     return entry.at, entry.listing
             while True:
-                generation, at = entry.generation, time.monotonic()
+                generation, at = entry.generation, self._clock()
                 listing = list_registry(storage)
                 with self._lock:
                     if entry.generation == generation:

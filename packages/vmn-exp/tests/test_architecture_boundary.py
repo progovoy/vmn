@@ -47,7 +47,7 @@ EXEMPT_PREFIXES = ()
 ALLOWED_FACADE = "version_stamp.api"
 
 # The git-free store layer: the second public contract experiments may import,
-# with its submodules (docs/plans/37-s3-snapshot-store-in-core.md).
+# with its submodules (docs/plans/45-s3-snapshot-store-in-core.md).
 ALLOWED_CONTRACT_PACKAGE = "version_stamp.store"
 
 

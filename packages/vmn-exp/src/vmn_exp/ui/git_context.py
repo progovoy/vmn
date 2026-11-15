@@ -43,22 +43,25 @@ def _failure(error):
             "dirty": None, "error": error}
 
 
-def _status(path):
+def _status(path, processes):
     try:
-        result = subprocess.run(
+        result = processes.run(
             GIT_STATUS, cwd=path, capture_output=True, text=True, errors="replace",
             timeout=TIMEOUT_SEC,
         )
     except subprocess.TimeoutExpired:
         return _failure("timeout")
-    except OSError as exc:  # no git binary
+    except OSError as exc:  # a missing or unreadable path
         return _failure(str(exc))
+    if result is None:
+        return _failure("git not found")
     if result.returncode != 0:
         lines = result.stderr.strip().splitlines()
         return _failure(lines[0] if lines else f"git exited {result.returncode}")
     return parse_status(result.stdout)
 
 
-def git_context(path):
-    """The checkout at *path*'s git context, with where the ui reads its runs."""
-    return dict(_status(path), store=os.path.relpath(local_store_root(path), path))
+def git_context(path, processes):
+    """The checkout at *path*'s git context (git run through *processes*),
+    with where the ui reads its runs."""
+    return dict(_status(path, processes), store=os.path.relpath(local_store_root(path), path))

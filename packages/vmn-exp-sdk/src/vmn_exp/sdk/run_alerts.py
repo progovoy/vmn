@@ -41,7 +41,8 @@ class RunAlerts:
 
     def _alerter(self):
         if self._alerter_instance is None:
-            self._alerter_instance = Alerter(load_alert_config(self.app_name, self._exp_conf))
+            self._alerter_instance = Alerter(load_alert_config(self.app_name, self._exp_conf, env=self._env),
+                                             clock=self._clock.monotonic)
         return self._alerter_instance
 
     def _finish_alerts(self, timeout):
@@ -49,4 +50,4 @@ class RunAlerts:
         alerter = self._alerter()
         alerter.drain(timeout)
         alert_if_failed(self._storage, self.app_name, self.id, self._state,
-                        alerter, run_name=self.name)
+                        alerter, run_name=self.name, now=self._clock.now())

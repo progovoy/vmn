@@ -15,6 +15,7 @@ from exp_helpers import (
     _storage,
     extract_dev_verstr,
 )
+from vmn_exp.core.real_io import real_io
 
 
 def _client(app_layout, read_only=False, extra=None):
@@ -25,7 +26,7 @@ def _client(app_layout, read_only=False, extra=None):
     manager.attach_path("main", app_layout.repo_path)
     for name, path in (extra or {}).items():
         manager.attach_path(name, path)
-    return TestClient(create_app(manager, read_only=read_only))
+    return TestClient(create_app(manager, io=real_io(), read_only=read_only))
 
 
 def _wait_job(client, job_url, timeout=60):
@@ -141,7 +142,7 @@ def test_ui_action_cli_preview(app_layout, capfd):
     )
     job = client.get(f"/api/v1/jobs/{r.json()['id']}").json()
     assert job["command"][:2] == ["vmn", "stamp"]
-    assert "-r" in job["command"] and "minor" in job["command"]
+    assert "--release-mode=minor" in job["command"]
 
 
 def test_ui_exp_create_build_command():
@@ -157,11 +158,9 @@ def test_ui_exp_create_build_command():
         "experiment",
         "create",
         "my_app",
-        "--note",
-        "swin-t",
-        "--metrics",
-        "loss=0.1",
-        "acc=0.9",
+        "--note=swin-t",
+        "--metrics=loss=0.1",
+        "--metrics=acc=0.9",
     ]
 
     cmd, err = build_command("exp_create", "my_app", {})
@@ -188,10 +187,8 @@ def test_ui_note_build_command_runs_vmn_exp():
         "experiment",
         "add",
         "my_app",
-        "-v",
-        "0.0.1-dev.abc.def",
-        "--note",
-        "hi",
+        "--version=0.0.1-dev.abc.def",
+        "--note=hi",
     ]
 
 
@@ -210,10 +207,8 @@ def test_ui_exp_add_build_command():
         "experiment",
         "add",
         "my_app",
-        "-v",
-        "0.0.1-dev.abc.def",
-        "--metrics",
-        "loss=0.05",
+        "--version=0.0.1-dev.abc.def",
+        "--metrics=loss=0.05",
     ]
 
     # verstr is required — you append to a specific run.
@@ -305,7 +300,7 @@ def test_ui_goto_build_command_version_optional():
 
     cmd, err = build_command("goto", "my_app", {"verstr": "1.2.0"})
     assert err is None
-    assert cmd == ["vmn", "goto", "-v", "1.2.0", "my_app"]
+    assert cmd == ["vmn", "goto", "--version=1.2.0", "my_app"]
 
 
 def test_ui_goto_action_without_version(app_layout, capfd):
@@ -366,3 +361,42 @@ def test_ui_workspace_isolation_on_stamp(app_layout, capfd):
     assert main_v[-1]["verstr"] == "0.1.0"
     assert second_v[-1]["verstr"] == "0.0.1"
     assert not os.path.exists(os.path.join(second, "iso.txt"))
+
+
+@pytest.mark.parametrize("keep", [0, -1, -5, "-1", "5", True, "5 --dry-run", 1.5])
+def test_ui_prune_keep_must_be_positive_int(keep):
+    from vmn_exp.ui.jobs import build_command
+
+    assert build_command("prune", "my_app", {"keep": keep})[0] is None
+    for ok in (1, 5):
+        assert build_command("prune", "my_app", {"keep": ok}) == (
+            ["vmn-exp", "experiment", "prune", "my_app", f"--keep={ok}"], None)
+
+
+@pytest.mark.parametrize("older_than", ["30", "d", "-30d", "30d --keep=0", "30m", 30, ["30d"]])
+def test_ui_prune_older_than_must_be_a_duration(older_than):
+    from vmn_exp.ui.jobs import build_command
+
+    assert build_command("prune", "my_app", {"older_than": older_than})[0] is None
+    assert build_command("prune", "my_app", {"older_than": "30d"}) == (
+        ["vmn-exp", "experiment", "prune", "my_app", "--older-than=30d"], None)
+
+
+@pytest.mark.parametrize("action", ["release", "goto", "restore"])
+@pytest.mark.parametrize("verstr", ["-v", "--attach=x", "a/b", "..", 7, ["1.0.0"]])
+def test_ui_release_goto_restore_refuse_invalid_verstr(action, verstr):
+    from vmn_exp.ui.jobs import build_command
+
+    cmd, err = build_command(action, "my_app", {"verstr": verstr})
+    assert cmd is None and err
+
+
+@pytest.mark.parametrize("prerelease", [["rc"], 7, {"a": 1}, "rc\n1"])
+def test_ui_stamp_prerelease_must_be_str(prerelease):
+    from vmn_exp.ui.jobs import build_command
+
+    body = {"release_mode": "patch", "prerelease": prerelease}
+    assert build_command("stamp", "my_app", body)[0] is None
+    body = {"release_mode": "minor", "prerelease": "rc", "dry_run": True}
+    assert build_command("stamp", "my_app", body) == (
+        ["vmn", "stamp", "--release-mode=minor", "--pr=rc", "--dry-run", "my_app"], None)

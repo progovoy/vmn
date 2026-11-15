@@ -22,9 +22,11 @@ take a query instead and return every verstr they changed. Archived runs are hid
 from vmn_exp.core import run_finish
 from vmn_exp.core.manage import set_archived, tag_run
 from vmn_exp.core.query import compile_query
+from vmn_exp.core.real_io import real_io
 from vmn_exp.core.refs import needs_listing, point_placement, resolve_experiment
 from vmn_exp.core.run_finish import FinishRefusedError, RunRefusedError  # noqa: F401
-from vmn_exp.core.writer import append_to_log, create_log_entry, flush_log
+from vmn_exp.core.status import min_stale_sec
+from vmn_exp.core.writer import append_to_log, create_log_entry, flush_log, get_writer_id
 from vmn_exp.sdk.reader import _resolve, list_runs
 from vmn_exp.sdk.resume import ReopenRefusedError  # noqa: F401
 from vmn_exp.storage.s3_base import parallel_map
@@ -84,7 +86,8 @@ def _set_archived_by_query(app_name, query, status, storage, dry_run, archived):
 def set_tags(app_name=None, ref="latest", tags=None, *, remove=None, storage=None):
     """Set *tags* (``{key: value}``, stored as strings) and drop *remove* keys."""
     app_name, storage, verstr = _target(app_name, ref, storage)
-    done = tag_run(storage, app_name, verstr, tags, remove)
+    io = real_io()
+    done = tag_run(storage, app_name, verstr, tags, remove, writer=get_writer_id(io.env, io.host))
     return _changed(done, app_name, verstr)
 
 
@@ -101,7 +104,7 @@ def finish_run(app_name, ref, exit_code, *, error=None, end_reason=None, force=F
     heartbeats are then dropped.
     """
     app_name, storage, verstr = _target(app_name, ref, storage)
-    return _finish_one(storage, app_name, verstr, exit_code, error, end_reason, force)
+    return _finish_one(storage, app_name, verstr, exit_code, error, end_reason, force, real_io())
 
 
 def finish_runs(app_name, refs, exit_code, *, error=None, end_reason=None, force=False,
@@ -116,13 +119,14 @@ def finish_runs(app_name, refs, exit_code, *, error=None, end_reason=None, force
     run_finish.checked_force(force)
     app_name, storage, _ = _resolve(app_name, storage)
     refs = list(dict.fromkeys(refs))
+    io = real_io()
 
     def finish(target):
         if isinstance(target, ValueError):
             return target
         try:
             return _finish_one(storage, app_name, target, exit_code, error,
-                               end_reason, force)
+                               end_reason, force, io)
         except ValueError as exc:
             return exc
 
@@ -147,9 +151,11 @@ def _targets(storage, app_name, refs):
     return targets
 
 
-def _finish_one(storage, app_name, verstr, exit_code, error, end_reason, force):
+def _finish_one(storage, app_name, verstr, exit_code, error, end_reason, force, io):
     done = run_finish.finish_run(storage, app_name, verstr, exit_code, error=error,
-                                 end_reason=end_reason, force=force)
+                                 end_reason=end_reason, force=force, random=io.random,
+                                 now=io.clock.now(), writer=get_writer_id(io.env, io.host),
+                                 min_stale_sec=min_stale_sec(io.env))
     return _changed(done, app_name, verstr)
 
 
@@ -171,7 +177,9 @@ def _append(app_name, ref, storage, entry):
     app_name, storage, verstr = _target(app_name, ref, storage)
     if not storage.exists(app_name, verstr):
         return _changed(False, app_name, verstr)
-    append_to_log(storage, app_name, verstr, entry)
+    io = real_io()
+    writer = get_writer_id(io.env, io.host)
+    append_to_log(storage, app_name, verstr, entry, writer)
     # A one-shot call: no heartbeat is around to ship it later.
-    flush_log(storage, app_name, verstr)
+    flush_log(storage, app_name, verstr, writer)
     return verstr

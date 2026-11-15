@@ -24,6 +24,7 @@ import weakref
 
 from vmn_exp.core.best_effort import BestEffort
 from vmn_exp.core.lineage import artifact_ref_uri
+from vmn_exp.core.real_io import real_io
 from vmn_exp.registry.datasets import producer_output
 from vmn_exp.registry.log import record_use
 from vmn_exp.registry.names import absolute_artifact_path, parse_ref, registry_uri
@@ -62,16 +63,18 @@ def resolved_version(storage, ref, kind) -> dict:
     return resolve_ref(storage, ref)
 
 
-def record_current_use(storage, meta) -> None:
-    """Record *meta*'s version as used by the current run, if one is open."""
+def record_current_use(storage, meta, io) -> None:
+    """Record *meta*'s version as used by the current run, if one is open, as
+    the writer of *io*'s env and host."""
     run = context.current_run()
     if run is not None:
-        record_version_use(run, storage, meta, model_kind(storage, meta["model"]) or "model")
+        record_version_use(run, storage, meta, model_kind(storage, meta["model"]) or "model", io)
 
 
-def record_version_use(run, storage, meta, kind) -> None:
+def record_version_use(run, storage, meta, kind, io) -> None:
     """Log *meta*'s version as an input of *run*, then note the use in the
-    registry. A run records each version once."""
+    registry as the writer of *io*'s env and host. A run records each version
+    once."""
     key = (meta["model"], meta["n"])
     with _USED_LOCK:
         if key in _USED.get(run, ()):
@@ -80,7 +83,7 @@ def record_version_use(run, storage, meta, kind) -> None:
     with _USED_LOCK:
         _USED.setdefault(run, set()).add(key)
     _REGISTRY_GUARD(f"use of {key[0]}@{key[1]}", record_use,
-                    storage, key[0], key[1], run.app_name, run.id)
+                    storage, key[0], key[1], run.app_name, run.id, env=io.env, host=io.host)
 
 
 def _use(ref, kind, run, storage):
@@ -88,7 +91,7 @@ def _use(ref, kind, run, storage):
     storage = _resolve_storage(storage or getattr(run, "_storage", None))
     meta = resolved_version(storage, ref, kind)
     if run is not None:
-        record_version_use(run, storage, meta, kind)
+        record_version_use(run, storage, meta, kind, real_io())
     return meta
 
 

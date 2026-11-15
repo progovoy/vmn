@@ -12,6 +12,7 @@ from vmn_exp.core.tree import rollup_status
 from vmn_exp.sdk.reader import list_runs
 from vmn_exp.snapshot import open_storage
 from vmn_exp.storage.areas import local_store_root
+from vmn_exp.core.real_io import RealClock, real_io
 
 APP = "loadapp"
 STATUSES = ("succeeded", "failed", "stuck", "created")
@@ -30,7 +31,7 @@ def seeded(tmp_path_factory):
         root, runs=60, sweeps=2, inner_per_sweep=5, max_metric_keys=30,
         max_steps=500, max_params=20, rng_seed=7, workers=2,
     )
-    storage = open_storage(root=local_store_root(root), area="runs")
+    storage = open_storage(root=local_store_root(root), area="runs", clock=RealClock(), env=os.environ)
     rows = list_runs(APP, storage=storage, include_archived=True)
     return root, counts, storage, rows
 
@@ -132,7 +133,7 @@ def test_ui_api_lists_all_seeded_runs(seeded):
     root, counts, _, _ = seeded
     manager = WorkspaceManager(os.path.join(os.path.dirname(root), "uidata"))
     manager.attach_path("ws", root)
-    client = TestClient(create_app(manager))
+    client = TestClient(create_app(manager, io=real_io()))
     base = f"/api/v1/workspaces/ws/apps/{APP}/experiments"
     page = client.get(f"{base}?limit=1000&archived=1").json()
     assert page["total"] == 60
@@ -145,7 +146,7 @@ def test_nan_and_inf_metrics_are_kept_somewhere(tmp_path):
     root = _root(tmp_path)
     seeder.seed(root, runs=400, sweeps=0, inner_per_sweep=0, max_metric_keys=10,
                 max_steps=50, max_params=5, workers=1)
-    storage = open_storage(root=local_store_root(root), area="runs")
+    storage = open_storage(root=local_store_root(root), area="runs", clock=RealClock(), env=os.environ)
     values = [v for r in list_runs(APP, storage=storage, include_archived=True)
               for v in r["metrics"].values()]
     assert any(isinstance(v, float) and not math.isfinite(v) for v in values)

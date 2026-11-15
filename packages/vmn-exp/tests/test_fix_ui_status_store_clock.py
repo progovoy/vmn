@@ -1,6 +1,7 @@
 """The ui derives stuck on both clocks: a run_state.yml the store saw written
 recently is live however stale its writer's heartbeat timestamp is."""
 import os
+import time
 
 import pytest
 from test_fix_exp_status_store_clock import _running, _write_run
@@ -9,6 +10,7 @@ from vmn_exp.storage.local import LocalSnapshotStorage
 
 fastapi = pytest.importorskip("fastapi")
 from fastapi.testclient import TestClient
+from vmn_exp.core.real_io import real_io
 
 API = "/api/v1/workspaces/main/apps"
 
@@ -19,7 +21,7 @@ def _client(app_layout, use_index=True):
 
     manager = WorkspaceManager(os.path.join(app_layout.base_dir, "ui_data"))
     manager.attach_path("main", app_layout.repo_path)
-    return TestClient(create_app(manager, use_index=use_index))
+    return TestClient(create_app(manager, io=real_io(), use_index=use_index))
 
 
 def _seed(app_layout):
@@ -72,7 +74,8 @@ def test_detail_uses_the_snapshot_store_time_with_a_refresher():
                                observed_at={"v": observed})
     from vmn_exp.ui.refresher import Refresher
 
-    source = ExperimentSource("/nonexistent", refresher=Refresher())
+    source = ExperimentSource("/nonexistent", refresher=Refresher(clock=time.monotonic),
+                              clock=real_io().clock, processes=real_io().processes, env=os.environ)
     options = source.detail_options(None, snap)
     assert options["read_observed_at"](None, "app", "v") is observed
 

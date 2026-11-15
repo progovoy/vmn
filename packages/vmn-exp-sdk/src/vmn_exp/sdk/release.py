@@ -14,8 +14,6 @@ SDK's SIGTERM handler release such a run instead of failing it with 143;
 ``"kill"`` re-delivers the signal, ``"raise"`` raises ``SystemExit(143)`` in
 the main thread so ``finally`` blocks and context managers still run.
 """
-import os
-
 from vmn_exp._base import now_iso
 from vmn_exp.core.status import RELEASED
 
@@ -27,20 +25,20 @@ SIGTERM_EXIT = (KILL, RAISE)
 SIGTERM_EXIT_ENV = "VMN_EXP_SIGTERM_EXIT"
 
 
-def resolve_on_sigterm(value):
-    """*value*, else ``VMN_EXP_ON_SIGTERM``, else ``"fail"`` — validated."""
-    return _resolve(value, ON_SIGTERM, "on_sigterm", ON_SIGTERM_ENV)
+def resolve_on_sigterm(value, env):
+    """*value*, else *env*'s ``VMN_EXP_ON_SIGTERM``, else ``"fail"`` — validated."""
+    return _resolve(value, ON_SIGTERM, "on_sigterm", env, ON_SIGTERM_ENV)
 
 
-def resolve_sigterm_exit(value):
-    """*value*, else ``VMN_EXP_SIGTERM_EXIT``, else ``"kill"`` — validated."""
-    return _resolve(value, SIGTERM_EXIT, "sigterm_exit", SIGTERM_EXIT_ENV)
+def resolve_sigterm_exit(value, env):
+    """*value*, else *env*'s ``VMN_EXP_SIGTERM_EXIT``, else ``"kill"`` — validated."""
+    return _resolve(value, SIGTERM_EXIT, "sigterm_exit", env, SIGTERM_EXIT_ENV)
 
 
-def _resolve(value, choices, name, env):
-    """The first of *choices* is the default; a bad env value names *env*."""
-    if value is None and os.environ.get(env):
-        value, name = os.environ[env], env
+def _resolve(value, choices, name, env, var):
+    """The first of *choices* is the default; a bad env value names *var*."""
+    if value is None and env.get(var):
+        value, name = env[var], var
     value = choices[0] if value is None else value
     if value not in choices:
         raise ValueError(f"{name} must be one of {', '.join(choices)}, not {value!r}")

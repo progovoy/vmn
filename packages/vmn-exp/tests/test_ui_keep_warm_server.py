@@ -11,6 +11,7 @@ from fastapi.testclient import TestClient
 from vmn_exp.snapshot import open_storage
 from vmn_exp.storage.areas import local_store_root
 from vmn_exp.storage.local import LocalSnapshotStorage
+from vmn_exp.core.real_io import RealClock, real_io
 
 STORE_APP, REPO_APP = "store_app", "repo_app"
 
@@ -26,13 +27,13 @@ def _app(tmp_path, **opts):
 
     repo = tmp_path / "repo"
     (repo / ".git").mkdir(parents=True)
-    _save(open_storage(root=local_store_root(str(repo)), area="runs"), REPO_APP)
+    _save(open_storage(root=local_store_root(str(repo)), area="runs", clock=RealClock(), env=os.environ), REPO_APP)
     store = tmp_path / "store"
     _save(LocalSnapshotStorage(str(store), area="runs"), STORE_APP)
     manager = WorkspaceManager(str(tmp_path / "data"))
     manager.attach_path("repo", str(repo))
     manager.add_store("st", f"file://{os.path.abspath(store)}")
-    return create_app(manager, background_refresh=True, **opts)
+    return create_app(manager, io=real_io(), background_refresh=True, **opts)
 
 
 def _kept_warm(app):

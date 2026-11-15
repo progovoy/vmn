@@ -1,0 +1,174 @@
+"""Ratchet: no new direct IO in vmn-exp (CLAUDE.md "IO behind interfaces").
+
+Every module of the two vmn_exp src roots is scanned with io_scan.scan and
+compared with io_boundary_known.KNOWN_IO. A count may only go down, and an
+entry must be lowered in the same commit that removes a call. Regenerate:
+    python packages/vmn-exp/tests/test_io_boundary.py --regen
+"""
+import ast
+import sys
+from pathlib import Path
+
+from io_boundary_known import KNOWN_IO, REAL_IO, REAL_WIRED
+from io_scan import scan
+
+REPO = Path(__file__).resolve().parents[3]
+SRC_ROOTS = [REPO / "packages" / dist / "src" for dist in ("vmn-exp-sdk", "vmn-exp")]
+REGEN = "python packages/vmn-exp/tests/test_io_boundary.py --regen"
+
+
+def _module_name(path, src):
+    return ".".join(path.relative_to(src).with_suffix("").parts).removesuffix(".__init__")
+
+
+def _module_paths():
+    return {
+        _module_name(path, src): path
+        for src in SRC_ROOTS
+        for path in sorted((src / "vmn_exp").rglob("*.py"))
+    }
+
+
+def _actual_io():
+    found = {}
+    for module, path in _module_paths().items():
+        counts = scan(path.read_text())
+        if counts:
+            found[module] = dict(sorted(counts.items()))
+    return found
+
+
+def _top_level_names(path):
+    names = set()
+    for node in ast.parse(path.read_text()).body:
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            names.add(node.name)
+        elif isinstance(node, ast.Assign):
+            names |= {t.id for t in node.targets if isinstance(t, ast.Name)}
+    return names
+
+
+def test_no_module_exceeds_its_known_io():
+    over = [
+        f"{module}: {kind} {count} > {KNOWN_IO.get(module, {}).get(kind, 0)}"
+        for module, counts in _actual_io().items()
+        for kind, count in counts.items()
+        if count > KNOWN_IO.get(module, {}).get(kind, 0)
+    ]
+    assert not over, (
+        "New direct IO; take it as an injected parameter instead "
+        f"(or, for a real implementation, run `{REGEN}`):\n  " + "\n  ".join(over)
+    )
+
+
+def test_known_io_has_no_stale_entries():
+    actual = _actual_io()
+    stale = [
+        f"{module}: {kind} known {known} > actual {actual.get(module, {}).get(kind, 0)}"
+        for module, counts in KNOWN_IO.items()
+        for kind, known in counts.items()
+        if known > actual.get(module, {}).get(kind, 0)
+    ]
+    assert not stale, f"Direct IO went down; lower the list with `{REGEN}`:\n  " + "\n  ".join(stale)
+
+
+def test_real_io_entries_name_existing_modules_and_carry_a_reason():
+    modules = _module_paths()
+    bad = [m for m, reason in REAL_IO.items() if m not in modules or not reason.strip()]
+    assert not bad
+
+
+# SnapshotStorage is the filesystem interface for store data (plan 44 G14): its
+# local implementation is real IO, declared with a "storage: " reason.
+STORAGE_REASON = "storage: "
+CORE_STORAGE_MODULES = {"vmn_exp.core.sqlite_conn", "vmn_exp.core.sqlite_files", "vmn_exp.core.index_io_process"}
+
+
+def test_no_ui_or_cli_module_is_on_the_real_io_list_as_storage():
+    storage = {m for m, reason in REAL_IO.items() if reason.startswith(STORAGE_REASON)}
+    assert storage, "the local Storage implementation modules are declared in REAL_IO"
+    misplaced = [m for m in storage if not m.startswith("vmn_exp.storage.") and m not in CORE_STORAGE_MODULES]
+    assert not misplaced
+
+
+def test_real_wired_entries_name_existing_names_and_carry_a_reason():
+    modules = _module_paths()
+    bad = [
+        name
+        for name, (module, reason) in REAL_WIRED.items()
+        if module not in modules
+        or name not in _top_level_names(modules[module])
+        or not reason.strip()
+    ]
+    assert not bad
+
+
+# The entry points CLAUDE.md names: `vmn-exp` main and the `vmn-exp ui` app factory.
+ENTRY_POINTS = {"vmn_exp.cli.main", "vmn_exp.ui.cli"}
+
+
+def _calls_real_io(path):
+    return any(
+        isinstance(node, ast.Call)
+        and (getattr(node.func, "id", None) == "real_io" or getattr(node.func, "attr", None) == "real_io")
+        for node in ast.walk(ast.parse(path.read_text()))
+    )
+
+
+def test_only_entry_points_and_listed_modules_call_real_io():
+    allowed = ENTRY_POINTS | REAL_IO.keys() | {module for module, _ in REAL_WIRED.values()}
+    callers = {module for module, path in _module_paths().items() if _calls_real_io(path)}
+    assert callers <= allowed, (
+        "real_io() is built only in an entry point or a module listed in REAL_IO/REAL_WIRED; "
+        f"take an `io` parameter instead: {sorted(callers - allowed)}"
+    )
+
+
+def test_no_clock_alias_remains_in_core_or_cli():
+    aliased = sorted(module for module, counts in _actual_io().items()
+                     if counts.get("clock_alias") and module not in REAL_IO)
+    assert not aliased, f"a module-level clock alias; take a Clock parameter instead: {aliased}"
+
+
+# Plan 44 G11: these resolve an omitted clock to real_io().clock, so production
+# code must hand them its own (LeaderboardCache takes it as a ``now`` callable).
+LIST_2 = {"ExperimentIndex": "clock", "SqliteStore": "clock", "LeaderboardCache": "now",
+          "shared_index": "clock", "indexed_snapshot": "clock", "indexed_status_rows": "clock"}
+
+
+def _called_name(call):
+    return getattr(call.func, "id", None) or getattr(call.func, "attr", None)
+
+
+def test_production_code_passes_a_clock_to_every_list_2_name():
+    missing = [
+        f"{module}:{node.lineno} {_called_name(node)}("
+        for module, path in _module_paths().items()
+        for node in ast.walk(ast.parse(path.read_text()))
+        if isinstance(node, ast.Call) and _called_name(node) in LIST_2
+        and LIST_2[_called_name(node)] not in {k.arg for k in node.keywords}
+    ]
+    assert not missing, "pass the caller's clock:\n  " + "\n  ".join(missing)
+
+
+def _regen():
+    lines = [
+        f"# AUTO-GENERATED (KNOWN_IO) by: {REGEN}",
+        "# KNOWN_IO only shrinks. REAL_IO and REAL_WIRED are hand-kept and survive --regen.",
+        "",
+        f"REAL_IO = {REAL_IO!r}",
+        f"REAL_WIRED = {REAL_WIRED!r}",
+        "",
+        "KNOWN_IO = {",
+    ]
+    lines += [f"    {module!r}: {counts!r}," for module, counts in sorted(_actual_io().items())]
+    lines += ["}", ""]
+    out = Path(__file__).parent / "io_boundary_known.py"
+    out.write_text("\n".join(lines))
+    print(f"Written: {out}")
+
+
+if __name__ == "__main__":
+    if "--regen" not in sys.argv:
+        sys.exit(f"Usage: {REGEN}")
+    _regen()

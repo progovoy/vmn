@@ -6,6 +6,7 @@ import itertools
 import time
 
 import pytest
+from bench_timing import fastest
 
 from vmn_exp.core.index_snapshot import IndexSnapshot
 from vmn_exp.ui.readers.baselines import last_good
@@ -111,10 +112,17 @@ def test_a_unique_command_on_a_big_app_is_a_lookup():
     states = {r["verstr"]: _state(f"cmd {i}") for i, r in enumerate(rows)}
     snap = _snapshot(rows, states)
     last_good(snap, "v299999")
-    started = time.perf_counter()
-    for n in range(299_990, 300_000):
-        assert last_good(snap, f"v{n}") is None
-    assert (time.perf_counter() - started) / 10 < 0.002
+    attempts = itertools.count()
+
+    def lookup():
+        """Seconds a lookup of 10 runs no earlier attempt looked up."""
+        first = 299_990 - 10 * next(attempts)
+        started = time.perf_counter()
+        for n in range(first, first + 10):
+            assert last_good(snap, f"v{n}") is None
+        return (time.perf_counter() - started) / 10
+
+    assert fastest(lookup, budget=0.002) < 0.002
 
 
 def test_a_command_holding_nested_lists_or_dicts_still_matches():

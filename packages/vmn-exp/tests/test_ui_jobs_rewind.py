@@ -9,7 +9,7 @@ V1 = "0.0.1-dev.abc.def"
 def test_exp_rewind_builds_the_cli_call():
     cmd, err = build_command("exp_rewind", "my_app", {"verstr": V1, "step": 3})
     assert err is None
-    assert cmd == ["vmn-exp", "experiment", "rewind", "my_app", "-v", V1, "--step", "3"]
+    assert cmd == ["vmn-exp", "experiment", "rewind", "my_app", f"--version={V1}", "--step=3"]
 
 
 @pytest.mark.parametrize("step", [None, -1, "3", 1.5, True, [2]])

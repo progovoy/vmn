@@ -24,6 +24,7 @@ from test_storage_cached_log_seed import (  # noqa: F401
 from vmn_exp.core.writer import own_stream
 from vmn_exp.storage.files import log_object_name
 from vmn_exp.storage.ship_state import FINALIZING_WAIT_SEC
+from writer_args import process_writer
 
 PROMPT_SEC = FINALIZING_WAIT_SEC + 3
 
@@ -43,7 +44,7 @@ def test_a_local_copy_without_the_writers_base_log_ships_without_a_type_error(tm
     assert b.load_record(APP, V)[0] is not None
     segment = b"".join(b'{"timestamp": "2026-01-01T00:00:3%dZ", "type": "note", '
                        b'"text": "old segment %d"}\n' % (i, i) for i in range(3))
-    b._local.save_file(APP, V, log_object_name(own_stream(b, APP, V), 1), segment)
+    b._local.save_file(APP, V, log_object_name(own_stream(b, APP, V, writer=process_writer()), 1), segment)
 
     _sync(b)
 

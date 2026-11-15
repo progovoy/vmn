@@ -6,6 +6,7 @@ fastapi = pytest.importorskip("fastapi")
 from fastapi.testclient import TestClient  # noqa: E402
 
 from vmn_exp.ui.auth import AuthenticatorChain  # noqa: E402
+from vmn_exp.core.real_io import real_io  # noqa: E402
 
 SECRET = "s3cret-token-value"
 
@@ -25,7 +26,7 @@ def _client(tmp_path, token=None, oidc=False):
     from vmn_exp.ui.workspaces import WorkspaceManager
 
     auth = AuthenticatorChain([_OidcStub()]) if oidc else None
-    return TestClient(create_app(WorkspaceManager(str(tmp_path / "ui")), token=token, auth=auth))
+    return TestClient(create_app(WorkspaceManager(str(tmp_path / "ui")), io=real_io(), token=token, auth=auth))
 
 
 def _unauthorized(client):
@@ -39,6 +40,7 @@ def test_token_only(tmp_path):
     r = _unauthorized(_client(tmp_path, token=SECRET))
     assert r.json() == {
         "detail": "Unauthorized",
+        "code": "unauthorized",
         "auth": {"token": True, "oidc": False, "login_url": None},
     }
 

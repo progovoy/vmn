@@ -147,3 +147,20 @@ def test_author_is_request_principal(tmp_path):
     rid = create_report(client, headers=user("alice", "editor"))
     got = client.get(f"{WS}/reports/{rid}", headers=user("alice", "viewer")).json()
     assert got["author"]["id"] == "alice" and got["created_by"]["id"] == "alice"
+
+
+def test_reports_limit_offset_and_total(tmp_path):
+    client = make_client(tmp_path)
+    for i in range(3):
+        create_report(client, title=f"R{i}")
+    everything = client.get(f"{WS}/reports").json()["reports"]
+    page = client.get(f"{WS}/reports", params={"offset": 1, "limit": 1}).json()
+    assert page == {"reports": everything[1:2], "total": 3}
+
+
+def test_reports_without_limit_unchanged(tmp_path):
+    client = make_client(tmp_path)
+    create_report(client)
+    create_report(client)
+    body = client.get(f"{WS}/reports").json()
+    assert list(body) == ["reports"] and len(body["reports"]) == 2

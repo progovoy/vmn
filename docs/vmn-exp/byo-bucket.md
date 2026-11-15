@@ -131,7 +131,9 @@ vmn-exp ui onboarding --store s3://acme-ml/vmn --edits --format cloudformation|t
 ```
 
 `--edits` adds the read + edits puts. `--format cloudformation|terraform` needs
-`--account-id` and `--external-id`. Only `s3://` stores are supported. The same
+`--account-id` and `--external-id`. Only `s3://` stores are supported. The
+serve flags (`--port`, `--host`, ...) are not flags of `onboarding`: passing
+one is a usage error (exit 2). The same
 helpers are available in Python from `vmn_exp.ui.onboarding`
 (`permission_policy(bucket, prefix, edits=)`, `trust_policy`,
 `lifecycle_rule`, `cors_rules`, `bucket_settings`, `cloudformation`,
@@ -140,6 +142,13 @@ helpers are available in Python from `vmn_exp.ui.onboarding`
 On GCS and Azure, grant the same prefixes to the server's service account or
 managed identity: object read and list on the prefix, plus object create on
 the edit paths for read + edits.
+
+On Azure, listings start past a key server-side (List Blobs `startFrom`) when
+the installed `azure-storage-blob` sends `start_from`: an index refresh then
+lists consecutive records in one walk of their key range (about one LIST per
+1000 objects) and skips past a big `artifacts/` subtree. With an older SDK
+every listing starts at the prefix and skips keys client-side, so a refresh
+reads every object under the prefix and costs about three LISTs per record.
 
 ## Journal lifecycle rule
 

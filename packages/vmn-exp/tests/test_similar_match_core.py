@@ -4,6 +4,7 @@ under column weights, and the deadline interrupting it."""
 import sqlite3
 
 import pytest
+from fakes.clock import FakeClock
 from similar_fixtures import changed, run
 from vmn_exp.core import similar_fts, similar_match
 from vmn_exp.core.similar_doc import COLUMNS, build_doc
@@ -119,6 +120,7 @@ def test_unasked_columns_are_left_out_of_the_match(conn):
 def test_a_passed_deadline_interrupts_the_query(conn):
     _file(conn, *[_text(f"r{i}", "focal loss") for i in range(50)])
     with pytest.raises(similar_match.SimilarDeadlineExceeded):
-        with similar_match.deadline(conn, similar_match._clock() - 1):
+        clock = FakeClock()
+        with similar_match.deadline(conn, clock.monotonic() - 1, clock.monotonic):
             _ranked(conn, _text(None, "focal"))
     assert _ranked(conn, _text(None, "focal"))  # the handler is gone again

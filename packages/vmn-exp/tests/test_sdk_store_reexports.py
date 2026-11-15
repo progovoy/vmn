@@ -1,5 +1,5 @@
 """The SDK's storage leaf modules are core's ``version_stamp.store`` ones
-(plan 37 P5b): one implementation, every SDK name still importable."""
+(plan 45 P5b): one implementation, every SDK name still importable."""
 import pytest
 
 from version_stamp.store import areas as core_areas

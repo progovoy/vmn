@@ -68,7 +68,7 @@ class TreeNodes:
         value of *split*)."""
         cache = self._cache
         base, bucket = cache._base(snapshot)
-        key = (base.token, bucket, minute(), cache.schema_key(schema),
+        key = (base.token, bucket, minute(cache.now()), cache.schema_key(schema),
                cache.jobs.progress_names(snapshot), parent, queries, split)
         return self._summaries.get(key, lambda: self._summarized(snapshot, schema, parent,
                                                                  queries, split))
@@ -92,7 +92,7 @@ class TreeNodes:
         if not queries:
             return {}
         base, bucket = self._cache._base(snapshot)
-        texts, root = pinned_texts(queries), tree_root(base, parent)
+        texts, root = pinned_texts(queries, self._cache.now()), tree_root(base, parent)
         return self._counts.get(
             (base.token, bucket, texts, root),
             lambda: _counted(self._cache.attention.matches(snapshot, schema, queries).get(root, ()),

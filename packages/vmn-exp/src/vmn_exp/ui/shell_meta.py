@@ -3,8 +3,8 @@
 the sign-in methods and the caller's role (``/meta``, ``/workspaces``, the
 401 body). Methods only, never a secret."""
 import functools
-from importlib import metadata
 
+from vmn_exp.cli.version import installed_version
 from vmn_exp.ui.auth.authz import effective_role
 from vmn_exp.ui.auth.static import StaticTokenAuthenticator
 
@@ -22,12 +22,7 @@ def auth_hints(chain):
     }
 
 
-@functools.cache
-def _vmn_exp_version():
-    try:
-        return metadata.version("vmn-exp")
-    except metadata.PackageNotFoundError:
-        return None
+_vmn_exp_version = functools.cache(installed_version)
 
 
 def server_versions():

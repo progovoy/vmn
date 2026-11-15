@@ -4,6 +4,7 @@ a new SQLite file swapped in by a pointer flip while the live indexes keep servi
 a plain ``resync()`` re-checks every record's signature."""
 import os
 import threading
+import time
 
 import pytest
 
@@ -39,7 +40,7 @@ def _make(st, i):
 def _setup(st, path, runs=3):
     verstrs = {_make(st, i) for i in range(runs)}
     index = ExperimentIndex(st, APP, cache_path=path).refresh()
-    cache = WorkspaceCache("ws", path, SqliteHealth(path), check_sec=0)
+    cache = WorkspaceCache("ws", path, SqliteHealth(path), check_sec=0, clock=time.monotonic)
     cache.note(APP, st, lambda: index)
     return index, cache, verstrs
 

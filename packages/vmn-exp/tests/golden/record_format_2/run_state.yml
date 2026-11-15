@@ -1,0 +1,16 @@
+state: finished
+command:
+- /job/train.py
+- /data/store
+runner: sdk
+cwd: null
+pid: 71225
+host: trainer-0
+attempt: 889ca8ec0bcd
+started_at: '2026-11-11T14:03:07.216227Z'
+heartbeat: '2026-11-11T14:03:07.216227Z'
+heartbeat_seq: 0
+heartbeat_interval_sec: 30
+exit_code: 0
+finished_at: '2026-11-11T14:03:07.219554Z'
+duration_sec: 0.003

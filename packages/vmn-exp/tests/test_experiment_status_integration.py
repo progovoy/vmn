@@ -14,6 +14,7 @@ fastapi = pytest.importorskip("fastapi")
 from fastapi.testclient import TestClient
 
 from exp_helpers import _SRC_PATH, _PY, _bootstrap, _exec_script, _exp
+from vmn_exp.core.real_io import real_io
 
 API = "/api/v1/workspaces/main/apps"
 
@@ -27,7 +28,7 @@ def _client(app_layout, use_index=True):
         manager.attach_path("main", app_layout.repo_path)
     except WorkspaceError:
         pass  # a previous client in this test already attached it
-    return TestClient(create_app(manager, use_index=use_index))
+    return TestClient(create_app(manager, io=real_io(), use_index=use_index))
 
 
 def _rows(app_layout, use_index=True, **params):

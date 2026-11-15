@@ -7,6 +7,7 @@ A run's own ``status`` stays what :func:`derive_status` says; its
 ancestor's own status: succeeded, failed or stuck (a container that never
 ran passes its parent's verdict on).
 """
+from datetime import datetime, timezone
 from vmn_exp.core.query import filter_rows
 from vmn_exp.core.status import CREATED, FAILED, RUNNING, STUCK, SUCCEEDED
 from vmn_exp.core.tree import annotate_tree, fleet_summary, run_status, subtree_status
@@ -127,7 +128,7 @@ class TestOneRun:
     STATES = {"o": _finished(0), "a": _finished(0), "b": None, "c": _stale()}
 
     def test_an_ended_outer_settles_its_subtree(self):
-        status = run_status("o", self.PARENT_OF, self.STATES.get)
+        status = run_status("o", self.PARENT_OF, self.STATES.get, now=datetime.now(timezone.utc))
         assert status["tree_status"] == SUCCEEDED  # c is lost: it adds nothing
         assert status["settled"] is None
 
@@ -138,22 +139,23 @@ class TestOneRun:
             reads.append(v)
             return self.STATES[v]
 
-        _, tree = subtree_status("b", self.PARENT_OF, read)
+        _, tree = subtree_status("b", self.PARENT_OF, read, now=datetime.now(timezone.utc))
         assert tree["settled"] == NEVER and tree["tree_status"] is None
         assert sorted(reads) == ["b", "o"]
 
     def test_a_started_run_reads_no_ancestor(self):
         reads = []
-        subtree_status("a", self.PARENT_OF, lambda v: reads.append(v) or self.STATES[v])
+        subtree_status("a", self.PARENT_OF, lambda v: reads.append(v) or self.STATES[v], now=datetime.now(timezone.utc))
         assert reads == ["a"]
 
     def test_the_fleet_counts_the_settled_ones_apart(self):
         children_of = {"o": ["a", "b", "c"]}
-        fleet = fleet_summary("o", children_of, self.STATES.get, expected=5, closed=True)
+        fleet = fleet_summary("o", children_of, self.STATES.get, expected=5, closed=True,
+                              now=datetime.now(timezone.utc))
         assert (fleet[NEVER], fleet[LOST]) == (3, 1)  # b and the two unclaimed slots
         assert fleet["counts"] == {RUNNING: 0, SUCCEEDED: 1, FAILED: 0, STUCK: 0, CREATED: 0,
                                    "waiting": 0}
-        open_fleet = fleet_summary("o", children_of, self.STATES.get, expected=5)
+        open_fleet = fleet_summary("o", children_of, self.STATES.get, expected=5, now=datetime.now(timezone.utc))
         assert (open_fleet[NEVER], open_fleet[LOST]) == (0, 0)
         assert open_fleet["counts"][CREATED] == 1 and open_fleet["counts"]["waiting"] == 2
 

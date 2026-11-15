@@ -4,6 +4,7 @@ See docs/packaging.md. `pip install x[typo]` only warns, and a stale pin only
 bites after a release, so these are checked here rather than discovered by users.
 """
 import pathlib
+import re
 
 import pytest
 import toml
@@ -29,6 +30,10 @@ def test_each_distribution_is_named_after_its_folder(dist):
 
 
 def test_the_exp_packages_share_one_version_and_pin_each_other():
+    # The == pin stays exact: vmn-exp imports SDK-internal modules (some by
+    # private name) from the shared vmn_exp namespace, so a mismatched pair can
+    # fail at import. It binds only where vmn-exp is installed; across machines
+    # the contract is the store (docs/packaging.md#compatibility).
     sdk_version = _project("vmn-exp-sdk")["version"]
     assert _project("vmn-exp")["version"] == sdk_version
     assert f"vmn-exp-sdk=={sdk_version}" in _project("vmn-exp")["dependencies"]
@@ -80,6 +85,30 @@ def test_git_cliff_uses_a_range_not_an_exact_pin():
     # other packages' constraints.
     [cliff] = [r for r in _project("vmn")["dependencies"] if r.startswith("git-cliff")]
     assert "==" not in cliff and ">=" in cliff and "<" in cliff
+
+
+def _first_parser(commit_parsers, message):
+    # git-cliff applies the first parser that matches; these match the subject.
+    return next(p for p in commit_parsers
+                if "message" in p and re.search(p["message"], message))
+
+
+def test_the_exp_changelog_config_reads_only_vmn_exp_tags_and_user_facing_commits():
+    git = toml.load(ROOT / "packages" / "vmn-exp" / "cliff.toml")["git"]
+    assert re.search(git["tag_pattern"], "vmn_exp_0.1.37")
+    assert not re.search(git["tag_pattern"], "vmn_0.10.2")
+    assert re.search(git["skip_tags"], "vmn_exp_0.0.0")
+    assert not re.search(git["skip_tags"], "vmn_exp_0.1.0")
+    assert git["filter_commits"] and git["filter_unconventional"]
+    parsers = git["commit_parsers"]
+    for kept in ("feat(sdk): a", "fix: b", "perf(exp-ui): c"):
+        parser = _first_parser(parsers, kept)
+        assert not parser.get("skip") and "Behaviour changes" not in parser["group"]
+    for skipped in ("test(exp): a", "refactor: b", "docs(exp): changelog",
+                    "chore: c", "style: d", "vmn_exp: Stamped version 0.1.37"):
+        assert _first_parser(parsers, skipped).get("skip") is True
+    for breaking in ("fix(sdk)!: a", "feat!: b", "docs(exp)!: c"):
+        assert "Behaviour changes" in _first_parser(parsers, breaking)["group"]
 
 
 def test_gitpython_uses_a_range_not_an_exact_pin():
@@ -224,3 +253,50 @@ def test_vmn_exp_needs_a_vmn_with_the_split():
     assert not vmn.specifier.contains("1.0.0")
     # The workspace's own vmn must satisfy it, or editable installs conflict.
     assert vmn.specifier.contains(_project("vmn")["version"], prereleases=True)
+
+
+EXP_DISTS = ("vmn-exp-sdk", "vmn-exp")
+
+
+def _requires_python(dist):
+    from packaging.specifiers import SpecifierSet
+
+    return SpecifierSet(_project(dist)["requires-python"])
+
+
+@pytest.mark.parametrize("dist", EXP_DISTS)
+def test_both_exp_distributions_require_python_3_10_or_newer(dist):
+    assert not _requires_python(dist).contains("3.9.18")
+    assert _requires_python(dist).contains("3.10.0")
+
+
+def _python_minors(classifiers):
+    prefix = "Programming Language :: Python :: 3."
+    return [int(c[len(prefix):]) for c in classifiers
+            if c.startswith(prefix) and c[len(prefix):].isdigit()]
+
+
+@pytest.mark.parametrize("dist", EXP_DISTS)
+def test_python_classifiers_match_requires_python(dist):
+    minors = _python_minors(_project(dist).get("classifiers", []))
+    assert 10 in minors
+    assert [m for m in minors if not _requires_python(dist).contains(f"3.{m}.0")] == []
+
+
+@pytest.mark.parametrize("dist", EXP_DISTS)
+def test_the_exp_distributions_declare_classifiers_keywords_and_urls(dist):
+    project = _project(dist)
+    assert project.get("keywords")
+    assert any(c.startswith("Development Status ::") for c in project.get("classifiers", []))
+    assert {"Documentation", "Changelog", "Issues", "Source"} <= set(project["urls"])
+
+
+@pytest.mark.parametrize("dist", EXP_DISTS)
+def test_every_exp_extra_requirement_has_a_lower_bound(dist):
+    from packaging.requirements import Requirement
+
+    extras = _project(dist).get("optional-dependencies", {})
+    reqs = [Requirement(r) for reqs in extras.values() for r in reqs]
+    unbounded = [str(r) for r in reqs if r.name not in EXP_DISTS  # vmn-exp-sdk[s3] is exempt
+                 and not any(s.operator in (">=", ">", "~=", "==") for s in r.specifier)]
+    assert unbounded == []

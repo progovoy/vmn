@@ -12,14 +12,16 @@ import pytest
 import yaml
 
 pytest.importorskip("fastapi")
+from fakes.clock import FakeClock  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402
+from unit_deps import fake_deps  # noqa: E402
 
-import vmn_exp.core.index_freshness as freshness_module  # noqa: E402
 from vmn_exp.core.index import ExperimentIndex  # noqa: E402
 from vmn_exp.core.index_sweep import Sweep  # noqa: E402
 from vmn_exp.storage.areas import RUNS  # noqa: E402
 from vmn_exp.storage.open import open_storage  # noqa: E402
 from vmn_exp.ui.freshness import STUCK_REFRESH_SEC, freshness, freshness_key  # noqa: E402
+from vmn_exp.core.real_io import RealClock, real_io
 
 APP = "my_app"
 STATUS = f"/api/v1/workspaces/ws/apps/{APP}/experiments-status"
@@ -34,19 +36,22 @@ IDLE = {"as_of": OCT_22, "refreshing": False, "phase": "idle", "progress": None}
 def _seed(tmp_path):
     uri = f"file://{tmp_path}/store"
     v = "0.0.1-dev.0000abcd.0"
-    open_storage(uri, area=RUNS).save(APP, v, {"verstr": v, "timestamp": "2026-01-01T00:00:00Z"}, {})
+    open_storage(uri, area=RUNS, clock=RealClock(), env=os.environ).save(APP, v, {"verstr": v, "timestamp": "2026-01-01T00:00:00Z"}, {})
     return uri
 
 
-def _client(tmp_path, background_refresh=True):
-    from vmn_exp.ui.server import create_app
+def _client(tmp_path, background_refresh=True, clock=None):
+    from vmn_exp.ui.server import build_app, create_app
     from vmn_exp.ui.workspaces import WorkspaceManager
 
     uri = _seed(tmp_path)
     manager = WorkspaceManager(os.path.join(tmp_path, "ui_data"))
     if "ws" not in {w.name for w in manager.list()}:
         manager.add_store("ws", uri)
-    app = create_app(manager, background_refresh=background_refresh)
+    if clock is None:
+        app = create_app(manager, io=real_io(), background_refresh=background_refresh)
+    else:
+        app = build_app(manager, fake_deps(clock, background_refresh=background_refresh))
     return app, TestClient(app)
 
 
@@ -108,12 +113,11 @@ def test_an_inline_refresher_reports_no_freshness(tmp_path):
 
 def test_a_restarted_server_serves_its_persisted_data_as_of_its_last_refresh(
         tmp_path, monkeypatch):
-    monkeypatch.setattr(freshness_module, "_wall", lambda: OCT_22)
-    app, client = _client(tmp_path)
+    oct_22 = FakeClock(datetime.datetime.fromtimestamp(OCT_22, datetime.timezone.utc))
+    app, client = _client(tmp_path, clock=oct_22)
     _wait_for_status(client, lambda f: f.get("as_of") and not f["refreshing"])
     app.state.refresher.stop()
 
-    monkeypatch.setattr(freshness_module, "_wall", time.time)
     gate, real = threading.Event(), Sweep.listing
 
     def held(self, records, now):  # a refresh that takes long on the old data

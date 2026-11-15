@@ -18,6 +18,7 @@ from exp_helpers import (
     _stamp_app,
 )
 from vmn_exp.storage.areas import local_store_root
+from vmn_exp.core.real_io import RealClock, real_io
 
 
 def _make_dirty(app_layout, filename="dirty.txt", content="dirty"):
@@ -498,7 +499,7 @@ def test_experiment_show_latest_before_name(app_layout, capfd):
     assert verstr is not None
 
     reset_logger()
-    ret = vmn_exp_run(["experiment", "show", app_layout.app_name, "--latest"])[0]
+    ret = vmn_exp_run(["experiment", "show", app_layout.app_name, "--latest"], real_io())[0]
     assert ret == 0, f"show <name> --latest failed with exit code {ret}"
 
 
@@ -535,7 +536,7 @@ def _exp_log(app_layout, verstr):
     """Load an experiment's merged log (per-writer JSONL + legacy log.yml)."""
     from vmn_exp.snapshot import open_storage
 
-    storage = open_storage(root=local_store_root(app_layout.repo_path), area="runs")
+    storage = open_storage(root=local_store_root(app_layout.repo_path), area="runs", clock=RealClock(), env=os.environ)
     return storage.load_merged_log(app_layout.app_name, verstr)
 
 
@@ -1047,7 +1048,7 @@ def test_exp_run_requires_double_dash(app_layout, capfd):
     capfd.readouterr()
     # No command after --
     ret = _experiment(app_layout.app_name, action="run")
-    assert ret == 1
+    assert ret == 2
 
 
 def test_exp_run_cold_start_fresh_repo(app_layout, capfd):

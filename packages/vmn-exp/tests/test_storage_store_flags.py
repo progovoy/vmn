@@ -1,5 +1,6 @@
 """``--store <uri>`` on every command that opens experiment/snapshot storage:
 ``exp`` (and ``import-mlflow``), ``model`` and ``ui``."""
+import os
 from types import SimpleNamespace
 
 import boto3
@@ -7,6 +8,7 @@ import pytest
 from moto import mock_aws
 
 from version_stamp.cli.args import parse_user_commands
+from vmn_exp.core.real_io import RealClock
 
 BUCKET = "flags-bkt"
 
@@ -50,7 +52,7 @@ def test_snapshot_storage_honours_store(s3, tmp_path):
     from vmn_exp.snapshot import _get_storage
 
     vcs = SimpleNamespace(vmn_root_path=str(tmp_path))
-    storage = _get_storage(vcs, {"store": f"s3://{BUCKET}/snaps"})
+    storage = _get_storage(vcs, {"store": f"s3://{BUCKET}/snaps"}, RealClock(), os.environ)
     assert (_remote(storage).bucket, _remote(storage).prefix) == (BUCKET, "snaps/snapshots")
 
 
@@ -58,16 +60,16 @@ def test_snapshot_storage_bucket_shorthand_uses_the_vmn_root(s3, tmp_path):
     from vmn_exp.snapshot import _get_storage
 
     vcs = SimpleNamespace(vmn_root_path=str(tmp_path))
-    storage = _get_storage(vcs, {"bucket": BUCKET})
+    storage = _get_storage(vcs, {"bucket": BUCKET}, RealClock(), os.environ)
     assert _remote(storage).prefix == "vmn/snapshots"
 
 
 def test_model_storage_honours_store(s3):
-    from vmn_exp.registry.cli import _get_storage
+    from vmn_exp.cli.model_cmd import _get_storage
 
     args = SimpleNamespace(dir=None, store=f"s3://{BUCKET}/models",
                            bucket=None, prefix=None, endpoint_url=None)
-    assert _remote(_get_storage(args)).prefix == "models/runs"
+    assert _remote(_get_storage(args, RealClock(), os.environ)).prefix == "models/runs"
 
 
 def test_import_mlflow_storage_honours_store(s3):
@@ -75,7 +77,7 @@ def test_import_mlflow_storage_honours_store(s3):
 
     args = SimpleNamespace(experiment_dir=None, store=f"s3://{BUCKET}/imp",
                            bucket=None, prefix=None, endpoint_url=None)
-    assert _remote(_get_storage(args)).prefix == "imp/runs"
+    assert _remote(_get_storage(args, RealClock(), os.environ)).prefix == "imp/runs"
 
 
 def test_ui_store_flag_adds_a_store_workspace(tmp_path, s3):
@@ -89,7 +91,7 @@ def test_ui_store_flag_adds_a_store_workspace(tmp_path, s3):
     manager = build_manager(args)
     stores = [w for w in manager.list() if w.kind == "store"]
     assert [w.store for w in stores] == [f"s3://{BUCKET}/team"]
-    assert _remote(workspace_storage(stores[0])).prefix == "team/runs"
+    assert _remote(workspace_storage(stores[0], RealClock(), os.environ)).prefix == "team/runs"
 
     again = build_manager(args)  # re-attaching is a no-op
     assert len([w for w in again.list() if w.kind == "store"]) == 1
@@ -98,7 +100,7 @@ def test_ui_store_flag_adds_a_store_workspace(tmp_path, s3):
 def test_ui_workspace_storage_is_only_for_store_workspaces():
     from vmn_exp.ui.workspaces import Workspace, workspace_storage
 
-    assert workspace_storage(Workspace(name="g", kind="git", path="/x")) is None
+    assert workspace_storage(Workspace(name="g", kind="git", path="/x"), RealClock(), os.environ) is None
 
 
 def test_ui_store_workspaces_get_their_own_index(tmp_path):

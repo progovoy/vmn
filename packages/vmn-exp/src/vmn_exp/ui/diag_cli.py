@@ -21,6 +21,7 @@ import urllib.error
 import urllib.request
 
 from version_stamp.api import VMN_LOGGER
+from vmn_exp.ui.config import static_token
 from vmn_exp.ui.diag_summary import summarize
 
 DIAG_PATH = "/api/v1/diag"
@@ -29,7 +30,7 @@ HTTP_TIMEOUT_SEC = 120
 STACKS_WAIT_SEC = 5
 
 
-def handle_diag(args):
+def handle_diag(args, env):
     sources = [s for s in (args.diag_url, args.diag_pid, args.diag_summarize) if s is not None]
     if len(sources) != 1:
         VMN_LOGGER.error("usage: vmn-exp ui diag (--url URL [--token T] | --pid PID "
@@ -38,8 +39,8 @@ def handle_diag(args):
     if args.diag_summarize is not None:
         return _report(args.diag_summarize)
     if args.diag_url is not None:
-        return _from_url(args)
-    return _from_pid(args)
+        return _from_url(args, env)
+    return _from_pid(args, env)
 
 
 def _report(path):
@@ -54,10 +55,10 @@ def _report(path):
     return 0
 
 
-def _from_url(args):
+def _from_url(args, env):
     url = args.diag_url.rstrip("/") + DIAG_PATH
     request = urllib.request.Request(url, headers={"Accept": "application/json"})
-    token = args.token or os.environ.get("VMN_UI_TOKEN")
+    token = static_token(None, args, env)
     if token:
         request.add_header("Authorization", f"Bearer {token}")
     try:
@@ -74,9 +75,9 @@ def _from_url(args):
     return _report(dest)
 
 
-def _from_pid(args):
+def _from_pid(args, env):
     pid = args.diag_pid
-    pattern = os.path.join(_data_dir(args), "diag", f"diag-*-{pid}.json")
+    pattern = os.path.join(_data_dir(args, env), "diag", f"diag-*-{pid}.json")
     before = set(glob.glob(pattern))
     try:
         os.kill(pid, signal.SIGUSR1)
@@ -85,7 +86,7 @@ def _from_pid(args):
         return 1
     path = _wait_for_dump(pattern, before, time.monotonic() + args.diag_wait)
     if path is None:
-        return _stacks_from_pid(args, pid, pattern)
+        return _stacks_from_pid(args, env, pid, pattern)
     if args.diag_output:
         _ensure_parent(args.diag_output)
         shutil.copyfile(path, args.diag_output)
@@ -93,11 +94,11 @@ def _from_pid(args):
     return _report(path)
 
 
-def _stacks_from_pid(args, pid, pattern):
+def _stacks_from_pid(args, env, pid, pattern):
     """No JSON dump came: every thread's stack via SIGUSR2 instead."""
     from vmn_exp.ui.diag.stacks import stacks_path
 
-    path = stacks_path(_data_dir(args), pid)
+    path = stacks_path(_data_dir(args, env), pid)
     start = os.path.getsize(path) if os.path.exists(path) else 0
     try:
         os.kill(pid, signal.SIGUSR2)
@@ -153,12 +154,12 @@ def _complete(path):
         return False
 
 
-def _data_dir(args):
+def _data_dir(args, env):
     """The data dir ``vmn-exp ui`` would use for these flags."""
     from vmn_exp.ui.cli import DEFAULT_DATA_DIR
     from vmn_exp.ui.config import resolve_config
 
-    cfg = resolve_config(args)
+    cfg = resolve_config(args, env)
     return cfg.data_dir if cfg is not None else args.data_dir or DEFAULT_DATA_DIR
 
 

@@ -5,8 +5,10 @@ sync that raises must never kill the supervisor — that orphans the child and
 leaves the run claiming ``running`` forever.
 """
 
+from datetime import datetime, timezone
 import os
 import subprocess
+import threading
 import time
 
 from exp_helpers import (
@@ -68,7 +70,7 @@ def test_failing_heartbeat_writes_do_not_kill_the_supervisor(
     assert code == 0
     state = _run_state(app_layout, verstr)
     assert state["exit_code"] == 0
-    assert st.derive_status(state) == st.SUCCEEDED
+    assert st.derive_status(state, now=datetime.now(timezone.utc)) == st.SUCCEEDED
 
 
 def test_failing_metric_ingestion_does_not_kill_the_supervisor(
@@ -164,6 +166,63 @@ def test_slow_remote_sync_does_not_starve_heartbeats(app_layout, capfd, monkeypa
     assert len(beats) >= 4, beats
     # The final sync is bounded by its timeout rather than the slow upload.
     assert elapsed < 4.5 + 6 + 4
+
+
+def test_a_hung_state_upload_does_not_starve_metric_ingestion(
+    app_layout, capfd, monkeypatch
+):
+    from s3_helpers import BUCKET, PREFIX, mocked_bucket
+
+    from vmn_exp.storage.s3 import S3SnapshotStorage
+    from vmn_exp.storage.uri import s3_uri
+
+    _bootstrap(app_layout)
+    monkeypatch.setattr(runmod, "_FINAL_SYNC_TIMEOUT_SEC", 1)
+    release = threading.Event()
+    hung_uploads = []
+    real_s3 = S3SnapshotStorage.save_file
+
+    def hung(self, app_name, verstr, filename, data):
+        if filename == RUN_STATE_FILE:
+            hung_uploads.append(verstr)
+            release.wait(30)
+            raise ConnectionError("S3 hung")  # never reaches past the mock
+        return real_s3(self, app_name, verstr, filename, data)
+
+    beats = []
+    real_local = LocalSnapshotStorage.save_file
+
+    def counting(self, app_name, verstr, filename, data):
+        if filename == RUN_STATE_FILE and "state: running" in str(data):
+            beats.append(time.monotonic())
+        return real_local(self, app_name, verstr, filename, data)
+
+    script = (
+        "import os, time\n"
+        "p = os.environ['VMN_METRICS_FILE']\n"
+        "for i in range(4):\n"
+        "    open(p, 'a').write(f'loss={i}\\n'); time.sleep(1)\n"
+    )
+    with mocked_bucket(monkeypatch):
+        monkeypatch.setenv("VMN_EXPERIMENT_STORE", s3_uri(BUCKET, PREFIX))
+        monkeypatch.setattr(S3SnapshotStorage, "save_file", hung)
+        monkeypatch.setattr(LocalSnapshotStorage, "save_file", counting)
+        capfd.readouterr()
+        try:
+            code = _exp_run(app_layout.app_name, [_PY, "-c", script],
+                            extra=["--heartbeat-interval", "1"])
+        finally:
+            release.set()
+    verstr = extract_dev_verstr(capfd.readouterr().out)
+
+    assert code == 0
+    assert hung_uploads, "the state never went to the remote"
+    # Inline, the first hung upload would have held the loop for 30 s.
+    assert len(beats) >= 3, beats
+    losses = [e["values"]["loss"] for e in _log(app_layout, verstr)
+              if e["type"] == "metrics" and "loss" in e["values"]]
+    assert losses == [0, 1, 2, 3]
+    assert _run_state(app_layout, verstr)["exit_code"] == 0
 
 
 def _env_without_working_dir(app_layout):

@@ -10,7 +10,6 @@ import hashlib
 import os
 import tempfile
 import threading
-import time
 
 from vmn_exp.core.writer import create_log_entry, save_artifact
 from vmn_exp.storage.files import OUTPUTS_DIR
@@ -26,9 +25,9 @@ _READ_CHUNK = 64 * 1024
 UPLOAD_BYTES_PER_SEC = 64 * 1024
 
 
-def output_cap_bytes(cap_mb):
-    """*cap_mb* (a flag's value), else ``$VMN_EXP_OUTPUT_CAP_MB``, else 10 MB."""
-    for value in (cap_mb, os.environ.get(OUTPUT_CAP_ENV)):
+def output_cap_bytes(cap_mb, env):
+    """*cap_mb* (a flag's value), else *env*'s ``VMN_EXP_OUTPUT_CAP_MB``, else 10 MB."""
+    for value in (cap_mb, env.get(OUTPUT_CAP_ENV)):
         try:
             if value is not None and float(value) > 0:
                 return int(float(value) * 1024 * 1024)
@@ -109,7 +108,7 @@ class OutputArtifact:
     :meth:`seal` the final log uploads on the next call, unthrottled.
     """
 
-    def __init__(self, storage, app_name, verstr, cap_bytes, clock=time.monotonic):
+    def __init__(self, storage, app_name, verstr, cap_bytes, *, clock):
         self._storage = storage
         self._app_name = app_name
         self._verstr = verstr

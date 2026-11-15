@@ -40,6 +40,7 @@ _BUFFERED = r"""
 import os, sys, time
 from vmn_exp.core.writer import own_stream
 from vmn_exp.storage import buffered
+from vmn_exp.core.real_io import RealClock
 from vmn_exp.storage.buffered import BufferedRemoteStorage
 from vmn_exp.storage.local import LocalSnapshotStorage
 
@@ -63,7 +64,7 @@ def line(i):
 
 
 def append(storage, i):
-    stream = own_stream(storage, "app", "v")   # <writer>~<the buffer's owner>
+    stream = own_stream(storage, "app", "v", "w")   # <writer>~<the buffer's owner>
     storage.append_log_entry("app", "v", stream, line(i))
 
 
@@ -74,7 +75,7 @@ def streams():
 
 remote = Remote(os.path.join(ROOT, "remote"), "runs")
 remote.save("app", "v", {"verstr": "v"}, {})
-storage = BufferedRemoteStorage(remote, flush_interval_sec=3600)
+storage = BufferedRemoteStorage(remote, os.path.join(ROOT, "buffers"), flush_interval_sec=3600, clock=RealClock())
 for i in range(3):
     append(storage, i)
 assert streams() == [[0]], streams()   # 1 and 2 wait in the parent's buffer
@@ -83,7 +84,7 @@ buffer_root = storage._buffer_root
 pid = os.fork()
 if pid == 0:
     if MODE == "own":
-        mine = BufferedRemoteStorage(remote, flush_interval_sec=3600)
+        mine = BufferedRemoteStorage(remote, os.path.join(ROOT, "buffers"), flush_interval_sec=3600, clock=RealClock())
         append(mine, 100)
         append(mine, 101)   # buffered: ships at exit
         append(storage, 200)  # an inherited storage
@@ -133,7 +134,7 @@ def puts_by(pid):
     return [key for who, key in rows if who == str(pid)]
 
 
-storage = journaled(LocalSnapshotStorage(os.path.join(ROOT, "store"), "runs"), sink=Sink())
+storage = journaled(LocalSnapshotStorage(os.path.join(ROOT, "store"), "runs"), sink=Sink(), clock=time.time)
 storage.save("app", "v", {"verstr": "v"}, {})
 state = storage._journal_state
 state.pending.append("parent-queued")   # a put that failed: retried later

@@ -5,6 +5,7 @@ from vmn_exp.registry import view
 from vmn_exp.registry.log import set_alias, set_version_status
 from vmn_exp.registry.store import ensure_model, register_version
 from vmn_exp.storage.local import LocalSnapshotStorage
+from vmn_exp.core.real_io import real_io
 
 
 def _storage(tmp_path):
@@ -38,7 +39,7 @@ def _count_version_reads(monkeypatch):
 def test_models_for_run_lists_every_live_version_of_the_run(tmp_path):
     storage = _storage(tmp_path)
     _registry(storage)
-    set_alias(storage, "clf", "prod", 1)
+    set_alias(storage, "clf", "prod", 1, env=real_io().env, host=real_io().host)
     found = view.models_for_run(storage, "myapp", "1.0.0")
     assert [(m["model"], m["version"], m["aliases"]) for m in found] == [
         ("clf", 1, ["prod"]), ("det", 1, []),
@@ -56,6 +57,6 @@ def test_lookups_reuse_one_scan_until_the_registry_changes(tmp_path, monkeypatch
     assert view.registered_runs(storage) == {("myapp", "1.0.0"), ("myapp", "2.0.0")}
     assert len(reads) == scanned
 
-    set_version_status(storage, "clf", 2, "deleted")
+    set_version_status(storage, "clf", 2, "deleted", env=real_io().env, host=real_io().host)
     assert view.models_for_run(storage, "myapp", "2.0.0") == []
     assert view.registered_runs(storage) == {("myapp", "1.0.0")}

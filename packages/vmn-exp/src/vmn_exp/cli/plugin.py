@@ -10,9 +10,14 @@ On import this module:
      and ``model`` in the plugin_api registry.
   2. Registers a dev-version loader so that ``output._goto_dev_version`` can
      restore a dev-version snapshot without importing this module directly.
+
+The handler shims here are composition roots (plan 44 G7): vmn calls them
+with ``vmn_ctx`` or ``args`` only, so each invocation builds ``real_io()`` and
+hands it to the handler, until core vmn passes ``vmn_ctx.io``.
 """
 from __future__ import annotations
 
+import functools
 import os
 
 from version_stamp.api import (
@@ -23,313 +28,20 @@ from version_stamp.api import (
     register_dev_version_loader,
     register_snapshot_store_opener,
 )
+from vmn_exp.cli.exp_parser.actions import EXPERIMENT_ACTIONS  # noqa: F401  (main.py, tests)
+from vmn_exp.cli.snapshot_arg import from_snapshot_metadata
+from vmn_exp.core.real_io import real_io
+from vmn_exp.core.status import min_stale_sec
 
 
-# ---------------------------------------------------------------------------
-# Argparse helpers (moved from version_stamp.cli.args)
-# ---------------------------------------------------------------------------
-
-EXPERIMENT_ACTIONS = [
-    "create", "run", "add", "list", "show", "compare", "diff", "restore",
-    "export", "prune", "tag", "archive", "unarchive", "import-mlflow", "watch",
-    "lineage",
-    "importance",
-    "rewind",
-    "rerun",
-    "push",
-    "compact",
-    "export-metrics",
-    "similar",
-    "similar-backfill",
-    "backfill-children",
-]
+def _add_experiment_parser(subparsers, name):
+    from vmn_exp.cli.exp_parser.build import add_experiment_parser
+    return add_experiment_parser(subparsers, name)
 
 
-def _add_experiment_parser(subprasers, name):  # noqa: N802
-    from vmn_exp.cli import views
-    from vmn_exp.cli.define_metric_args import add_define_metric_flags
-    from vmn_exp.cli.finish_args import add_finish_flags
-    from vmn_exp.cli.intent_arg import add_intent_flags
-    from vmn_exp.cli.similar_args import add_similar_flags
-    from vmn_exp.cli.sweep.parser import add_experiment_storage_flags
-
-    pexp = subprasers.add_parser(
-        name, help="Experiment tracking for reproducible research"
-    )
-    pexp.set_defaults(strict_version=False)
-    pexp.add_argument(
-        "action", nargs="?", default="create",
-        choices=EXPERIMENT_ACTIONS,
-        help="Experiment action (default: create)",
-    )
-    pexp.add_argument("name", help="The application's name")
-    pexp.add_argument("refs", nargs="*", default=None,
-                      help="tag/archive/unarchive: run refs (verstr, prefix, @N, latest); "
-                           "tag also takes key=value pairs")
-    pexp.add_argument("--name", dest="run_name", default=None,
-                      help="create/run: a human-readable name for the run")
-    pexp.add_argument("--new-app", action="store_true", default=False,
-                      help="create/run: confirm that this app name is genuinely new when "
-                           "other vmn apps already exist in this repo")
-    pexp.add_argument("--remove", action="append", default=None,
-                      help="tag: remove this tag key (repeatable)")
-    pexp.add_argument("--archived", action="store_true", default=False,
-                      help="list/importance/similar: include archived runs")
-    pexp.add_argument("-v", "--version", action="append", default=None,
-                      help="Version string(s). Repeatable for compare; prune deletes exactly "
-                           "the named run(s) instead of applying --keep/--older-than. "
-                           "similar: without -v/--latest it compares the current working "
-                           "tree, to ask before you submit: the one action whose missing ref "
-                           "means the working tree (show/restore/export take the latest run)")
-    pexp.add_argument("--note", default=None, help="Note or description")
-    pexp.add_argument("-f", "--file", default=None,
-                      help="YAML file with structured notes/params")
-    pexp.add_argument("--metrics", nargs="*", default=None,
-                      help="Metrics as key=value pairs (e.g., loss=0.34 acc=0.91)")
-    pexp.add_argument("--attach", default=None, help="File to attach as artifact")
-    pexp.add_argument("--sort", default=None,
-                      help="Sort list by a metric name, newest first by "
-                           "timestamp/started_at/finished_at/idx, or ascending by "
-                           "a row field (duration_sec, queue_sec, ...), tags.<k> "
-                           "or params.<k>")
-    pexp.add_argument("--metric", default=None,
-                      help="importance: the metric whose driving params to rank")
-    pexp.add_argument("--top", type=int, default=None,
-                      help="list: show the top N results; similar: how many runs to show "
-                           "(default 10)")
-    pexp.add_argument("--last", type=int, default=None,
-                      help="Use the N most recent experiments (for list/compare)")
-    pexp.add_argument("--latest", action="store_true", default=False,
-                      help="Use the most recent experiment (for show/compare/restore/export/"
-                           "similar)")
-    pexp.add_argument("--tool", default=None,
-                      help="External diff tool for compare. Falls back to git config diff.tool")
-    pexp.add_argument("-o", "--output", default=None, help="Output path for export")
-    pexp.add_argument("--keep", type=int, default=None,
-                      help="Keep latest N experiments (for prune)")
-    pexp.add_argument("--older-than", default=None,
-                      help="Prune experiments older than duration (e.g., 30d)")
-    pexp.add_argument("--dry-run", dest="dry_run", action="store_true", default=False,
-                      help="prune: print what would be deleted, delete nothing; "
-                           "archive/unarchive --query: print what would change, write nothing; "
-                           "rerun: print the plan, create nothing; "
-                           "push: print what would be pushed, write nothing remote; "
-                           "similar-backfill/backfill-children: print what would be "
-                           "backfilled, write nothing")
-    pexp.add_argument("--adopt", action="store_true", default=False,
-                      help="push: make this checkout the owner of the streams its runs "
-                           "inherited from a copied/moved checkout, then push them; only "
-                           "when that checkout is gone or will never write again")
-    pexp.add_argument("--print", dest="print_only", action="store_true", default=False,
-                      help="rerun: print the resolved command, cwd, code identity and a "
-                           "recipe (with --json as JSON); runs and creates nothing")
-    pexp.add_argument("--keep-worktree", action="store_true", default=False,
-                      help="rerun: keep the workspace the run's code was restored into")
-    pexp.add_argument("--worktree-dir", default=None, metavar="DIR",
-                      help="rerun: restore the run's code here (missing or empty, "
-                           "outside the repo; default: a fresh dir in $TMPDIR)")
-    pexp.add_argument("--cwd", dest="rerun_cwd", default=None, metavar="PATH",
-                      help="rerun: run the command here, relative to the restored app "
-                           "root (default: the recorded cwd)")
-    pexp.add_argument("--force", action="store_true", default=False,
-                      help="prune: also delete runs that are still running; restore: "
-                           "even if untracked files over the snapshot size caps would "
-                           "be deleted without being saved; add --finish: even a run "
-                           "that heartbeats elsewhere or has finished (--force-live: "
-                           "only the first)")
-    pexp.add_argument("--local-only", action="store_true", default=False,
-                      help="prune: delete local copies only, keep the remote (S3) ones")
-    pexp.add_argument("--protect-tag", dest="protect_tag", action="append", default=None,
-                      help="prune: never delete a run carrying this tag key (repeatable)")
-    pexp.add_argument("--no-trim-journal", dest="no_trim_journal", action="store_true",
-                      default=False,
-                      help="prune --keep/--older-than/--query: leave the change journal "
-                           "alone (a bucket whose lifecycle rule expires it); -v never "
-                           "trims it")
-    pexp.add_argument("--full-log", action="store_true", default=False,
-                      help="show: print every log entry (default: the last 50)")
-    pexp.add_argument("--patch", action="store_true", default=False,
-                      help="show: also print the run's own patches (working tree, local "
-                           "commits, deps; never untracked files)")
-    pexp.add_argument("--max-bytes", type=views.positive_max_bytes,
-                      default=views.PATCH_MAX_BYTES, metavar="N",
-                      help="show --patch: print at most N bytes of patch text "
-                           f"(default: {views.PATCH_MAX_BYTES})")
-    pexp.add_argument("--query", default=None,
-                      help="list/importance/similar: filter rows by query "
-                           "(e.g. 'metrics.loss < 0.5'); "
-                           "prune: select candidates by query (dry-run unless --yes/-y); "
-                           "archive/unarchive: act on every run the query selects")
-    pexp.add_argument("--yes", "-y", action="store_true", default=False,
-                      help="prune --query: confirm deletion")
-    pexp.add_argument("--json", action="store_true", default=False,
-                      help="list/show/importance/push/similar: print machine-readable JSON")
-    pexp.add_argument("--from-snapshot", default=None,
-                      help="Path to vmn_metadata.yml or directory containing it. "
-                           "Records against a tree from 'vmn-exp export' (no git required). "
-                           "Falls back to VMN_SNAPSHOT_METADATA env var.")
-    pexp.add_argument("--no-env", dest="capture_env", action="store_false", default=None,
-                      help="create/run: skip environment capture (packages, python, platform). "
-                           "Overrides VMN_CAPTURE_ENV and conf capture_env settings.")
-    pexp.add_argument("--input", action="append", dest="inputs", default=None,
-                      metavar="[NAME=]URI[#DIGEST]",
-                      help="create/run/add: record a dataset or artifact input. "
-                           "Optional name= prefix and #digest suffix. Repeatable.")
-    pexp.add_argument("--sync-interval", type=int, default=None,
-                      help="Seconds between remote syncs during 'run' (default: "
-                           "VMN_EXP_SYNC_SEC, else conf sync_interval_sec, else 30).")
-    pexp.add_argument("--heartbeat-interval", type=int, default=None,
-                      help="Seconds between run-state heartbeats during 'run' (default: "
-                           "VMN_EXP_HEARTBEAT_SEC, else conf heartbeat_interval_sec, else 30).")
-    pexp.add_argument("--kill-grace-sec", type=float, default=None,
-                      help="Seconds a child gets to exit after a forwarded signal "
-                           "before it is killed during 'run'.")
-    pexp.add_argument("--no-capture-output", dest="capture_output", action="store_false",
-                      default=True,
-                      help="run: don't keep the command's stdout/stderr as the output.log "
-                           "artifact (it still streams to the terminal).")
-    pexp.add_argument("--output-cap-mb", type=float, default=None,
-                      help="run: size cap of output.log; past it the first and last "
-                           "halves are kept (default: VMN_EXP_OUTPUT_CAP_MB or 10).")
-    pexp.add_argument("--no-system-metrics", dest="system_metrics", action="store_false",
-                      default=None,
-                      help="run: don't record the child process tree's CPU/memory/GPU as "
-                           "sys_* metrics. Overrides VMN_SYSTEM_METRICS and conf "
-                           "system_metrics settings.")
-    pexp.add_argument("--interval", type=float, default=None,
-                      help="watch: re-check every N seconds (default: check once, for cron)")
-    pexp.add_argument("--within", default=None,
-                      help="watch: only alert transitions newer than this (e.g. 6h, 1d; "
-                           "default 1d)")
-    pexp.add_argument("--compact", action="store_true", default=False,
-                      help="watch: also compact the metrics of failed/stuck runs")
-    pexp.add_argument("--keys", nargs="+", default=None,
-                      help="export-metrics: only these metric keys")
-    pexp.add_argument("--format", dest="metrics_format", default=None,
-                      choices=("parquet", "csv"),
-                      help="export-metrics: output format (default: from -o, else parquet)")
-    pexp.add_argument("--all-finished", action="store_true", default=False,
-                      help="compact: every succeeded or failed run")
-    pexp.add_argument("--all-apps", action="store_true", default=False,
-                      help="similar/similar-backfill: every app of the store, not just <name>")
-    pexp.add_argument("--depth", type=int, default=1,
-                      help="lineage: follow links this many hops (default: 1)")
-    pexp.add_argument("--parent", default=None,
-                      help="Parent experiment for a nested run.")
-    pexp.add_argument("--fork-from", default=None, metavar="REF",
-                      help="create/run: start a new run with REF's metrics and params "
-                           "(up to --fork-step; 'REF?_step=N' also works)")
-    pexp.add_argument("--fork-step", type=int, default=None, metavar="N",
-                      help="create/run: with --fork-from, copy history up to step N "
-                           "(default: all of it)")
-    pexp.add_argument("--step", type=int, default=None, metavar="N",
-                      help="rewind: hide the run's history past step N")
-    add_experiment_storage_flags(pexp)
-    add_define_metric_flags(pexp)
-    add_finish_flags(pexp)
-    add_intent_flags(pexp)
-    add_similar_flags(pexp)
-    # import-mlflow flags
-    _mlf = pexp.add_mutually_exclusive_group()
-    _mlf.add_argument("--mlruns", default=None, metavar="DIR",
-                      help="import-mlflow: path to mlruns/ FileStore directory")
-    _mlf.add_argument("--tracking-uri", default=None, metavar="URI",
-                      help="import-mlflow: MLflow tracking server URI "
-                           "(requires mlflow-skinny)")
-    pexp.add_argument("--experiment", action="append", default=None,
-                      metavar="NAME_OR_ID",
-                      help="import-mlflow: include only this experiment (repeatable)")
-    pexp.add_argument("--skip-artifacts", action="store_true", default=False,
-                      help="import-mlflow: do not copy local artifacts")
-    pexp.add_argument("--include-deleted", action="store_true", default=False,
-                      help="import-mlflow: include deleted/trashed runs")
-    pexp.add_argument("--workers", type=int, default=8,
-                      help="import-mlflow: parallel import workers (default: 8)")
-    pexp.add_argument("--refresh-features", action="store_true", default=False,
-                      help="import-mlflow: give already-imported runs the features "
-                           "(author, entrypoint, branch) and note they lack")
-    pexp.add_argument("--repo", default=None, metavar="PATH",
-                      help="import-mlflow: a checkout holding the runs' source commits, "
-                           "to record what each commit's branch changed")
-
-
-def _add_ui_parser(subprasers):  # noqa: N802
-    from vmn_exp.cli import views
-
-    pui = subprasers.add_parser(
-        "ui", help="Serve the vmn web UI (experiments, stamp tree, actions)"
-    )
-    pui.add_argument("ui_args", nargs="*",
-                     metavar="cache resync|rebuild | onboarding | backup <path> | diag",
-                     help="Maintenance: 'cache resync' re-checks every record of the "
-                          "cache, 'cache rebuild' rebuilds it; 'onboarding' prints the "
-                          "BYO-bucket IAM policy for --store; 'backup <path>' copies the "
-                          "SQLite control plane (Postgres: prints the pg_dump command); "
-                          "'diag' takes a diagnostic dump of a running server "
-                          "(--url, --pid or --summarize FILE)")
-    pui.add_argument("--workspace", default=None,
-                     help="cache: the workspace to resync (default: every one)")
-    pui.add_argument("--config", default=None,
-                     help="Server config file (server.yml); flags override its values")
-    pui.add_argument("--db", default=None,
-                     help="Control-plane DB DSN (sqlite:///path or postgresql://...; or "
-                          "VMN_UI_DB). Keeps the workspace registry in the DB; "
-                          "Postgres also holds the shared cache for replicas")
-    pui.add_argument("--host", default="127.0.0.1", help="Bind address")
-    pui.add_argument("--port", type=int, default=8265, help="Port (default 8265)")
-    pui.add_argument("--allowed-host", action="append", default=None,
-                     help="Extra hostname clients may reach the server by (repeatable).")
-    pui.add_argument("--token", default=None,
-                     help="Bearer token required for API access (or VMN_UI_TOKEN env)")
-    pui.add_argument("--data-dir", default=None,
-                     help="Server data dir for the workspace registry and index "
-                          "(default: ~/.vmn-ui)")
-    pui.add_argument("--repo", action="append", default=None,
-                     help="Attach a local checkout as a workspace (repeatable)")
-    pui.add_argument("--store", default=None,
-                     help="Read-only experiment store URI (s3://, gs://, az://, file://)")
-    pui.add_argument("--read-only", action="store_true", default=False,
-                     help="Disable all mutation endpoints")
-    pui.add_argument("--no-browser", action="store_true", default=False,
-                     help="Do not open a browser on start")
-    pui.add_argument("--no-index", action="store_true", default=False,
-                     help="Keep no on-disk read cache (the index lives in memory only)")
-    pui.add_argument("--keep-warm", dest="keep_warm", action="store_const", const=True,
-                     default=None,
-                     help="Keep refreshing every index once loaded, with nobody watching "
-                          "(default: on for store workspaces, off for checkouts; or "
-                          "server.keep_warm)")
-    pui.add_argument("--no-keep-warm", dest="keep_warm", action="store_const", const=False,
-                     help="Let an index nobody asked for in 60 s stop refreshing")
-    pui.add_argument("--metrics-ended-hours", type=views.positive_int, default=None, metavar="H",
-                     help="Keep an ended outer run on /metrics for H hours (default 24; "
-                          "or server.metrics_ended_hours)")
-    pui.add_argument("--diag-every", type=float, default=None, metavar="SEC",
-                     help="Write a diagnostic dump to <data-dir>/diag/ every SEC seconds "
-                          "(keeps the last 20; SIGUSR1 writes one on demand)")
-    pui.add_argument("--edits", action="store_true", default=False,
-                     help="onboarding: also grant the puts server-side edits need")
-    pui.add_argument("--format", dest="onboarding_format", default="json",
-                     choices=("json", "cloudformation", "terraform"),
-                     help="onboarding: output format (default: json)")
-    pui.add_argument("--account-id", default=None,
-                     help="onboarding: the AWS account the role trusts")
-    pui.add_argument("--external-id", default=None,
-                     help="onboarding: the org's AssumeRole external id")
-    pui.add_argument("--origin", action="append", default=None,
-                     help="onboarding: a browser origin allowed by bucket CORS (repeatable)")
-    pui.add_argument("--url", dest="diag_url", default=None,
-                     help="diag: the server's base URL (e.g. http://host:8265)")
-    pui.add_argument("--pid", dest="diag_pid", type=int, default=None,
-                     help="diag: signal this vmn-exp ui process (SIGUSR1) to write a dump "
-                          "into <data-dir>/diag/")
-    pui.add_argument("--wait", dest="diag_wait", type=float, default=30,
-                     help="diag --pid: seconds to wait for the dump (default: 30)")
-    pui.add_argument("--summarize", dest="diag_summarize", default=None, metavar="FILE",
-                     help="diag: print the summary of an existing dump")
-    pui.add_argument("-o", "--output", dest="diag_output", default=None, metavar="FILE",
-                     help="diag: where to write the dump (default: "
-                          "vmn-exp-diag-<ts>.json; --pid: the server's file)")
+def _add_ui_parser(subparsers):
+    from vmn_exp.ui.cli_parser import add_ui_parser
+    return add_ui_parser(subparsers)
 
 
 # ---------------------------------------------------------------------------
@@ -338,7 +50,7 @@ def _add_ui_parser(subprasers):  # noqa: N802
 
 def _handle_experiment(vmn_ctx):
     from vmn_exp.cli.experiment import handle_experiment
-    return handle_experiment(vmn_ctx)
+    return handle_experiment(vmn_ctx, real_io())
 
 
 def _add_sweep_parser(subparsers):
@@ -348,22 +60,25 @@ def _add_sweep_parser(subparsers):
 
 def _handle_sweep(vmn_ctx):
     from vmn_exp.cli.sweep.handler import handle_sweep
-    return handle_sweep(vmn_ctx)
+    return handle_sweep(vmn_ctx, real_io())
+
+
+def _handle_ui_args(args):
+    from vmn_exp.ui.cli import handle_ui
+    return handle_ui(args, real_io())
 
 
 def _handle_ui(vmn_ctx):
-    from vmn_exp.ui.cli import handle_ui
-    return handle_ui(vmn_ctx.args)
+    return _handle_ui_args(vmn_ctx.args)
 
 
-def _ui_run_without_repo(args):
+def _ui_run_without_repo(args, handle_ui=_handle_ui_args):
     """An explicit source (--repo, --store, --config) needs no enclosing
     checkout, nor does `ui diag` (a dump of a running server); a bare
     `vmn-exp ui` falls through to serve that checkout."""
     diag = (getattr(args, "ui_args", None) or [None])[0] == "diag"
     if not (diag or args.repo or args.store or args.config):
         return None
-    from vmn_exp.ui.cli import handle_ui
     return handle_ui(args)
 
 
@@ -381,21 +96,26 @@ def _exp_run_without_repo(args):
     """
     is_experiment = getattr(args, "command", None) in ("experiment", "exp")
     action = getattr(args, "action", None)
+    if is_experiment:
+        from vmn_exp.cli.exp_parser.ownership import refuse_usage_errors
+
+        usage_error = refuse_usage_errors(args)
+        if usage_error:
+            return usage_error
     if is_experiment and action == "run":
         from vmn_exp.cli.run_disabled import exec_if_disabled
-        result = exec_if_disabled(args)
+        result = exec_if_disabled(args, real_io().env)
         if result is not None:
             return result
 
     # import-mlflow is always git-free — intercept before from_snapshot check
     if is_experiment and action == "import-mlflow":
         from vmn_exp.importers.cli import import_mlflow_run_without_repo
-        return import_mlflow_run_without_repo(args)
+        return import_mlflow_run_without_repo(args, real_io())
 
-    from_snapshot = getattr(args, "from_snapshot", None) or os.environ.get(
-        "VMN_SNAPSHOT_METADATA"
-    )
-    if not is_experiment or not (from_snapshot or _store_only_outside_checkout(action)):
+    io = real_io()
+    if not is_experiment or not (from_snapshot_metadata(args, io.env)
+                                 or _store_only_outside_checkout(action)):
         return None
 
     from vmn_exp.cli.experiment import (
@@ -416,19 +136,23 @@ def _exp_run_without_repo(args):
         experiment_storage_params,
     )
 
+    stale_sec = min_stale_sec(io.env)
     dispatch = {
-        "create": experiment_create,
-        "run": experiment_run,
-        "add": experiment_add,
-        "list": experiment_list,
-        "show": experiment_show,
-        "compare": experiment_compare,
-        "prune": experiment_prune,
-        "compact": experiment_compact,
-        "rewind": experiment_rewind,
-        "push": experiment_push,
-        "similar": experiment_similar,
-        "similar-backfill": experiment_similar_backfill,
+        "create": functools.partial(experiment_create, clock=io.clock, env=io.env,
+                                    host=io.host),
+        "run": functools.partial(experiment_run, io=io),
+        "add": functools.partial(experiment_add, io=io),
+        "list": functools.partial(experiment_list, console=io.console, clock=io.clock,
+                                  stale_sec=stale_sec),
+        "show": functools.partial(experiment_show, console=io.console, clock=io.clock,
+                                  stale_sec=stale_sec),
+        "compare": functools.partial(experiment_compare, console=io.console),
+        "prune": functools.partial(experiment_prune, clock=io.clock),
+        "compact": functools.partial(experiment_compact, clock=io.clock, stale_sec=stale_sec),
+        "rewind": functools.partial(experiment_rewind, io=io),
+        "push": functools.partial(experiment_push, clock=io.clock, env=io.env),
+        "similar": functools.partial(experiment_similar, clock=io.clock),
+        "similar-backfill": functools.partial(experiment_similar_backfill, io=io),
         "backfill-children": experiment_backfill_children,
     }
 
@@ -439,9 +163,9 @@ def _exp_run_without_repo(args):
 
     if getattr(args, "writer_id", None):
         os.environ["VMN_WRITER_ID"] = args.writer_id
-    params = experiment_storage_params(None, args)
+    params = experiment_storage_params(None, args, io.env)
     try:
-        storage = _get_experiment_storage(None, params)
+        storage = _get_experiment_storage(None, params, clock=io.clock, env=io.env)
     except ValueError as exc:
         VMN_LOGGER.error(str(exc))
         return 1
@@ -470,7 +194,9 @@ def _dev_version_loader(vcs, params, version):
     from vmn_exp.cli.experiment import experiment_storage_params
     from vmn_exp.snapshot import _restore_with_safety_net
 
-    record = load_code_record(vcs, experiment_storage_params(vcs, None), version)
+    io = real_io()
+    record = load_code_record(vcs, experiment_storage_params(vcs, None, io.env), version,
+                              clock=io.clock, env=io.env)
     if record is None:
         return 1
     return _restore_with_safety_net(vcs, params, *record)
@@ -488,7 +214,8 @@ def _register(spec) -> None:
 def _snapshot_store_opener(vcs, params):
     from vmn_exp.snapshot.stores import open_configured_snapshot_stores
 
-    return open_configured_snapshot_stores(vcs, params)
+    io = real_io()
+    return open_configured_snapshot_stores(vcs, params, io.clock, io.env)
 
 
 def register_dev_version() -> None:
@@ -502,7 +229,7 @@ def register_dev_version() -> None:
 def register_all() -> None:
     """Every command `vmn-exp` serves. Idempotent."""
     from vmn_exp.cli.experiment import READ_ONLY_ACTIONS as EXP_READ_ONLY_ACTIONS
-    from vmn_exp.registry.cli import add_model_parser, model_run_without_repo
+    from vmn_exp.cli.model_cmd import add_model_parser, model_run_without_repo
 
     register_dev_version()
     _register(CommandSpec(
@@ -535,10 +262,10 @@ def register_all() -> None:
     _register(CommandSpec(
         names=("model",),
         add_parser=add_model_parser,
-        handle=lambda ctx: model_run_without_repo(ctx.args),
+        handle=lambda ctx: model_run_without_repo(ctx.args, real_io()),
         access="local",
         read_only_actions=frozenset({"list", "show", "resolve"}),
-        run_without_repo=model_run_without_repo,
+        run_without_repo=lambda args: model_run_without_repo(args, real_io()),
     ))
     _register_reports()
 
@@ -557,8 +284,8 @@ def _register_reports():
         _register(CommandSpec(
             names=names,
             add_parser=add_parser,
-            handle=lambda ctx, run=run: run(ctx.args),
+            handle=lambda ctx, run=run: run(ctx.args, real_io()),
             access="local",
             read_only_actions=frozenset(read_only),
-            run_without_repo=run,
+            run_without_repo=lambda args, run=run: run(args, real_io()),
         ))

@@ -5,7 +5,7 @@ NAME=vmn
 DIST=${PWD}/dist
 TWINE=twine
 
-.PHONY: build upload dist check docs major _major minor _minor patch _patch rc _rc _build _build_ui _run_black
+.PHONY: build upload dist check docs major _major minor _minor patch _patch rc _rc _build _build_ui _changelog _test_ui _lint_ui _run_black
 
 build: check _build
 
@@ -13,6 +13,13 @@ _build_ui:
 	@echo "Building web UI"
 	npm install --prefix ${PWD}/packages/vmn-exp/webui
 	npm run build --prefix ${PWD}/packages/vmn-exp/webui
+
+# The web client's unit tests, with a JUnit report for the CI stage.
+_test_ui:
+	npm test --prefix ${PWD}/packages/vmn-exp/webui -- --reporter=default --reporter=junit --outputFile.junit=${PWD}/reports/tests_webui.xml
+
+_lint_ui:
+	npm run lint --prefix ${PWD}/packages/vmn-exp/webui
 
 # Builds at the version `vmn show ${NAME}` reports (the release after a
 # `vmn release`, not the rc the stamp wrote into the files); see build_dist.sh.
@@ -31,6 +38,19 @@ upload:
 		grep -q "^\[$$section\]" ~/.pypirc 2>/dev/null || section=pypi; \
 		${TWINE} upload --verbose --skip-existing -r $$section $$f || exit 1; \
 	done
+
+# vmn_exp only: rebuilds packages/vmn-exp/CHANGELOG.md from the vmn_exp_ tags
+# (packages/vmn-exp/cliff.toml), commits it when it changed and pushes.
+# release_exp.sh runs it after the upload; a rerun is a no-op.
+EXP_CHANGELOG=packages/vmn-exp/CHANGELOG.md
+_changelog:
+	@[ "${NAME}" = vmn_exp ] || { echo "_changelog: NAME=vmn_exp only" >&2; exit 1; }
+	git-cliff --config packages/vmn-exp/cliff.toml \
+		--include-path 'packages/vmn-exp/**' --include-path 'packages/vmn-exp-sdk/**' \
+		-o ${EXP_CHANGELOG}
+	git add ${EXP_CHANGELOG}
+	git diff --cached --quiet -- ${EXP_CHANGELOG} || \
+		{ git commit -m "docs(exp): changelog" -- ${EXP_CHANGELOG} && git push; }
 
 major: check _major _build
 

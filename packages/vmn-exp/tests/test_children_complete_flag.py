@@ -1,6 +1,7 @@
 """The per-app "every child has its marker" flag: a small object beside the
 app's records that no listing takes for a run, written by a complete
 backfill and dropped whenever a child's marker fails to be written."""
+import os
 import pytest
 from s3_helpers import mocked_bucket, s3_storage
 
@@ -8,6 +9,8 @@ from vmn_exp.cli import backfill_children
 from vmn_exp.core.writer import create_run
 from vmn_exp.storage.cached import CachedSnapshotStorage
 from vmn_exp.storage.local import LocalSnapshotStorage
+from vmn_exp.core.real_io import RealClock
+from writer_args import process_suffix, process_writer
 
 APP = "my_app"
 CODE = "0.0.1-dev.abc.def"
@@ -15,7 +18,7 @@ CODE = "0.0.1-dev.abc.def"
 
 def _run(storage, parent=None):
     return create_run(storage, APP, CODE, {"timestamp": "2026-01-01T00:00:00Z"}, {},
-                      parent=parent)
+                      parent=parent, writer=process_writer(), suffix=process_suffix())
 
 
 @pytest.fixture
@@ -139,20 +142,20 @@ def test_a_failed_backfill_leaves_the_flag_off(local, monkeypatch):
 def test_a_renamed_pushed_child_marks_its_parent_on_the_remote(tmp_path, s3):
     from push_helpers import APP as PUSH_APP, CODE as PUSH_CODE, X, local_root, \
         make_run, run_meta
-    from vmn_exp.core.push_code import CodePusher
-    from vmn_exp.core.push_ledger import PushLedger
-    from vmn_exp.core.push_rename import push_or_rename
-    from vmn_exp.core.push_run import NEW, push_run
+    from vmn_exp.cli.pushing.push_code import CodePusher
+    from vmn_exp.cli.pushing.push_ledger import PushLedger
+    from vmn_exp.cli.pushing.push_rename import push_or_rename
+    from vmn_exp.cli.pushing.push_run import NEW, push_run
 
     local = local_root(tmp_path)
     outer = make_run(local, tmp_path, verstr=PUSH_CODE + ".outer")
     make_run(local, tmp_path, parent=outer)
-    assert push_run(local, s3, PUSH_APP, outer).status == NEW
+    assert push_run(local, s3, PUSH_APP, outer, env=os.environ).status == NEW
     s3.save(PUSH_APP, X, run_meta(X, timestamp="2025-05-05T00:00:00Z"), {})
 
-    ledger = PushLedger.for_target(local, PUSH_APP, s3)
+    ledger = PushLedger.for_target(local, PUSH_APP, s3, os.environ)
     outcome = push_or_rename(local, s3, PUSH_APP, X, ledger,
-                             CodePusher(local, s3, PUSH_APP))
+                             CodePusher(local, s3, PUSH_APP), now=RealClock().now(), env=os.environ)
 
     assert outcome.verstr != X
     assert s3.list_children(PUSH_APP, outer) == [outcome.verstr]

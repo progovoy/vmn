@@ -1,7 +1,9 @@
 """Two workspaces sharing an app name are separate election and wake scopes."""
+import os
 import time
 
 import pytest
+from vmn_exp.core.real_io import RealClock
 
 pytest.importorskip("psycopg")
 
@@ -19,7 +21,7 @@ class _Ws:
 
 def _seed(tmp_path, name):
     uri = f"file://{tmp_path}/{name}"
-    storage = open_storage(uri, area=RUNS)
+    storage = open_storage(uri, area=RUNS, clock=RealClock(), env=os.environ)
     verstr = f"0.0.1-dev.abc.{name}"
     storage.save(APP, verstr, {"verstr": verstr, "timestamp": "2026-01-01T00:00:00Z"}, {})
     return _Ws(name, uri), storage, verstr
@@ -75,7 +77,7 @@ def _until(cond, timeout=3.0):
 
 def test_wake_scope_wakes_only_the_matching_workspace():
     one, two = _Counting(f"1:{APP}"), _Counting(f"2:{APP}")
-    refresher = Refresher(interval_sec=30)
+    refresher = Refresher(interval_sec=30, clock=time.monotonic)
     try:
         refresher.snapshot(one)
         refresher.snapshot(two)

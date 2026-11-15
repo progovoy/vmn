@@ -1,6 +1,6 @@
 # 11 — vmn-exp as a central server (on-prem and BYO-bucket SaaS)
 
-Status: **design, not started**. Decisions agreed 2026-10-02:
+Status: **done** (designed 2026-10-02, built from 2026-10-02; confirmed in code 2026-11-11). Decisions agreed 2026-10-02:
 
 - vmn-exp may run as a central server, installed on-prem or offered as SaaS.
 - SaaS is **bring-your-own-bucket**: we host the control plane, the data stays in the

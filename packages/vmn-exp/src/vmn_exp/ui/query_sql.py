@@ -111,12 +111,13 @@ class _Compiler:
         )
 
 
-def compile_sql(text, column="data"):
+def compile_sql(text, column="data", now=None):
     """``(where, params)`` matching query *text* over the jsonb *column*;
     ``("true", {})`` for an empty query. Raises ``QueryError`` like
-    :func:`~vmn_exp.core.query.compile_query`."""
+    :func:`~vmn_exp.core.query.compile_query`; an ``ago()`` is pinned to
+    *now*."""
     if not text or not text.strip():
         return "true", {}
     compiler = _Compiler(column)
-    where = compiler.node(parse_query(text))
+    where = compiler.node(parse_query(text, now))
     return where, compiler.params

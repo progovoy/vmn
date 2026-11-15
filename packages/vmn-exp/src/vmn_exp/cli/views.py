@@ -10,7 +10,6 @@ Non-finite metrics are written as ``null`` so the output is strict JSON.
 import argparse
 import json
 import math
-import sys
 import tarfile
 import zlib
 
@@ -18,20 +17,22 @@ from version_stamp.api import _list_tarball_members
 from vmn_exp.core.app_conf import experiment_conf
 from vmn_exp.core.app_settings_store import app_metrics_schema
 from vmn_exp.core.code_store import CODE_MISSING
-from vmn_exp.core.fold import fold_features, fold_log, fold_row
+from vmn_exp.core.fold import fold_features, fold_log, fold_row, is_folded_param
 from vmn_exp.core.intent import cap_utf8
 from vmn_exp.core.media import media_counts
 from vmn_exp.core.metric_summary import value_policy
 from vmn_exp.core.provenance import no_code_reason
 from vmn_exp.core.record_format import record_format_version
 from vmn_exp.core.run_error import error_summary
-from vmn_exp.core.status import status_fields
+from vmn_exp.core.status import MIN_STALE_SEC, status_fields
 
 PATCH_TYPES = ("working_tree", "local_commits")
 # ``show --patch`` prints at most this much patch text unless ``--max-bytes`` says otherwise.
 PATCH_MAX_BYTES = 200000
 # ``show --patch``'s reason for a run whose code is untracked files only.
 UNTRACKED_ONLY = "untracked_only"
+# At most this many untracked paths are listed beside a text patch.
+UNTRACKED_NAMES_CAP = 200
 # Log entries that record facts about the run rather than events in it.
 FACT_ENTRY_TYPES = frozenset({"features"})
 
@@ -51,6 +52,15 @@ def metrics_schema(vcs, storage, app_name):
 def patch_lines(patches):
     """``{patch type: line count}`` for the patches present."""
     return {p: patches[p].count("\n") for p in PATCH_TYPES if (patches or {}).get(p)}
+
+
+def patch_stat_lines(metadata, patches):
+    """Plain ``show``'s patch stats: ``<type>: N lines`` per text patch, then
+    ``untracked_files: captured`` when the run captured untracked files."""
+    lines = [f"{ptype}: {n} lines" for ptype, n in patch_lines(patches).items()]
+    if metadata.get("has_untracked_files") or (patches or {}).get("untracked_files"):
+        lines.append("untracked_files: captured")
+    return lines
 
 
 def _patch_sources(patches):
@@ -120,27 +130,70 @@ def _no_text_payload(metadata, patches):
     return {"text": None, "reason": "no_code"}
 
 
+def _has_tarball(patches):
+    return any(source.get("untracked_files") for _, source in _patch_sources(patches))
+
+
+def _untracked_beside_text(patches):
+    """The untracked keys of a text payload: ``untracked_files`` (capped at
+    :data:`UNTRACKED_NAMES_CAP`) and ``untracked_total``, or ``[]`` with
+    ``untracked_unreadable`` when a tarball cannot be read."""
+    names = _untracked_names(patches)
+    if names is None:
+        return {"untracked_files": [], "untracked_unreadable": True}
+    return {"untracked_files": names[:UNTRACKED_NAMES_CAP], "untracked_total": len(names)}
+
+
 def patch_payload(metadata, patches, max_bytes=PATCH_MAX_BYTES):
-    """``show --patch``'s ``{"text", "truncated"}``, capped at *max_bytes*.
-    A run without a text patch gets
+    """``show --patch``'s ``{"text", "truncated"}``, capped at *max_bytes*,
+    plus the untracked keys (:func:`_untracked_beside_text`) when the run
+    captured an untracked tarball. A run without a text patch gets
     ``{"text": None, "reason"}``: ``code_missing``, ``untracked_only`` (plus
     the ``untracked_files`` paths, unless a tarball cannot be read) or ``no_code``."""
-    sections = _text_patches(patches or {})
+    patches = patches or {}
+    sections = _text_patches(patches)
     if not sections:
-        return _no_text_payload(metadata or {}, patches or {})
+        return _no_text_payload(metadata or {}, patches)
     text = "".join(_section(*s) for s in sections)
     text, truncated = cap_utf8(text, max_bytes)
-    return {"text": text, "truncated": truncated}
+    payload = {"text": text, "truncated": truncated}
+    if _has_tarball(patches):
+        payload.update(_untracked_beside_text(patches))
+    return payload
+
+
+def _first_names(names, total=None):
+    """``a, b, c, +N more`` of *names* (``total`` of them in all)."""
+    total = len(names) if total is None else total
+    return ", ".join(names[:3]) + (f", +{total - 3} more" if total > 3 else "")
 
 
 def _untracked_only_note(names):
     if not names:
         return "only untracked files were captured, in a tarball that cannot be read"
-    shown = ", ".join(names[:3]) + (f", +{len(names) - 3} more" if len(names) > 3 else "")
     return (
-        f"only untracked files were captured ({shown}), which are not printed; "
+        f"only untracked files were captured ({_first_names(names)}), which are not printed; "
         "vmn-exp export or vmn-exp restore brings them back"
     )
+
+
+def _untracked_beside_text_note(payload):
+    if payload.get("untracked_unreadable"):
+        return "untracked files captured, in a tarball that cannot be read"
+    shown = _first_names(payload["untracked_files"], payload["untracked_total"])
+    return (
+        f"untracked files captured, not printed: {shown} "
+        "(vmn-exp export or restore brings them back)"
+    )
+
+
+def base_line(metadata):
+    """``show``'s line for the code a run started from: its base version and
+    commit, or none for a run recorded with ``code=False``."""
+    if metadata.get("codeless"):
+        return "Code:      none (recorded with code=False)"
+    base_commit = (metadata.get("base_commit") or "?")[:7]
+    return f"Base:      {metadata.get('base_version') or '?'} ({base_commit})"
 
 
 def no_patch_note(verstr, metadata, untracked=None):
@@ -158,17 +211,30 @@ def no_patch_note(verstr, metadata, untracked=None):
     return f"{verstr} has no patch to show: {reason}"
 
 
-def print_patch(verstr, metadata, patches, max_bytes=PATCH_MAX_BYTES):
-    """``show --patch``'s text: the patches, or a one-line note on stderr."""
-    payload = patch_payload(metadata, patches, max_bytes)
+def _patch_stderr_note(verstr, metadata, payload):
+    """``show --patch``'s one stderr line, or None: why there is no text, or
+    the untracked files captured beside it."""
     if payload["text"] is None:
         untracked = (payload.get("untracked_files", [])
                      if payload["reason"] == UNTRACKED_ONLY else None)
-        print(no_patch_note(verstr, metadata, untracked), file=sys.stderr)
-        return
-    print("\n" + payload["text"], end="")
-    if payload["truncated"]:
-        print(f"\n[patch truncated at {max_bytes} bytes; raise --max-bytes to see more]")
+        return no_patch_note(verstr, metadata, untracked)
+    if "untracked_files" in payload:
+        return _untracked_beside_text_note(payload)
+    return None
+
+
+def print_patch(verstr, metadata, patches, max_bytes=PATCH_MAX_BYTES, *, out, err):
+    """``show --patch``'s text to *out*: the patches, and a one-line note to
+    *err* when there is no text or untracked files were captured beside it."""
+    payload = patch_payload(metadata, patches, max_bytes)
+    text = payload["text"]
+    if text is not None and payload["truncated"]:
+        out(f"\n{text}\n[patch truncated at {max_bytes} bytes; raise --max-bytes to see more]")
+    elif text is not None:
+        out(f"\n{text}".removesuffix("\n"))  # out() adds the newline the text ends with
+    note = _patch_stderr_note(verstr, metadata, payload)
+    if note:
+        err(note)
 
 
 def event_log(log):
@@ -179,13 +245,13 @@ def event_log(log):
 
 def show_payload(
     idx, metadata, patches, log, run_state, tree, log_tail=None, observed_at=None,
-    schema=None,
+    schema=None, *, now, min_stale_sec=MIN_STALE_SEC,
 ):
     """The ``show --json`` object; *log_tail* keeps only the newest entries.
-    *schema* is the app's metrics schema."""
+    *schema* is the app's metrics schema; the status is derived at *now* on *min_stale_sec*."""
     fold = fold_log(log)
     run = fold_row(idx, metadata, fold, schema=schema)
-    run.update(status_fields(run_state, observed_at=observed_at))
+    run.update(status_fields(run_state, now=now, observed_at=observed_at, min_stale_sec=min_stale_sec))
     run.update(tree)
     run["base_commit"] = metadata.get("base_commit")
     run["format_version"] = record_format_version(metadata)
@@ -265,3 +331,11 @@ def dumps(payload):
     return json.dumps(
         _finite_or_none(payload), indent=2, sort_keys=True, allow_nan=False, default=str
     )
+
+
+def split_params(metrics, params, logged):
+    """``(logged metrics, params)`` of a run: *metrics* without the params'
+    numbers folded into them (a param also logged as a metric, in *logged*,
+    stays), and every param."""
+    shown = {k: v for k, v in metrics.items() if not is_folded_param(k, params, logged)}
+    return shown, dict(params)

@@ -2,7 +2,14 @@
 import io
 import tarfile
 
-from vmn_exp.cli.views import PATCH_MAX_BYTES, no_patch_note, patch_payload
+from vmn_exp.cli.views import (
+    PATCH_MAX_BYTES,
+    UNTRACKED_NAMES_CAP,
+    no_patch_note,
+    patch_payload,
+    print_patch,
+)
+from vmn_exp.core.real_io import RealConsole
 
 WORKING = "diff --git a/f b/f\n-old\n+new\n"
 COMMITS = "From 0123 Mon Sep 17 00:00:00 2001\nSubject: [PATCH] try it\n"
@@ -139,3 +146,55 @@ def test_no_patch_note_lists_at_most_three_untracked_names():
     note = no_patch_note("v", {"base_commit": "abcdef0123"}, untracked=names)
     assert "f0.py, f1.py, f2.py" in note and "f3.py" not in note
     assert "+2 more" in note
+
+
+def test_a_text_patch_also_lists_the_untracked_files():
+    patches = {"working_tree": WORKING, "untracked_files": _tarball("train2.py")}
+    payload = patch_payload({}, patches)
+    assert payload == {
+        "text": f"=== working_tree ===\n{WORKING}",
+        "truncated": False,
+        "untracked_files": ["train2.py"],
+        "untracked_total": 1,
+    }
+
+
+def test_a_deps_untracked_files_are_listed_beside_the_text_under_deps_prefix():
+    patches = {
+        "working_tree": WORKING,
+        "deps": {"libs_b": {"untracked_files": _tarball("gen.py")}},
+    }
+    payload = patch_payload({}, patches)
+    assert payload["untracked_files"] == ["deps/libs_b/gen.py"]
+    assert payload["untracked_total"] == 1
+
+
+def test_an_unreadable_tarball_beside_text_is_flagged_not_dropped():
+    patches = {"working_tree": WORKING, "untracked_files": b"\x1f\x8bTAR"}
+    payload = patch_payload({}, patches)
+    assert payload["untracked_files"] == []
+    assert payload["untracked_unreadable"] is True
+    assert payload["text"] == f"=== working_tree ===\n{WORKING}"
+
+
+def test_untracked_names_are_capped_with_a_total():
+    names = [f"f{i:04d}.py" for i in range(UNTRACKED_NAMES_CAP + 5)]
+    payload = patch_payload({}, {"working_tree": WORKING, "untracked_files": _tarball(*names)})
+    assert UNTRACKED_NAMES_CAP == 200
+    assert payload["untracked_files"] == names[:UNTRACKED_NAMES_CAP]
+    assert payload["untracked_total"] == UNTRACKED_NAMES_CAP + 5
+
+
+def test_a_text_patch_without_a_tarball_has_no_untracked_keys():
+    assert set(patch_payload({}, {"working_tree": WORKING})) == {"text", "truncated"}
+
+
+def test_print_patch_notes_untracked_files_on_stderr(capsys):
+    names = ["a.py", "b.py", "c.py", "d.py", "e.py"]
+    patches = {"working_tree": WORKING, "untracked_files": _tarball(*names)}
+    print_patch("v", {}, patches, out=RealConsole().out, err=RealConsole().err)
+    out, err = capsys.readouterr()
+    assert "=== working_tree ===" in out and "a.py" not in out
+    assert err.count("\n") == 1
+    assert "untracked files captured, not printed: a.py, b.py, c.py, +2 more" in err
+    assert "vmn-exp export or restore brings them back" in err

@@ -6,6 +6,7 @@ import time
 import pytest
 
 from vmn_exp.ui.refresher import Refresher
+from vmn_exp.core.real_io import real_io
 
 
 class FakeIndex:
@@ -47,7 +48,7 @@ def _wait_for(predicate, timeout=5.0):
 
 @pytest.fixture
 def refresher():
-    r = Refresher(interval_sec=0.02, idle_sec=0.3)
+    r = Refresher(interval_sec=0.02, idle_sec=0.3, clock=time.monotonic)
     yield r
     r.stop()
 
@@ -99,7 +100,7 @@ def test_a_failing_refresh_keeps_serving_the_last_snapshot(refresher, caplog):
 
 
 def test_stop_ends_every_thread():
-    r = Refresher(interval_sec=0.02, idle_sec=60)
+    r = Refresher(interval_sec=0.02, idle_sec=60, clock=time.monotonic)
     indexes = [FakeIndex(), FakeIndex()]
     for index in indexes:
         r.snapshot(index)
@@ -126,14 +127,14 @@ def test_inline_refresher_refreshes_before_every_snapshot():
     inline = InlineRefresher()
     assert inline.snapshot(index) == ("snapshot", 1)
     assert inline.snapshot(index) == ("snapshot", 2)
-    assert not inline.background and Refresher().background
+    assert not inline.background and Refresher(clock=time.monotonic).background
 
 
 def test_inline_refresher_keeps_the_full_sweep_default():
     from vmn_exp.ui.refresher import InlineRefresher
 
     assert InlineRefresher().full_sweep_sec is None
-    assert Refresher().full_sweep_sec == 3600
+    assert Refresher(clock=time.monotonic).full_sweep_sec == 3600
 
 
 def test_create_app_refreshes_inline_unless_asked_otherwise(tmp_path):
@@ -142,5 +143,5 @@ def test_create_app_refreshes_inline_unless_asked_otherwise(tmp_path):
     from vmn_exp.ui.server import create_app
     from vmn_exp.ui.workspaces import WorkspaceManager
 
-    app = create_app(WorkspaceManager(str(tmp_path / "data")))
+    app = create_app(WorkspaceManager(str(tmp_path / "data")), io=real_io())
     assert isinstance(app.state.refresher, InlineRefresher)

@@ -1,0 +1,17 @@
+app_name: golden
+base_commit: null
+base_version: null
+branch: null
+code_verstr: 0.0.1-dev.1+aaaaaaaa
+dirty_states: []
+format_version: 2
+from_snapshot: true
+has_dep_patches: false
+has_local_commits_patch: false
+has_untracked_files: false
+has_working_tree_patch: false
+name: golden-run
+note: first note
+remote: null
+timestamp: '2026-11-11T14:03:07.197724Z'
+verstr: 0.0.1-dev.1+aaaaaaaa.trainer-0

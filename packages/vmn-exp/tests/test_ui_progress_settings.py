@@ -1,14 +1,16 @@
 """Plan 28 P2 + A0: an app's ``ui.progress`` settings name the metrics an
 outer run's declared progress is read from; the rollups follow a settings
 change at once (the settings are part of their memo keys)."""
+import os
+
 import pytest
 import yaml
 
 pytest.importorskip("fastapi")
 from fastapi.testclient import TestClient  # noqa: E402
-
 from vmn_exp.core.app_settings import SettingsError, parse_settings  # noqa: E402
 from vmn_exp.core.app_settings_store import write_settings  # noqa: E402
+from vmn_exp.core.real_io import RealClock, real_io
 from vmn_exp.storage.areas import RUNS  # noqa: E402
 from vmn_exp.storage.open import open_storage  # noqa: E402
 
@@ -38,13 +40,13 @@ def store(tmp_path):
     from vmn_exp.ui.workspaces import WorkspaceManager
 
     uri = f"file://{tmp_path}/store"
-    storage = open_storage(uri, area=RUNS)
+    storage = open_storage(uri, area=RUNS, clock=RealClock(), env=os.environ)
     manager = WorkspaceManager(str(tmp_path / "data"))
     manager.add_store("ws", uri)
     outer = _run(storage, 1, {"dates_done": 20, "dates_total": 60})
     for n in (2, 3, 4):
         _run(storage, n, {"loss": float(n)}, parent=outer)
-    return TestClient(create_app(manager)), storage, outer
+    return TestClient(create_app(manager, io=real_io())), storage, outer
 
 
 def _summary(client, outer):
@@ -69,7 +71,7 @@ def test_a_progress_mapping_is_validated():
 
 def test_the_settings_mapping_drives_an_outer_runs_declared_progress(store):
     client, storage, outer = store
-    write_settings(storage, APP, MAPPING)
+    write_settings(storage, APP, MAPPING, env=real_io().env, host=real_io().host)
     body = _summary(client, outer)
     assert body["declared_progress"]["done"] == 20
     assert body["declared_progress"]["total"] == 60
@@ -131,5 +133,5 @@ def test_a_git_workspaces_conf_names_them_too(tmp_path):
         {"conf": {"experiment": {"ui": yaml.safe_load(MAPPING)["ui"]}}}))
     manager = WorkspaceManager(str(tmp_path / "data"))
     manager.attach_path("ws", str(root))
-    body = _summary(TestClient(create_app(manager)), outer)
+    body = _summary(TestClient(create_app(manager, io=real_io())), outer)
     assert body["declared_progress"]["unit"] == "dates" and body["progress"] == 0.5

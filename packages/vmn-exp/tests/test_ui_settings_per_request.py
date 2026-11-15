@@ -1,5 +1,8 @@
 """Plan 28 A0 follow-up: an inline-refresh server reads an app's store
 settings once per request, however many read paths ask for them."""
+import os
+import time
+
 import pytest
 
 pytest.importorskip("fastapi")
@@ -11,6 +14,7 @@ from vmn_exp.storage.local import LocalSnapshotStorage  # noqa: E402
 from vmn_exp.storage.open import open_storage  # noqa: E402
 from vmn_exp.ui import settings_cache  # noqa: E402
 from vmn_exp.ui.settings_cache import SettingsCache, request_scope  # noqa: E402
+from vmn_exp.core.real_io import RealClock, real_io
 
 APP = "app"
 BASE = f"/api/v1/workspaces/ws/apps/{APP}"
@@ -34,14 +38,14 @@ def _client(tmp_path):
     from vmn_exp.ui.workspaces import WorkspaceManager
 
     uri = f"file://{tmp_path}/store"
-    storage = open_storage(uri, area=RUNS)
+    storage = open_storage(uri, area=RUNS, clock=RealClock(), env=os.environ)
     verstr = "0.0.1-dev.abc1234.def5678.r1"
     storage.save(APP, verstr, {"verstr": verstr, "timestamp": "2026-01-01T00:00:01Z"}, {})
     storage.save_file(APP, verstr, "run_state.yml", "state: finished\nexit_code: 0\n")
-    write_settings(storage, APP, "metrics: {loss: {goal: min}}\nui: {group_aggregate: min}\n")
+    write_settings(storage, APP, "metrics: {loss: {goal: min}}\nui: {group_aggregate: min}\n", env=real_io().env, host=real_io().host)
     manager = WorkspaceManager(str(tmp_path / "data"))
     manager.add_store("ws", uri)
-    return TestClient(create_app(manager))
+    return TestClient(create_app(manager, io=real_io()))
 
 
 def test_an_inline_refresh_request_reads_the_settings_once(tmp_path, reads):
@@ -55,10 +59,10 @@ def test_an_inline_refresh_request_reads_the_settings_once(tmp_path, reads):
 
 def test_a_zero_window_cache_reads_once_per_request_scope(tmp_path, reads):
     storage = LocalSnapshotStorage(str(tmp_path / "store"), "runs")
-    cache = SettingsCache(recheck_sec=0)
+    cache = SettingsCache(recheck_sec=0, clock=time.monotonic)
     with request_scope():
         cache.get("ws", storage, APP)
-        write_settings(storage, APP, "ui: {stale_after_min: 2}\n")
+        write_settings(storage, APP, "ui: {stale_after_min: 2}\n", env=real_io().env, host=real_io().host)
         assert cache.get("ws", storage, APP) == {}
         cache.forget("ws", APP)
         assert cache.get("ws", storage, APP) == {"ui": {"stale_after_min": 2}}

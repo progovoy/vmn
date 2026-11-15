@@ -20,13 +20,11 @@ reported phase and progress have not changed (None between refreshes): a
 long refresh that keeps moving is not stuck.
 """
 import bisect
-import time
 
 FULL_LISTING, JOURNAL, LISTING, LOADING_NEW, MIGRATING, IDLE = (
     "full_listing", "journal", "listing", "loading_new", "migrating", "idle")
 PERSIST_EVERY_SEC = 60
 _FORMAT = "1"
-_wall = time.time
 
 
 def listing_progress(keys, at):
@@ -40,8 +38,10 @@ class Freshness:
     """One index's ``as_of`` (persisted in ``store()``'s key-value table) and
     refresh phase."""
 
-    def __init__(self, store, app_name):
+    def __init__(self, store, app_name, wall):
+        """*wall*: epoch seconds now."""
         self._store, self._scope = store, f"as_of:{app_name}"
+        self._wall = wall
         self._as_of = self._persisted_at = self._read_at = self._started = None
         self.phase = IDLE
         self._keys, self._position, self._sorted = None, None, False  # a full listing's
@@ -56,24 +56,24 @@ class Freshness:
 
     def load(self):
         """Read ``as_of`` from the store now."""
-        self._read_at = _wall()
+        self._read_at = self._wall()
         payload = self._store().kv_get(self._scope, _FORMAT)
         self._as_of = self._persisted_at = (payload or {}).get("as_of")
 
     def reload(self):
         """Read ``as_of`` again when next asked, at most every
         PERSIST_EVERY_SEC (a follower's, which its leader writes)."""
-        if self._read_at is not None and _wall() - self._read_at >= PERSIST_EVERY_SEC:
+        if self._read_at is not None and self._wall() - self._read_at >= PERSIST_EVERY_SEC:
             self._read_at = None
 
     def started(self):
         """A refresh starts now."""
-        self._started = _wall()
+        self._started = self._wall()
         self._moved = (None, self._started)
 
     def stalled_sec(self, phase, progress):
         """Seconds the refresh has reported this *phase* and *progress*."""
-        now, (seen, since) = _wall(), self._moved
+        now, (seen, since) = self._wall(), self._moved
         if (phase, progress) != seen or since is None:
             self._moved, since = ((phase, progress), now), now
         return now - since

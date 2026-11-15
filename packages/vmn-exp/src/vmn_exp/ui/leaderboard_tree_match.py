@@ -62,7 +62,7 @@ def _hits(base, bucket, root, f):
         at = [base.position[root], *at]
     rows = [patched.get(i, base.rows[i]) for i in at]
     passing = filtered(base.snapshot, rows,
-                       Filters(status=f.status, query=f.query, archived=f.archived))
+                       Filters(status=f.status, query=f.query, archived=f.archived), base.now_of())
     edges = base.snapshot.edges
     counts = Counter()
     for row in passing:

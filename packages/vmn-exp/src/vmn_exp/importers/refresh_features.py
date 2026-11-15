@@ -24,19 +24,21 @@ def refresh_record(
     metadata: dict[str, Any],
     logs: dict[str, list[dict[str, Any]]] | None,
     commit: Callable[[], dict[str, Any] | None] = lambda: None,
+    *,
+    writer: str,
 ) -> bool:
     """Refresh *verstr*, imported from *run*: *metadata* is the record's,
     *logs* its entries by writer (None: load them), ``commit()`` the source
-    commit's changes, asked only when they count. True when something was
-    written."""
+    commit's changes, asked only when they count; *writer* appends the
+    features. True when something was written."""
     tags = run.get("tags")
     wrote = False
     entries = (storage.load_merged_log(app_name, verstr) if logs is None
                else [entry for writer_entries in logs.values() for entry in writer_entries])
     if needs_features(entries, commit):
         entry = features_entry(tags, commit(), branch=not metadata.get("branch"))
-        append_to_log(storage, app_name, verstr, stamped_entry(entry))
-        flush_log(storage, app_name, verstr)
+        append_to_log(storage, app_name, verstr, stamped_entry(entry), writer)
+        flush_log(storage, app_name, verstr, writer)
         wrote = True
     note = tag(tags, NOTE)
     if note and not (metadata.get("note") or "").strip():

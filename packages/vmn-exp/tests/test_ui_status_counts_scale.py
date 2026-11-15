@@ -5,11 +5,10 @@ read instead of timing, so it cannot flake on a loaded box."""
 import sys
 
 import pytest
+from fakes.clock import FakeClock
 from leaderboard_fleet import T0, Fleet, finished, running
 from vmn_exp.ui.leaderboard_cache import LeaderboardCache
 from vmn_exp.ui.status_summary import status_summary
-
-from vmn_exp.core import status as status_mod
 
 N = 50000
 LIVE = 40
@@ -17,6 +16,7 @@ SWEEPS = 5
 EDITS = 10  # metric edits, new children, finishes, starts, an archive toggle
 BOUND = 4 * (LIVE + SWEEPS + EDITS)
 GENERATIONS = 4
+CLOCK = FakeClock(start=T0)
 
 
 def _count_counted_status(monkeypatch, counts):
@@ -60,8 +60,7 @@ def fleet():
 
 def test_a_new_generation_counts_the_changed_and_live_rows_only(monkeypatch, fleet):
     fleet, roots, live = fleet
-    monkeypatch.setattr(status_mod, "_now", lambda now=None: now or T0)
-    cache = LeaderboardCache()
+    cache = LeaderboardCache(now=CLOCK.now)
     cache.status_summary(fleet.snapshot(), T0)  # warm-up: one full count
     counts = [0]
     _count_counted_status(monkeypatch, counts)
@@ -70,4 +69,4 @@ def test_a_new_generation_counts_the_changed_and_live_rows_only(monkeypatch, fle
         counts[0] = 0
         body = cache.status_summary(snap, T0)
         assert counts[0] <= BOUND, step
-        assert body == status_summary(LeaderboardCache().rows(snap), T0)
+        assert body == status_summary(LeaderboardCache(now=CLOCK.now).rows(snap), T0)

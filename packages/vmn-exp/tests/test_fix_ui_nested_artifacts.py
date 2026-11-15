@@ -1,9 +1,11 @@
 """The artifact download route serves nested artifact paths, safely."""
+import os
+
 import pytest
 
 pytest.importorskip("fastapi")
 from fastapi.testclient import TestClient
-
+from vmn_exp.core.real_io import RealClock, real_io
 from vmn_exp.snapshot import open_storage
 from vmn_exp.storage.areas import local_store_root
 
@@ -16,7 +18,7 @@ BASE = f"/api/v1/workspaces/ws/apps/{APP}/experiments/{V}/artifacts"
 def client(tmp_path):
     root = tmp_path / "repo"
     (root / ".git").mkdir(parents=True)
-    storage = open_storage(root=local_store_root(str(root)), area="runs")
+    storage = open_storage(root=local_store_root(str(root)), area="runs", clock=RealClock(), env=os.environ)
     storage.save(APP, V, {"verstr": V, "timestamp": "2026-01-01T00:00:00Z"}, {})
     src = tmp_path / "c.txt"
     src.write_bytes(b"nested bytes")
@@ -27,7 +29,7 @@ def client(tmp_path):
 
     manager = WorkspaceManager(str(tmp_path / "data"))
     manager.attach_path("ws", str(root))
-    return TestClient(create_app(manager))
+    return TestClient(create_app(manager, io=real_io()))
 
 
 def test_a_nested_artifact_downloads(client):

@@ -6,8 +6,8 @@ import sys
 from vmn_exp.core.app_settings import SettingsError, check_settings
 from vmn_exp.core.app_settings_store import read_settings_text, write_settings
 from vmn_exp.cli.intent_arg import read_file_arg
-from vmn_exp.registry.cli import _get_storage
-from vmn_exp.registry.cli_parser import _add_storage_args
+from vmn_exp.cli.model_cmd import _get_storage
+from vmn_exp.cli.storage_flags import _add_storage_args
 
 
 def add_settings_parser(subparsers):
@@ -21,10 +21,10 @@ def add_settings_parser(subparsers):
     return parser
 
 
-def settings_run_without_repo(args):
-    storage = _get_storage(args)
+def settings_run_without_repo(args, io):
+    storage = _get_storage(args, io.clock, io.env)
     if args.action == "set":
-        return _set(storage, args)
+        return _set(storage, args, io.env, io.host)
     text = read_settings_text(storage, args.name)
     if text is None:
         print(f"No settings for {args.name}", file=sys.stderr)
@@ -33,14 +33,14 @@ def settings_run_without_repo(args):
     return 0
 
 
-def _set(storage, args):
+def _set(storage, args, env, host):
     if not args.file:
         print("settings set needs -f <file>", file=sys.stderr)
-        return 1
+        return 2
     try:
         text = read_file_arg(args.file, "-f")
         check_settings(text)
-        write_settings(storage, args.name, text)
+        write_settings(storage, args.name, text, env=env, host=host)
     except SettingsError as exc:
         print(f"Invalid settings: {exc}", file=sys.stderr)
         return 1

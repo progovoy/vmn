@@ -1,5 +1,6 @@
 """``vmn-exp add <app> -v <ref> --finish <code> [--error] [--end-reason] [--force]``:
 the CLI's ``manage.finish_run`` (plan 28 API3)."""
+from datetime import datetime, timezone
 from exp_helpers import _bootstrap, _exp, _storage
 
 from vmn_exp.core.status import load_run_state, status_fields
@@ -29,7 +30,7 @@ def test_add_finish_records_the_final_state(app_layout):
     state = _state(app_layout, verstr)
     assert (state["state"], state["exit_code"], state["end_reason"]) == (
         "finished", 2, "closed")
-    assert status_fields(state)["error_summary"] == "pod lost"
+    assert status_fields(state, now=datetime.now(timezone.utc))["error_summary"] == "pod lost"
     log = _storage(app_layout).load_merged_log(app_layout.app_name, verstr)
     assert [e["text"] for e in log if e["type"] == "note"] == ["closed at study end"]
 

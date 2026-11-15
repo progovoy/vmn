@@ -4,32 +4,35 @@ and ``create_runs()``.
 
 Two modes, as with the CLI: a git checkout (cold-start if needed, snapshot the
 tree) and a container built from ``vmn-exp export`` (no git; record against
-the exported code's identity). Either is first a :data:`RecordSource` — what
+the exported code's identity) — plus, only on request, no code at all
+(:mod:`vmn_exp.sdk.codeless`). Each is first a :data:`RecordSource` — what
 every run recorded from it shares — then a claim per run under its lock. The
 checkout mode lives in :mod:`vmn_exp.gitmode.checkout`, which only the full
 vmn-exp package ships.
 """
 import collections
 import contextlib
+import functools
 import os
 
 import yaml
-from vmn_exp._base import ensure_logger
+from vmn_exp._base import ensure_logger, now_iso, working_dir
 from vmn_exp.core import create_batch
 from vmn_exp.core.app_conf import experiment_conf
-from vmn_exp.core.env import (
-    capture_env_safe,
-    should_capture,
-)
+from vmn_exp.core.env import capture_env_safe, should_capture
 from vmn_exp.core.from_snapshot import exported_features, snapshot_record
 from vmn_exp.core.refs import resolve_parent
-from vmn_exp.core.storage_resolve import _get_experiment_storage
-from vmn_exp.core.writer import create_run as record_run
-from vmn_exp.core.writer import get_repo_lock, merge_env_into_params
+from vmn_exp.core.storage_resolve import try_repo_root
+from vmn_exp.core.writer import create_run as record_run, new_run_ids
+from vmn_exp.core.real_io import real_io
+from vmn_exp.core.writer import get_repo_lock
 from vmn_exp.sdk import _resolve_app_name, context
 from vmn_exp.sdk.context import current_run
 
 SNAPSHOT_METADATA_ENV = "VMN_SNAPSHOT_METADATA"
+CODE_ENV = "VMN_EXP_CODE"
+# Where a new run's code comes from (:func:`source_kind`).
+SNAPSHOT, CODELESS, CHECKOUT = "snapshot", "codeless", "checkout"
 GIT_MODE_MISSING = (
     "This run needs a git checkout, and git mode is not installed: "
     "`pip install vmn-exp` for it, or record git-free by setting "
@@ -95,45 +98,91 @@ def create_runs(
     specs = create_batch.run_specs(runs)
     if not specs:
         return []
-    source = record_source(app_name, parent, True, storage, capture_env)
+    io = real_io()
+    source = record_source(app_name, parent, True, storage, capture_env, io.env, io.host)
     with source.lock():
         return create_batch.create_runs(
             source.storage, source.app_name, source.code_verstr, source.template,
             specs, parent=source.parent, env=source.env, features=source.features,
-            workers=workers, exist_ok=exist_ok,
+            workers=workers, exist_ok=exist_ok, **new_run_ids(io.env, io.host),
         )
 
 
 def create_record(
     app_name, note, params, parent, nested, storage, name=None,
-    capture_env=None, python_exe=None,
+    capture_env=None, python_exe=None, code=None, *, env, host,
 ):
     """Create a new run's record; ``(app_name, storage, verstr, exp_conf)``.
 
-    *exp_conf* is the checkout's ``experiment:`` conf (``{}`` without one).
+    *exp_conf* is the checkout's ``experiment:`` conf (``{}`` without one);
+    ``code=False`` records no code (:func:`source_kind`), as *env* (and *host*) say.
     """
-    _reject_reentry_without_nesting(nested)
+    from vmn_exp.sdk.reentry import reject_reentry_without_nesting
+
+    reject_reentry_without_nesting(nested)
     # Same shape as the CLI's `-f file` params, so latest_metrics and
     # `exp diff` pick them up unchanged.
     create_data = {"params": dict(params)} if params else None
-    source = record_source(app_name, parent, nested, storage, capture_env, python_exe)
+    source = record_source(app_name, parent, nested, storage, capture_env, env, host, python_exe,
+                           code)
     with source.lock():
         verstr = record_run(
             source.storage, source.app_name, source.code_verstr,
             dict(source.template, note=note), {}, note=note, create_data=create_data,
             parent=source.parent, name=name, env=source.env, features=source.features,
+            **new_run_ids(env, host),
         )
     return source.app_name, source.storage, verstr, source.exp_conf
 
 
-def record_source(app_name, parent, nested, storage, capture_env, python_exe=None):
-    """The :data:`RecordSource` new runs record from: the export
-    ``VMN_SNAPSHOT_METADATA`` names, else the checkout."""
-    meta_path = os.environ.get(SNAPSHOT_METADATA_ENV)
-    if meta_path:
-        return snapshot_source(app_name, meta_path, parent, nested, storage, capture_env)
+def record_source(app_name, parent, nested, storage, capture_env, env, host, python_exe=None,
+                  code=None):
+    """The :data:`RecordSource` new runs record from (:func:`source_kind` of
+    *env*); a run's author is as *env* and *host* say."""
+    kind = source_kind(code, env)
+    if kind == SNAPSHOT:
+        return snapshot_source(app_name, env[SNAPSHOT_METADATA_ENV], parent, nested, storage,
+                               capture_env, env=env, host=host)
+    if kind == CODELESS:
+        from vmn_exp.sdk.codeless import codeless_source
+
+        return codeless_source(app_name, parent, nested, storage, capture_env, env,
+                               _codeless_io(env))
+    require_checkout_here()
     return gitmode().checkout_source(
-        app_name, parent, nested, storage, capture_env=capture_env, python_exe=python_exe)
+        app_name, parent, nested, storage, env, host, capture_env=capture_env,
+        python_exe=python_exe)
+
+
+def source_kind(code, env):
+    """Where a new run's code comes from: the export ``VMN_SNAPSHOT_METADATA``
+    names, else nothing when asked (``code=False``, or ``VMN_EXP_CODE=none``
+    with *code* not given), else the checkout. Never code-less by default."""
+    if env.get(SNAPSHOT_METADATA_ENV):
+        return SNAPSHOT
+    if code is not None:
+        return CHECKOUT if code else CODELESS
+    value = env.get(CODE_ENV)
+    if not value:
+        return CHECKOUT
+    if value == "none":
+        return CODELESS
+    raise ValueError(f"{CODE_ENV}={value!r}: its one value is 'none' (record no code)")
+
+
+def _codeless_io(env):
+    from vmn_exp.sdk.codeless import CodelessIO
+
+    return CodelessIO(snapshot_mode_storage, pick_parent,
+                      lambda capture: _maybe_capture_env(None, capture, env), now_iso,
+                      functools.partial(_shared_dir_lock, env))
+
+
+def require_checkout_here():
+    """RuntimeError unless the working dir is inside a git checkout."""
+    from vmn_exp.sdk.checkout_guard import require_checkout
+
+    require_checkout(try_repo_root(), working_dir())
 
 
 def creation_failed(app_name, err):
@@ -144,40 +193,13 @@ def creation_failed(app_name, err):
     )
 
 
-def _reject_reentry_without_nesting(nested):
-    """Guard against silently chaining a new run under a stale open one.
-
-    Re-running a notebook cell that never called ``run.finish()`` calls
-    ``start_run()`` again on the same thread/context while the previous run is
-    still open. Without this, ``pick_parent``'s env-var fallback would treat
-    that still-open run's self-export as an enclosing launcher and quietly
-    parent the new run to it — chaining runs nobody asked to nest, and leaking
-    the old run's heartbeat thread forever.
-
-    ``context.context_run()`` is thread/context-bound only (no process-wide
-    fallback), so a different thread opening its own run — legitimate
-    concurrent usage — is never affected. Pass ``nested=True`` to nest under
-    the open run on purpose, mirroring mlflow's "run already active" error.
-    """
-    if nested:
-        return
-    active = context.context_run()
-    if active is not None:
-        raise RuntimeError(
-            f"Run '{active.id}' is already active on this thread. Call its "
-            ".finish() before starting another, or pass nested=True to open "
-            "a nested run under it."
-        )
-
-
 def snapshot_mode_storage():
     """Where a git-less run records, as the CLI does: ``VMN_EXPERIMENT_DIR``
     and/or the remote store it syncs to (``VMN_STORE*``, read first, else the
     legacy ``VMN_EXPERIMENT_*`` twins)."""
-    params = {}
-    merge_env_into_params(params)
+    from vmn_exp.sdk.store_resolve import env_storage  # lazy (plan 41 D1)
     try:
-        return _get_experiment_storage(None, params)
+        return env_storage()
     except ValueError:
         raise ValueError(
             "No experiment store for a run without a git checkout: "
@@ -224,10 +246,10 @@ def pick_parent(storage, app_name, parent, nested):
     return resolve_parent(storage, app_name, env_ref=ref)[0]
 
 
-def snapshot_source(app_name, meta_path, parent, nested, storage, capture_env=None):
+def snapshot_source(app_name, meta_path, parent, nested, storage, capture_env=None, *, env, host):
     """Container mode: the :data:`RecordSource` of an exported snapshot, no
     git needed."""
-    app_name = _resolve_app_name(app_name, lambda: snapshot_app_names(meta_path))
+    app_name = _resolve_app_name(app_name, lambda: snapshot_app_names(meta_path), env)
     if storage is None:
         storage = snapshot_mode_storage()
     record = snapshot_record(meta_path, app_name)
@@ -235,25 +257,26 @@ def snapshot_source(app_name, meta_path, parent, nested, storage, capture_env=No
         raise creation_failed(app_name, 1)
     app_name, code_verstr, template = record
     # Env and the export's features are read OUTSIDE the lock.
-    env = _maybe_capture_env(None, capture_env)
-    features = exported_features(meta_path)
+    captured = _maybe_capture_env(None, capture_env, env)
+    features = exported_features(meta_path, env, host)
     parent = pick_parent(storage, app_name, parent, nested)
-    return RecordSource(app_name, storage, code_verstr, template, parent, env,
-                        features, _shared_dir_lock, {})
+    return RecordSource(app_name, storage, code_verstr, template, parent, captured,
+                        features, functools.partial(_shared_dir_lock, env), {})
 
 
-def _shared_dir_lock():
-    """A shared VMN_EXPERIMENT_DIR is the only thing concurrent git-less workers
-    have in common: serialize verstr allocation on it, like a checkout's lock."""
-    lock_root = os.environ.get("VMN_EXPERIMENT_DIR")
+def _shared_dir_lock(env):
+    """A shared VMN_EXPERIMENT_DIR (in *env*) is the only thing concurrent
+    git-less workers have in common: serialize verstr allocation on it, like a
+    checkout's lock."""
+    lock_root = env.get("VMN_EXPERIMENT_DIR")
     if not lock_root:
         return contextlib.nullcontext()
     os.makedirs(os.path.join(lock_root, ".vmn"), exist_ok=True)
     return get_repo_lock(lock_root)
 
 
-def _maybe_capture_env(vcs, capture_env_param, python_exe=None):
-    """Return the captured env dict, or None when opted out or capture fails."""
-    if not should_capture(capture_env_param, experiment_conf(vcs)):
+def _maybe_capture_env(vcs, capture_env_param, env, python_exe=None):
+    """The env dict captured from the Env *env*, or None when opted out or capture fails."""
+    if not should_capture(capture_env_param, experiment_conf(vcs), env=env):
         return None
-    return capture_env_safe(python_exe)
+    return capture_env_safe(env, python_exe)

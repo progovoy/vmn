@@ -4,68 +4,52 @@
 Reads go straight to the vmn library (lock-free); the SPA is served from
 ``static/`` when present. App names in URLs use vmn's dashed tag form
 (``root_app/svc`` → ``root_app-svc``), which is bijective because ``-`` is
-illegal in app names. Request hardening lives in :mod:`vmn_exp.ui.security`.
+illegal in app names. Request hardening lives in :mod:`vmn_exp.ui.security`;
+the resolvers routes share in :mod:`vmn_exp.ui.server_context`.
 """
 import os
 from functools import partial
 
-from fastapi import FastAPI, HTTPException, Query, Request
-from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
 from starlette.concurrency import run_in_threadpool
 from vmn_exp.core.app_conf import read_experiment_conf
-from vmn_exp.core.metric_schema import effective_schema, with_goal_counts, with_resolved_goals
-from vmn_exp.core.query import QueryError
 from vmn_exp.core.similar_search import conf_weights
-from vmn_exp.storage.areas import app_key
-from vmn_exp.storage.files import FILE_TREES, valid_artifact_path
-from vmn_exp.storage.store_marker import require_store
-from vmn_exp.ui.api_errors import APP_NOT_FOUND, CodedError, raise_read_error
+from vmn_exp.core.status import min_stale_sec
+from vmn_exp.ui.api_errors import error_body, status_code_name
 from vmn_exp.ui.app_presence import app_exists
 from vmn_exp.ui.attention_built_in import with_built_in
-from vmn_exp.ui.audit import AuditLog, install_audit_middleware
+from vmn_exp.ui.app_deps import real_deps, wall_seconds
+from vmn_exp.ui.audit import install_audit_middleware
 from vmn_exp.ui.auth import build_chain
-from vmn_exp.ui.auth.authz import require, require_action
-from vmn_exp.ui.auth.principal import ADMIN, VIEWER
-from vmn_exp.ui.auth.tokens import ApiTokenAuthenticator, TokenService
+from vmn_exp.ui.auth.tokens import ApiTokenAuthenticator
 from vmn_exp.ui.config import DEFAULT_AUDIT_RETENTION_DAYS, DEFAULT_METRICS_ENDED_HOURS
 from vmn_exp.ui.experiment_source import ExperimentSource
-from vmn_exp.ui.http_params import attachment, clamp_page, key_list, media_type
 from vmn_exp.ui.baseline_views import BaselineViews
 from vmn_exp.ui.job_views import JobViews
 from vmn_exp.ui.leaderboard_cache import LeaderboardCache
-from vmn_exp.ui.leaderboard_scope import UnknownScope
 from vmn_exp.ui.memo import TTLCache
 from vmn_exp.ui.metrics_feed import MetricsFeed
-from vmn_exp.ui.middleware import SelectiveGZipMiddleware
+from vmn_exp.ui.middleware import RequestGate, SelectiveGZipMiddleware
 from vmn_exp.ui.query_params import refuse_unknown_params
-from vmn_exp.ui.refresher import InlineRefresher, Refresher
 from vmn_exp.ui.readers.models import ModelListing
-from vmn_exp.ui.registry_snapshot import RegistryListings, RegistrySnapshots
+from vmn_exp.ui.registry_snapshot import RegistryListings, RegistrySnapshot, RegistrySnapshots
 from vmn_exp.ui.report_index import ReportIndexes
-from vmn_exp.ui.responses import (
-    GZIP_LEVEL,
-    GZIP_MIN_BYTES,
-    SafeJSONResponse,
-    json_response,
-)
-from vmn_exp.ui.security import RequestGuard, safe_app_name, safe_segment
+from vmn_exp.ui.responses import GZIP_LEVEL, GZIP_MIN_BYTES, SafeJSONResponse
+from vmn_exp.ui.security import RequestGuard
+from vmn_exp.ui.server_context import ServerContext
 from vmn_exp.ui.settings_cache import request_scope
-from vmn_exp.ui.shell_meta import auth_hints, meta_payload, workspace_role
-from vmn_exp.ui.slow_reads import slow_read
+from vmn_exp.ui.shell_meta import auth_hints, meta_payload
 from vmn_exp.ui.static_files import mount_static
 from vmn_exp.ui.tenancy import install_org_middleware
 from vmn_exp.ui.thread_limiters import install_default_limiter
-from vmn_exp.ui.workspaces import WorkspaceError, workspace_storage
+from vmn_exp.ui.workspaces import workspace_storage
 
 from vmn_exp.ui import (
-    api_errors,
-    diag,
-    control_plane_sweep,
-    routes_admin,
-    routes_baseline,
-    routes_cache,
-    routes_comments,
+    api_errors, diag, control_plane_sweep, routes_actions, routes_admin, routes_baseline,
+    routes_cache, routes_comments,
     routes_events,
+    routes_experiment,
     routes_job,
     routes_leaderboard,
     routes_lineage,
@@ -82,14 +66,11 @@ from vmn_exp.ui import (
     routes_similar,
     routes_sweep,
     routes_tree,
+    routes_versions,
+    routes_workspaces,
     startup_warmup,
 )
 from vmn_exp.ui.diag import routes as diag_routes
-from vmn_exp.ui.readers import changelog as changelog_reader
-from vmn_exp.ui.readers import config as config_reader
-from vmn_exp.ui.readers import diffs as diff_reader
-from vmn_exp.ui.readers import experiment_detail as detail_reader
-from vmn_exp.ui.readers import experiments as exp_reader
 
 API_PREFIX = "/api/v1"
 # A chart's worth of points per metric, however much a client asks for.
@@ -112,46 +93,43 @@ class SettingsScope:
             await self.app(scope, receive, send)
 
 
-def create_app(
+def create_app(manager, io, background_refresh=False, keep_warm=None, read_only=False,
+               control_plane=None, **options):
+    """``build_app`` with the collaborators :func:`~vmn_exp.ui.app_deps.real_deps` builds on *io*."""
+    deps = real_deps(io, control_plane, background_refresh, read_only, keep_warm)
+    return build_app(manager, deps, read_only=read_only, control_plane=control_plane, **options)
+
+
+def build_app(
     manager,
+    deps,
     token=None,
     read_only=False,
     use_index=True,
     bind_host=None,
     allowed_hosts=None,
-    background_refresh=False,
     auth=None,
     role_mappings=(),
     control_plane=None,
     search_dsn=None,
     cache_dsn=None,
     audit_retention_days=DEFAULT_AUDIT_RETENTION_DAYS,
-    keep_warm=None,
     metrics_ended_hours=DEFAULT_METRICS_ENDED_HOURS,
 ):
-    """The FastAPI app. With *background_refresh* (what ``vmn-exp ui`` runs)
-    watched apps' indexes are refreshed by daemon threads and requests serve
-    the latest snapshot at once, up to about a second behind storage;
-    without it each request refreshes the index first, seeing every write
-    made before it. *auth* is an ``AuthenticatorChain`` tried after the
-    static *token*; with neither the API is open. *role_mappings* map OIDC
-    groups to roles (``{group, workspace or "*", role}``). A *control_plane*
-    enables API tokens (``vmnx_...`` bearer tokens, managed under
-    ``/api/v1/tokens``) and the audit log, kept *audit_retention_days* by its
-    hourly sweep (:mod:`~vmn_exp.ui.control_plane_sweep`). A Postgres *search_dsn* answers
+    """The FastAPI app, serving with *deps*' job runner, refresher, store
+    upkeep, audit log and token service (:class:`~vmn_exp.ui.app_deps.ServerDeps`).
+    *auth* is an ``AuthenticatorChain`` tried after the static *token*; with
+    neither the API is open. *role_mappings* map OIDC groups to roles
+    (``{group, workspace or "*", role}``). A *control_plane* enables API
+    tokens (``vmnx_...`` bearer tokens, managed under ``/api/v1/tokens``) and
+    the audit log, kept *audit_retention_days* by its hourly sweep
+    (:mod:`~vmn_exp.ui.control_plane_sweep`). A Postgres *search_dsn* answers
     ``/api/v1/search`` in SQL; a Postgres *cache_dsn* caches store
-    workspaces' indexes there, refreshed by one elected replica. *keep_warm*
-    keeps a background-refreshed index refreshing with nobody watching (None:
-    store workspaces' indexes only; see :mod:`~vmn_exp.ui.refresher`). An
-    ended outer run stays on ``/metrics`` for *metrics_ended_hours*
+    workspaces' indexes there, refreshed by one elected replica. An ended
+    outer run stays on ``/metrics`` for *metrics_ended_hours*
     (:mod:`~vmn_exp.ui.metrics_feed`)."""
     from vmn_exp.storage.areas import RUNS
     from vmn_exp.storage.open import open_storage
-    from vmn_exp.ui.bulk_actions import BulkSpec, is_bulk
-    from vmn_exp.ui.jobs import JobRunner, build_command
-    from vmn_exp.ui.jobs_store import build_store_action
-    from vmn_exp.ui.storage_access import EDIT, READ
-    from vmn_exp.ui.store_upkeep import StoreUpkeep
 
     from vmn_exp.ui import storage_access
 
@@ -163,17 +141,16 @@ def create_app(
         dependencies=[refuse_unknown_params(API_PREFIX)],
     )
     app.router.on_startup.append(install_default_limiter)  # first: before any thread runs
-    app.state.manager = manager
-    app.state.read_only = read_only
+    app.state.manager, app.state.read_only = manager, read_only
     app.state.role_mappings = list(role_mappings)
-    jobs = JobRunner()
+    jobs = app.state.jobs = deps.jobs
     app.state.control_plane = control_plane
-    app.state.audit = AuditLog(control_plane) if control_plane else None
+    app.state.audit, app.state.token_service = deps.audit, deps.token_service
     if control_plane:
-        control_plane_sweep.install(app, control_plane, audit_retention_days)
+        control_plane_sweep.install(app, control_plane, audit_retention_days, wall_seconds(deps.io.clock))
     extra = list(auth.authenticators) if auth else []
-    if control_plane:
-        extra.append(ApiTokenAuthenticator(TokenService(control_plane)))
+    if deps.token_service:
+        extra.append(ApiTokenAuthenticator(deps.token_service))
     chain = build_chain(token, extra)
     app.state.auth_chain = chain
     app.state.auth_enabled = bool(chain)
@@ -181,44 +158,38 @@ def create_app(
         bind_host=bind_host, allowed_hosts=allowed_hosts, token_required=bool(chain)
     )
 
-    refresher = Refresher(keep_warm=keep_warm) if background_refresh else InlineRefresher()
-    app.state.refresher = refresher
+    refresher = app.state.refresher = deps.refresher
+    stale_sec = min_stale_sec(deps.io.env)  # the stuck floor every status here is derived on
     search_sql = search_rows = None
     if search_dsn:
         from vmn_exp.ui.search_pg import PgRowSearch
         from vmn_exp.ui.search_rows_writer import SearchRowsWriter
 
         search_sql = PgRowSearch(search_dsn)
-        search_rows = SearchRowsWriter(search_sql)
-    # Markers and compaction a store lacks, written by the server itself.
-    upkeep = StoreUpkeep() if background_refresh and not read_only else None
-    app.state.store_upkeep = upkeep
+        search_rows = SearchRowsWriter(search_sql, deps.status_clock.now, stale_sec)
+    upkeep = app.state.store_upkeep = deps.upkeep
     source = ExperimentSource(manager.data_dir, use_index=use_index, refresher=refresher,
                               cache_dsn=cache_dsn, search_rows=search_rows,
-                              store_upkeep=upkeep)
-    def _board_conf(snapshot):
-        """``(metrics schema, experiment.ui)`` of *snapshot*'s app, as a request reads them."""
-        owner = source.owner_of(snapshot)
-        if owner is None:
-            return {}, {}
-        ws, app_name = owner
-        settings = _settings(ws, app_name)
-        return (source.metrics_schema(ws, app_name, settings),
-                source.experiment_ui(ws, app_name, settings))
-
-    leaderboards = LeaderboardCache(conf_of=_board_conf)
+                              store_upkeep=upkeep, clock=deps.io.clock, env=deps.io.env,
+                              processes=deps.io.processes, index_clock=deps.status_clock, min_stale_sec=stale_sec)
+    # Looked up at call time, so a test's patch of this module or of
+    # storage_access/storage.open still applies.
+    ctx = ServerContext(
+        manager, source, TTLCache(APPS_TTL_SEC),
+        open_workspace_storage=lambda ws: workspace_storage(ws, deps.io.clock, deps.io.env),
+        open_edit_storage=lambda uri: open_storage(uri, area=RUNS, buffer_logs=True, clock=deps.io.clock, env=deps.io.env),
+        probe_store=lambda uri: storage_access.probe_store(uri, random=deps.io.random, env=deps.io.env),
+        app_exists=lambda *args: app_exists(*args), clock=deps.io.clock, env=deps.io.env,
+    )
+    leaderboards = LeaderboardCache(conf_of=ctx.board_conf, now=deps.status_clock.now,
+                                    min_stale_sec=stale_sec)
     if refresher.background:  # requests after a refresh pay no base or search build
         refresher.on_refresh = leaderboards.warm
     job_views = JobViews(leaderboards)
     report_indexes = ReportIndexes(
-        os.path.join(manager.data_dir, "index") if use_index else None, background_refresh,
-        journal_of=source.journal_of,
-    )
-    app_lists = TTLCache(APPS_TTL_SEC)
-    # One client per store workspace: building one resolves credentials, and its
-    # prefix probes are worth keeping across requests.
-    store_storages = {}
-    edit_storages = {}
+        os.path.join(manager.data_dir, "index") if use_index else None, refresher.background,
+        journal_of=source.journal_of, clock=wall_seconds(deps.io.clock),
+        index_clock=deps.status_clock)
 
     for router in chain.routers():
         app.include_router(router)
@@ -233,607 +204,152 @@ def create_app(
             return diag_routes.authenticate(chain, request)
         return run_in_threadpool(chain.authenticate, request)
 
-    @app.middleware("http")
-    async def _authenticate(request: Request, call_next):
+    async def _authenticate(request: Request):
         # Off the event loop: API token and session checks hit the control plane.
         principal = await _principal(request) if chain else None
         request.state.principal = principal
         if chain and principal is None and request.url.path.startswith("/api"):
-            return JSONResponse({"detail": "Unauthorized", "auth": auth_hints(chain)},
+            return JSONResponse(error_body("Unauthorized", "unauthorized", auth=auth_hints(chain)),
                                 status_code=401, headers={"WWW-Authenticate": "Bearer"})
-        return await call_next(request)
+        return None
+    app.add_middleware(RequestGate, check=_authenticate)
 
-    # Registered after the token check, so it runs first: a rebound or
+    # Added after the token check, so it runs first: a rebound or
     # cross-site request is refused before anything else looks at it.
-    @app.middleware("http")
-    async def _request_guard(request: Request, call_next):
+    async def _request_guard(request: Request):
         refused = guard.reject_reason(
             request.method, request.url.path, request.headers
         )
         if refused:
             status, detail = refused
-            return JSONResponse({"detail": detail}, status_code=status)
-        return await call_next(request)
+            return JSONResponse(error_body(detail, status_code_name(status)), status_code=status)
+        return None
+    app.add_middleware(RequestGate, check=_request_guard)
 
     app.add_middleware(
         SelectiveGZipMiddleware, minimum_size=GZIP_MIN_BYTES, compresslevel=GZIP_LEVEL
     )
 
-    @app.exception_handler(ValueError)
-    async def _bad_path(request: Request, exc: ValueError):
-        # Storage refuses names that are not a single path component.
-        return JSONResponse({"detail": str(exc)}, status_code=400)
-
     api_errors.install(app)
 
-    def _app_name(app_tag):
-        """The app name a URL names, refusing anything that walks out of .vmn/."""
-        name = safe_app_name(app_tag)
-        if name is None:
-            raise HTTPException(400, f"Invalid app name '{app_tag}'")
-        return name
+    def _forget(ws_name):
+        for forget in (source.forget, report_indexes.forget, ctx.forget, forget_git):
+            forget(ws_name)
 
-    def _segment(value, what="version"):
-        if not safe_segment(value):
-            raise HTTPException(400, f"Invalid {what} '{value}'")
-        return value
+    routes_workspaces.register(app, API_PREFIX, ctx, read_only,
+                               lambda principal: meta_payload(app.state, principal, read_only),
+                               _forget)
+    routes_experiment.register(app, API_PREFIX, ctx, job_views, leaderboards, refresher.background,
+                               MAX_SERIES_POINTS, os.path.isfile)
+    routes_actions.register(app, API_PREFIX, ctx, jobs, leaderboards, read_only, deps.io)
+    routes_versions.register(app, API_PREFIX, ctx)
 
-    def _optional_segment(value, what="version"):
-        return None if value is None else _segment(value, what)
-
-    def _workspace(name):
-        ws = manager.get(name)
-        if ws is None:
-            raise HTTPException(404, f"Workspace '{name}' not found")
-        return ws
-
-    def _git_workspace(name):
-        ws = _workspace(name)
-        if ws.kind != "git":
-            raise HTTPException(400, f"Workspace '{name}' is not a git checkout")
-        return ws
-
-    def _experiment_workspace(name):
-        """Like _workspace but accepts git and store workspaces for experiment routes."""
-        return _workspace(name)
-
-    def _exp_storage_for(ws):
-        """The store workspace's experiment storage (memoized), or None for git."""
-        if ws.kind == "git":
-            return None  # None means: use the default path-based reader
-        if ws.name not in store_storages:
-            try:
-                storage = workspace_storage(ws)
-                require_store(storage, ws.store)
-                store_storages[ws.name] = storage
-            except ValueError as exc:  # no store there / an unusable one
-                raise HTTPException(404, str(exc))
-        return store_storages[ws.name]
-
-    def _any_exp_storage(ws):
-        """The workspace's experiment storage, local checkout or store."""
-        return _exp_storage_for(ws) or source.workspace_index(ws).storage
-
-    @app.get(f"{API_PREFIX}/meta", dependencies=[require(VIEWER)])
-    def meta(request: Request):
-        return meta_payload(app.state, request.state.principal, read_only)
-
-    @app.get(f"{API_PREFIX}/workspaces", dependencies=[require(VIEWER)])
-    def list_workspaces(request: Request):
-        principal = request.state.principal
-        return [dict(ws.to_public_dict(), role=workspace_role(app.state, principal, ws.name))
-                for ws in manager.list()]
-
-    @app.post(f"{API_PREFIX}/workspaces", status_code=201, dependencies=[require(ADMIN)])
-    def add_workspace(body: dict):
-        if read_only:
-            raise HTTPException(403, "Server is read-only")
-        try:
-            if body.get("remote"):
-                ws = manager.clone_remote(
-                    body["name"], body["remote"], path=body.get("path")
-                )
-            else:
-                ws = manager.attach_path(body["name"], body["path"])
-        except KeyError as e:
-            raise HTTPException(422, f"Missing field: {e}")
-        except WorkspaceError as e:
-            raise HTTPException(400, str(e))
-        return ws.to_public_dict()
-
-    @app.delete(f"{API_PREFIX}/workspaces/{{ws_name}}", status_code=204, dependencies=[require(ADMIN)])
-    def remove_workspace(ws_name: str):
-        if read_only:
-            raise HTTPException(403, "Server is read-only")
-        try:
-            manager.remove(ws_name)
-        except WorkspaceError as e:
-            raise HTTPException(404, str(e))
-        # A later workspace of the same name may point elsewhere.
-        source.forget(ws_name)
-        report_indexes.forget(ws_name)
-        app_lists.pop(ws_name)
-        forget_git(ws_name)
-        store_storages.pop(ws_name, None)
-        edit_storages.pop(ws_name, None)
-
-    @app.get(f"{API_PREFIX}/workspaces/{{ws_name}}/apps", dependencies=[require(VIEWER)])
-    def list_apps(ws_name: str):
-        ws = _experiment_workspace(ws_name)
-        store_storage = _exp_storage_for(ws)
-        if store_storage:
-            # A remote store's runs are counted by its index (listing them is
-            # slow); a file:// store lists them at once.
-            counted = store_storage.is_remote()
-            compute = lambda: exp_reader.list_apps_from_storage(  # noqa: E731
-                store_storage, (lambda name: source.persisted_count(ws, name)) if counted else None)
-        else:
-            compute = lambda: exp_reader.list_apps(ws.path)  # noqa: E731
-        return app_lists.get(ws_name, compute)
-
-    def _app_inputs(ws_name, app_tag):
-        """``(app name, snapshot, conf metrics schema)`` of an app: rows
-        summarized by the conf schema (none in a store)."""
-        ws, app_name = _experiment_workspace(ws_name), _app_name(app_tag)
-        schema = _app_schema(ws, app_name)
-        return app_name, source.snapshot(ws, app_name, _exp_storage_for(ws), schema), schema
-
-    def _status_snapshot(ws_name, app_tag):
-        """The app's snapshot; 404 ``app_not_found`` when there is no such app
-        (an index still loading or re-deriving its records has one)."""
-        app_name, snapshot, _ = _app_inputs(ws_name, app_tag)
-        ws = _experiment_workspace(ws_name)
-        if not snapshot.rows and snapshot.loading is None and not app_exists(
-                ws, app_name, _any_exp_storage(ws)):
-            raise CodedError(404, f"App '{app_name}' not found", APP_NOT_FOUND)
-        return snapshot
-
-    def _status_schema(ws_name, app_tag, snapshot):
-        """The board's schema over the *snapshot* a status request already took."""
-        schema = _app_schema(_experiment_workspace(ws_name), _app_name(app_tag))
-        return effective_schema(schema, snapshot.declared_schema())
-
-    def _app_tags(ws_name):
-        return [app_key(row["name"]) for row in list_apps(ws_name)]
-
-    def _leaderboard_inputs(ws_name, app_tag):
-        """``(snapshot, effective metrics schema)`` of an app: sorted by the
-        conf schema plus what the runs declare (see :mod:`vmn_exp.core.metric_schema`)."""
-        _, snapshot, schema = _app_inputs(ws_name, app_tag)
-        return snapshot, effective_schema(schema, snapshot.declared_schema())
-
-    def _settings(ws, app_name):
-        """The app's store settings (plan 28 A0), below a git workspace's conf."""
-        return source.app_settings(ws, app_name, _any_exp_storage(ws))
-
-    def _app_schema(ws, app_name):
-        """The app's metrics schema: conf.yml over the store settings."""
-        return source.metrics_schema(ws, app_name, _settings(ws, app_name))
-
-    def _group_aggregate(ws_name, app_tag):
-        """The app's ``experiment.ui.group_aggregate``: conf.yml, else the store
-        settings, else the mean."""
-        ws, app_name = _experiment_workspace(ws_name), _app_name(app_tag)
-        return source.group_aggregate(ws, app_name, _settings(ws, app_name))
-
-    def _split_by(ws_name, app_tag):
-        """An outer run summary's default split: conf.yml, else the store settings."""
-        ws, app_name = _experiment_workspace(ws_name), _app_name(app_tag)
-        return source.split_by(ws, app_name, _settings(ws, app_name))
-
-    def _experiment_ui(ws_name, app_tag):
-        """The app's ``experiment.ui``: conf.yml over the store settings."""
-        ws, app_name = _experiment_workspace(ws_name), _app_name(app_tag)
-        return source.experiment_ui(ws, app_name, _settings(ws, app_name))
-
-    def _attention_entries(ws_name, app_tag):
-        """The built-in attention parts, then the app's queries: conf.yml
-        over the store settings."""
-        ws, app_name = _experiment_workspace(ws_name), _app_name(app_tag)
-        return with_built_in(source.attention(ws, app_name, _settings(ws, app_name)))
-
-    def _views(ws_name, app_tag):
-        """The app's team views: conf.yml over the store settings."""
-        ws, app_name = _experiment_workspace(ws_name), _app_name(app_tag)
-        return source.views(ws, app_name, _settings(ws, app_name))
+    group_aggregate = ctx.from_settings(source.group_aggregate)
+    split_by = ctx.from_settings(source.split_by)
+    experiment_ui = ctx.from_settings(source.experiment_ui)
+    views = ctx.from_settings(source.views)
+    attention_entries = ctx.from_settings(lambda *app_args: with_built_in(source.attention(*app_args)))
+    freshness = ctx.from_settings(lambda ws, app_name, settings: source.freshness(
+        ws.name, app_name, source.stale_after_min(ws, app_name, settings)))
+    leaderboard_inputs = ctx.leaderboard_inputs
 
     def _similar_weights(ws_name, app_name):
         """The app's conf.yml ``experiment.similar.weights``, read as ``vmn-exp
         similar`` and the SDK reader read them; none in a store."""
-        ws = _experiment_workspace(ws_name)
-        if _exp_storage_for(ws):
+        ws = ctx.workspace(ws_name)
+        if ctx.exp_storage_for(ws):
             return None
         return conf_weights(read_experiment_conf(app_name, ws.path))
 
-    def _detail_options(ws, app_name):
-        """Refs, edges (and in the background, run states) from the app's snapshot."""
-        return source.detail_options(ws, source.snapshot(ws, app_name, _exp_storage_for(ws)))
-
-    @app.get(
-        f"{API_PREFIX}/workspaces/{{ws_name}}/apps/{{app_tag}}" "/experiments/{verstr}", dependencies=[require(VIEWER)])
-    @slow_read
-    def get_experiment(
-        request: Request,
-        ws_name: str,
-        app_tag: str,
-        verstr: str,
-        max_points: int = detail_reader.DEFAULT_MAX_POINTS,
-        include_log: bool = False,
-        keys: str = None,
-        series: bool = True,
-        x: str = None,
-        step_min: float = None,
-        step_max: float = None,
-    ):
-        bounds = routes_series.step_range(step_min, step_max, x or None)
-        ws = _experiment_workspace(ws_name)
-        app_name = _app_name(app_tag)
-        _segment(verstr)
-        detail, err = exp_reader.get_experiment_from_storage(
-            _any_exp_storage(ws),
-            app_name,
-            verstr,
-            max_points=max(2, min(max_points, MAX_SERIES_POINTS)),
-            include_log=include_log,
-            keys=key_list(keys),
-            include_series=series,
-            x=x or None,
-            step_range=bounds,
-            schema=_app_schema(ws, app_name),
-            job_status=lambda v: job_views.detail_status(*_leaderboard_inputs(ws_name, app_tag), v),
-            **_detail_options(ws, app_name),
-        )
-        if err:
-            raise_read_error(err)
-        return json_response(detail, request=request)
-
-    @app.get(
-        f"{API_PREFIX}/workspaces/{{ws_name}}/apps/{{app_tag}}"
-        "/experiments/{verstr}/log", dependencies=[require(VIEWER)])
-    @slow_read
-    def experiment_log(
-        request: Request,
-        ws_name: str,
-        app_tag: str,
-        verstr: str,
-        offset: int = 0,
-        limit: int = detail_reader.LOG_TAIL,
-    ):
-        ws = _experiment_workspace(ws_name)
-        app_name = _app_name(app_tag)
-        _segment(verstr)
-        offset, limit = clamp_page(offset, limit)
-        page, err = detail_reader.log_page(
-            _any_exp_storage(ws),
-            app_name,
-            verstr,
-            offset=offset,
-            limit=limit,
-            read_log=exp_reader._load_log,
-            # Inline, a snapshot costs a full refresh: more than resolving directly.
-            resolve=(
-                _detail_options(ws, app_name).get("resolve")
-                if refresher.background
-                else None
-            ),
-        )
-        if err:
-            raise_read_error(err)
-        return json_response(page, request=request)
-
-    def download_artifact(ws_name: str, app_tag: str, verstr: str, filename: str):
-        ws = _experiment_workspace(ws_name)
-        app_name = _app_name(app_tag)
-        _segment(verstr)
-        # Record-relative paths (artifacts/a/b/c.txt), each part one segment.
-        if not valid_artifact_path(filename):
-            raise HTTPException(400, f"Invalid artifact name '{filename}'")
-        redirect = routes_media.signed_redirect(ws, app_name, verstr, filename)
-        if redirect is not None:
-            return redirect
-        download_name = filename.rsplit("/", 1)[-1]
-        # The backend resolves the file — a local path, or an S3 object streamed
-        # straight through — and refuses names that leave the run's dir.
-        storage = _any_exp_storage(ws)
-        opened = getattr(storage, "open_artifact", None)
-        if opened:
-            found = opened(app_name, verstr, filename)
-            if found is None:
-                raise HTTPException(404, f"Artifact {filename} not found")
-            chunks, size = found
-            return StreamingResponse(
-                chunks,
-                media_type=media_type(filename),
-                headers={
-                    "Content-Disposition": attachment(download_name),
-                    "Content-Length": str(size),
-                },
-            )
-        path = storage.artifact_local_path(app_name, verstr, filename)
-        if not path or not os.path.isfile(path):
-            raise HTTPException(404, f"Artifact {filename} not found")
-        return FileResponse(path, filename=download_name)
-
-    # A stored file's URL is its record path: .../experiments/{v}/artifacts/…
-    # for the user's artifacts, .../experiments/{v}/outputs/… for vmn's own.
-    def _download_route(tree):
-        def download_from(ws_name: str, app_tag: str, verstr: str, path: str):
-            return download_artifact(ws_name, app_tag, verstr, f"{tree}/{path}")
-
-        app.get(
-            f"{API_PREFIX}/workspaces/{{ws_name}}/apps/{{app_tag}}"
-            f"/experiments/{{verstr}}/{tree}/{{path:path}}",
-            name=f"download_{tree}",
-            dependencies=[require(VIEWER)],
-        )(slow_read(download_from))
-
-    for tree in FILE_TREES:
-        _download_route(tree)
-
-    @app.get(f"{API_PREFIX}/workspaces/{{ws_name}}/apps/{{app_tag}}/metrics-schema", dependencies=[require(VIEWER)])
-    def app_metrics_schema(ws_name: str, app_tag: str):
-        snapshot, schema = _leaderboard_inputs(ws_name, app_tag)
-        names = leaderboards.facets(snapshot, archived=True)["metric_keys"]
-        return with_goal_counts(with_resolved_goals(schema, names), snapshot.goal_counts())
-
-    @app.get(f"{API_PREFIX}/workspaces/{{ws_name}}/apps/{{app_tag}}/versions", dependencies=[require(VIEWER)])
-    def list_versions(ws_name: str, app_tag: str):
-        ws = _git_workspace(ws_name)
-        return source.workspace_index(ws).list_versions(_app_name(app_tag))
-
-    @app.post(
-        f"{API_PREFIX}/workspaces/{{ws_name}}/apps/{{app_tag}}/actions/{{action}}",
-        status_code=202, dependencies=[require_action()])
-    def run_action(ws_name: str, app_tag: str, action: str, body: dict = None):
-        if read_only:
-            raise HTTPException(403, "Server is read-only")
-        ws = _workspace(ws_name)
-        app_name = _app_name(app_tag)
-        if is_bulk(action, body):
-            return _bulk_action(ws, app_tag, app_name, action, body)
-        if ws.kind == "store":
-            return _submit_store_action(ws, app_name, action, body)
-        command, err = build_command(action, app_name, body)
-        if err:
-            raise HTTPException(400, err)
-        job, err = jobs.submit(ws_name, ws.path, command)
-        if err:
-            raise HTTPException(409, err)
-        return job
-
-    def _capabilities(ws):
-        if ws.capabilities is not None:
-            return ws.capabilities
-        capabilities = storage_access.probe_store(ws.store).capabilities
-        if READ in capabilities:  # an unreachable store is re-probed next time
-            manager.set_capabilities(ws.name, capabilities)
-        return capabilities
-
-    def _edit_storage(ws):
-        if ws.name not in edit_storages:
-            edit_storages[ws.name] = open_storage(ws.store, area=RUNS, buffer_logs=True)
-        return edit_storages[ws.name]
-
-    def _bulk_action(ws, app_tag, app_name, action, body):
-        """An action on the runs of a query (plan 23 S4): a ``dry_run``
-        preview, else a batched job resolving them again when it starts."""
-        spec, err = BulkSpec.build(action, app_name, body)
-        if err:
-            raise HTTPException(400, err)
-        _optional_segment(body.get("scope"))
-        if ws.kind == "store" and EDIT not in _capabilities(ws):
-            raise HTTPException(403, "The server has no edit access to this store")
-
-        def resolve():
-            snapshot, schema = _leaderboard_inputs(ws.name, app_tag)
-            return spec.matching(leaderboards.ordered(snapshot, schema, **spec.filters()))
-
-        try:
-            verstrs = resolve()
-        except UnknownScope as e:
-            raise HTTPException(404, str(e))
-        except QueryError as e:
-            raise HTTPException(400, str(e))
-        if body.get("dry_run"):
-            return JSONResponse(spec.preview(verstrs))
-        if ws.kind == "store":
-            storage, reads = _edit_storage(ws), _exp_storage_for(ws)
-            act = partial(spec.apply, storage, hint=lambda app, v: source.touched(ws, app, reads))
-        else:
-            act = partial(spec.run_in_checkout, jobs.run_command, ws.path)
-        job, err = jobs.submit_bulk(ws.name, spec.label, resolve, act)
-        if err:
-            raise HTTPException(409, err)
-        return job
-
-    def _submit_store_action(ws, app_name, action, body):
-        store_action, err = build_store_action(action, app_name, body)
-        if err:
-            raise HTTPException(400, err)
-        if EDIT not in _capabilities(ws):
-            raise HTTPException(403, "The server has no edit access to this store")
-        storage, reads = _edit_storage(ws), _exp_storage_for(ws)
-
-        def hint(app, verstr):
-            source.touched(ws, app, reads)
-
-        job, err = jobs.submit_call(
-            ws.name, store_action.command, lambda: store_action.run(storage, hint))
-        if err:
-            raise HTTPException(409, err)
-        return job
-
-    @app.get(f"{API_PREFIX}/jobs/{{job_id}}", dependencies=[require(VIEWER)])
-    def get_job(job_id: str):
-        job = jobs.get(job_id)
-        if job is None:
-            raise HTTPException(404, "Job not found")
-        return job
-
-    @app.get(f"{API_PREFIX}/workspaces/{{ws_name}}/apps/{{app_tag}}/experiments-diff", dependencies=[require(VIEWER)])
-    @slow_read
-    def experiments_diff(ws_name: str, app_tag: str, v: str, to: str):
-        ws = _experiment_workspace(ws_name)
-        app_name = _app_name(app_tag)
-        _segment(v)
-        _segment(to)
-        store_storage = _exp_storage_for(ws)
-        schema = _app_schema(ws, app_name)
-        try:
-            if store_storage:
-                # The index has both runs folded: no log read (a long-stuck
-                # run's log is thousands of segments); else read the store.
-                result, err = diff_reader.experiment_diff_from_snapshot(
-                    source.snapshot(ws, app_name, store_storage, schema), v, to, schema), None
-                if result is None:
-                    result, err = diff_reader.experiment_diff_from_storage(
-                        store_storage, app_name, v, to, schema=schema
-                    )
-            else:
-                result, err = diff_reader.cached_experiment_diff(
-                    ws.path, app_name, v, to, schema=schema
-                )
-        except diff_reader.DiffBusy:
-            raise HTTPException(429, "Too many diffs in progress; retry shortly")
-        except diff_reader.DiffMaterializeError as exc:
-            return SafeJSONResponse(
-                {"detail": exc.detail, "reason": exc.reason},
-                status_code=422,
-            )
-        if err:
-            raise_read_error(err)
-        return result
-
-    @app.get(f"{API_PREFIX}/workspaces/{{ws_name}}/apps/{{app_tag}}/changelog", dependencies=[require(VIEWER)])
-    def version_changelog(
-        ws_name: str,
-        app_tag: str,
-        v: str = None,
-        frm: str = Query(None, alias="from"),
-    ):
-        ws = _git_workspace(ws_name)
-        result, err = changelog_reader.version_changelog(
-            ws.path,
-            _app_name(app_tag),
-            to_verstr=_optional_segment(v),
-            from_verstr=_optional_segment(frm),
-        )
-        if err:
-            raise HTTPException(404, err)
-        return result
-
-    @app.get(f"{API_PREFIX}/workspaces/{{ws_name}}/apps/{{app_tag}}/config", dependencies=[require(VIEWER)])
-    def app_config(ws_name: str, app_tag: str, v: str = None):
-        ws = _git_workspace(ws_name)
-        payload, err = config_reader.app_conf_payload(
-            ws.path, _app_name(app_tag), verstr=_optional_segment(v)
-        )
-        if err:
-            raise HTTPException(404, err)
-        return payload
-
     def _series_storage(ws_name, app_tag):
-        ws, app_name = _experiment_workspace(ws_name), _app_name(app_tag)
-        return _any_exp_storage(ws), app_name, _app_schema(ws, app_name)
+        ws, app_name = ctx.workspace(ws_name), ctx.app_name(app_tag)
+        return ctx.any_exp_storage(ws), app_name, ctx.app_schema(ws, app_name)
 
     def _workspace_lineage_inputs(ws_name):
-        ws = _experiment_workspace(ws_name)
-        store_storage = _exp_storage_for(ws)
-        return lambda name: source.snapshot(ws, name, store_storage), _any_exp_storage(ws)
+        ws = ctx.workspace(ws_name)
+        store_storage = ctx.exp_storage_for(ws)
+        return lambda name: source.snapshot(ws, name, store_storage), ctx.any_exp_storage(ws)
 
     def _lineage_inputs(ws_name, app_tag):
-        return (_app_name(app_tag), *_workspace_lineage_inputs(ws_name))
+        return (ctx.app_name(app_tag), *_workspace_lineage_inputs(ws_name))
 
     def _checkout(ws_name, app_tag):
-        return _git_workspace(ws_name).path, _app_name(app_tag)
+        return ctx.git_workspace(ws_name).path, ctx.app_name(app_tag)
 
-    routes_admin.register(app, API_PREFIX)
+    routes_admin.register(app, API_PREFIX, wall_seconds(deps.io.clock), deps.io.random)
 
     def _cache_of(ws_name):
-        ws = _experiment_workspace(ws_name)
+        ws = ctx.workspace(ws_name)
         if ws.kind == "git":
             source.workspace_index(ws)
         return source.cache(ws)
 
     app.state.metrics_feed = MetricsFeed(source, manager.get, leaderboards, metrics_ended_hours)
     routes_cache.register(app, API_PREFIX, _cache_of, source.caches, app.state.metrics_feed.text)
+
     def _report_index(ws_name):
-        ws = _experiment_workspace(ws_name)
-        return report_indexes.get(ws, _any_exp_storage(ws))
+        ws = ctx.workspace(ws_name)
+        return report_indexes.get(ws, ctx.any_exp_storage(ws))
 
     def _comment_counts(ws_name, app_tag):
         index = _report_index(ws_name)
-        return index.comment_counts(_app_name(app_tag)), index.generation
+        return index.comment_counts(ctx.app_name(app_tag)), index.generation
 
-    routes_leaderboard.register(app, API_PREFIX, _leaderboard_inputs, leaderboards,
-                                _comment_counts, _group_aggregate, _attention_entries,
-                                _experiment_ui)
-    routes_pivot.register(app, API_PREFIX, _leaderboard_inputs, leaderboards, _group_aggregate)
+    routes_leaderboard.register(app, API_PREFIX, leaderboard_inputs, leaderboards,
+                                _comment_counts, group_aggregate, attention_entries,
+                                experiment_ui)
+    routes_pivot.register(app, API_PREFIX, leaderboard_inputs, leaderboards, group_aggregate)
     routes_series.register(app, API_PREFIX, _series_storage, MAX_SERIES_POINTS)
 
     def _events_reader(ws_name, app_tag):
-        ws, app_name = _experiment_workspace(ws_name), _app_name(app_tag)
-        store_storage = _exp_storage_for(ws)
-        return lambda: source.snapshot(ws, app_name, store_storage)
+        ws, app_name = ctx.workspace(ws_name), ctx.app_name(app_tag)
+        return partial(source.snapshot, ws, app_name, ctx.exp_storage_for(ws))
 
-    routes_events.register(app, API_PREFIX, _events_reader, refresher.background, _segment)
-    def _freshness(ws_name, app_tag):
-        ws, app_name = _experiment_workspace(ws_name), _app_name(app_tag)
-        return source.freshness(ws_name, app_name,
-                                source.stale_after_min(ws, app_name, _settings(ws, app_name)))
-
+    routes_events.register(app, API_PREFIX, _events_reader, refresher.background, ctx.segment,
+                           deps.io.clock.monotonic, deps.event_sleep, leaderboards.now, stale_sec)
     forget_git = routes_shell.register(
-        app, API_PREFIX, _git_workspace, _status_snapshot, _app_tags, leaderboards, _freshness,
-        _attention_entries, _status_schema, _views, _experiment_ui)
-    routes_run_search.register(app, API_PREFIX, _status_snapshot, leaderboards)
-    routes_media.register(app, API_PREFIX, _series_storage, _segment)
-    routes_tree.register(app, API_PREFIX, _checkout, _optional_segment)
-    listings = RegistryListings()  # one registry listing per refresh for both snapshots
-    registries = RegistrySnapshots(refresher.background, listings=listings)
-    routes_lineage.register(app, API_PREFIX, _lineage_inputs, _segment, registries.get)
+        app, API_PREFIX, ctx.git_workspace, ctx.status_snapshot, ctx.app_tags, leaderboards,
+        freshness, attention_entries, ctx.status_schema, views, experiment_ui,
+        processes=deps.io.processes)
+    routes_run_search.register(app, API_PREFIX, ctx.status_snapshot, leaderboards)
+    routes_media.register(app, API_PREFIX, _series_storage, ctx.segment)
+    routes_tree.register(app, API_PREFIX, _checkout, ctx.optional_segment, deps.io.processes)
+    listings = RegistryListings(deps.io.clock.monotonic)  # one listing per refresh for both
+    registries, model_lists = (RegistrySnapshots(refresher.background, read, listings,
+                                                 clock=deps.io.clock.monotonic)
+                               for read in (RegistrySnapshot.read, ModelListing.read))
+    routes_lineage.register(app, API_PREFIX, _lineage_inputs, ctx.segment, registries.get,
+                            leaderboards.now, stale_sec)
     routes_lineage.register_version_lineage(app, API_PREFIX, _workspace_lineage_inputs,
-                                            registries.get)
-    routes_job.register(app, API_PREFIX, _leaderboard_inputs, job_views, _segment,
-                        _split_by)
-    routes_baseline.register(app, API_PREFIX, _leaderboard_inputs, BaselineViews(job_views),
-                             _segment, _attention_entries)
-    routes_sweep.register(app, API_PREFIX, _lineage_inputs, _segment,
+                                            registries.get, leaderboards.now, stale_sec)
+    routes_job.register(app, API_PREFIX, leaderboard_inputs, job_views, ctx.segment, split_by)
+    routes_baseline.register(app, API_PREFIX, leaderboard_inputs, BaselineViews(job_views),
+                             ctx.segment, attention_entries)
+    routes_sweep.register(app, API_PREFIX, _lineage_inputs, ctx.segment,
                           lambda ws_name, app_tag, verstr: job_views.job_summary(
-                              *_leaderboard_inputs(ws_name, app_tag), verstr))
-    routes_run_code.register(app, API_PREFIX, _series_storage, _leaderboard_inputs,
-                             leaderboards, _segment)
-    def _ws_storage(ws_name):
-        return _any_exp_storage(_experiment_workspace(ws_name))
-
-    routes_models.register(app, API_PREFIX, _ws_storage,
-                           RegistrySnapshots(refresher.background, ModelListing.read, listings))
-    routes_reports.register(app, API_PREFIX, _ws_storage, _report_index)
-    routes_comments.register(app, API_PREFIX, _ws_storage)
+                              *leaderboard_inputs(ws_name, app_tag), verstr), leaderboards.now,
+                          stale_sec)
+    routes_run_code.register(app, API_PREFIX, _series_storage, leaderboard_inputs,
+                             leaderboards, ctx.segment)
+    routes_models.register(app, API_PREFIX, ctx.ws_storage, model_lists, deps.io)
+    routes_reports.register(app, API_PREFIX, ctx.ws_storage, _report_index, deps.io)
+    routes_comments.register(app, API_PREFIX, ctx.ws_storage, deps.io)
 
     def _settings_target(ws_name, app_tag):
-        app_name = _app_name(app_tag)
-        changed = lambda: source.settings_changed(_workspace(ws_name), app_name)  # noqa: E731
-        return _ws_storage(ws_name), app_name, changed
+        app_name = ctx.app_name(app_tag)
+        changed = lambda: source.settings_changed(ctx.workspace(ws_name), app_name)  # noqa: E731
+        return ctx.ws_storage(ws_name), app_name, changed
 
-    routes_settings.register(app, API_PREFIX, _settings_target)
-
-    def _app_scopes(ws_names):
-        """``(ws_name, app_name, snapshot, conf schema)`` of every app of *ws_names*."""
-        for ws_name in ws_names:
-            ws = _workspace(ws_name)
-            for row in sorted(list_apps(ws_name), key=lambda r: r["name"]):
-                name = row["name"]
-                schema = _app_schema(ws, name)
-                yield ws_name, name, source.snapshot(ws, name, _exp_storage_for(ws), schema), schema
+    routes_settings.register(app, API_PREFIX, _settings_target, deps.io)
 
     def _search_scopes(ws_names):
-        return ((ws, name, snap) for ws, name, snap, _ in _app_scopes(ws_names))
+        return ((ws, name, snap) for ws, name, snap, _ in ctx.app_scopes(ws_names))
 
-    routes_search.register(app, API_PREFIX, _search_scopes, search_sql)
-    routes_similar.register(app, API_PREFIX, _app_inputs, _app_scopes, _segment,
-                            _similar_weights, source.similar.scope)
-    startup_warmup.install(app, manager, list_apps, _app_inputs, leaderboards, refresher.background)
+    routes_search.register(app, API_PREFIX, _search_scopes, search_sql, now=leaderboards.now, stale_sec=stale_sec)
+    routes_similar.register(app, API_PREFIX, ctx.app_inputs, ctx.app_scopes, ctx.segment,
+                            _similar_weights, source.similar.scope, deps.io.clock)
+    startup_warmup.install(app, manager, ctx.list_apps, ctx.app_inputs, leaderboards,
+                           refresher.background)
     diag.install_app(app, API_PREFIX, refresher)
-    mount_static(app, os.path.join(os.path.dirname(__file__), "static"))
+    mount_static(app, deps.static_dir)
     return app
-

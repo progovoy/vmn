@@ -32,17 +32,18 @@ CHECK_SEC = 1.0
 def _build(storage, app, store, like):
     """*app* loaded afresh into *store*, swept like the live index *like*
     (journaled only once loaded: a journaled sweep lists behind serving)."""
-    fresh = ExperimentIndex(storage, app, cache_store=store)
+    fresh = ExperimentIndex(storage, app, cache_store=store, clock=like.clock,
+                            min_stale_sec=like.min_stale_sec)
     fresh.full_sweep_sec = like.full_sweep_sec
     fresh.drops_folds = False  # *store* closes on commit; the adopting index drops them
     fresh.refresh().journaled = like.journaled
     return fresh
 
 
-def _rederive(path):
+def _rederive(path, clock):
     """Re-derive every app the file at *path* holds rows of an older version
-    for (opening it marks them)."""
-    store = SqliteStore(path)
+    for (opening it marks them), on *clock* (see :class:`SqliteStore`)."""
+    store = SqliteStore(path, clock=clock)
     try:
         for app in store.pending_apps():
             store.derive(app)
@@ -52,13 +53,13 @@ def _rederive(path):
 
 class WorkspaceCache:
     def __init__(self, name, cache_path=None, health=None, journal_of=None,
-                 check_sec=CHECK_SEC, target_of=None, clock=time.monotonic):
-        self.name = name
+                 check_sec=CHECK_SEC, target_of=None, *, clock, index_clock=None):
+        self.name, self._index_clock = name, index_clock
         self._path = cache_path
         self._health = health
         self._journal_of = journal_of or (lambda: None)
         self._target_of = target_of or (
-            lambda: SqliteSwap(cache_path) if cache_path else MemoryTarget())
+            lambda: SqliteSwap(cache_path, index_clock) if cache_path else MemoryTarget(index_clock))
         self._check_sec, self._clock, self._checked_at = check_sec, clock, None
         self.tidy = CacheTidy(cache_path, clock) if cache_path else None
         self._apps = {}  # app -> (storage, index_of)
@@ -150,7 +151,7 @@ class WorkspaceCache:
 
     def _derive_logged(self):
         try:
-            _rederive(self._path)
+            _rederive(self._path, self._index_clock)
         except Exception:
             _LOGGER.warning("Re-deriving workspace %s's cache failed", self.name, exc_info=True)
 

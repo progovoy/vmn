@@ -1,6 +1,7 @@
 """VMN_EXP_MIN_STALE_SEC lowers (or raises) the stuck floor, so load tests and
 demos see a hung run flip to ``stuck`` in seconds instead of a minute."""
 import datetime
+import os
 
 import pytest
 
@@ -16,21 +17,22 @@ def _running(heartbeat_age, interval=1):
 
 def test_env_lowers_the_floor(monkeypatch):
     monkeypatch.setenv("VMN_EXP_MIN_STALE_SEC", "5")
-    assert st.stale_after_sec(_running(0)) == 5
-    assert st.derive_status(_running(heartbeat_age=6), now=NOW) == st.STUCK
+    assert st.stale_after_sec(_running(0), st.min_stale_sec(os.environ)) == 5
+    assert st.derive_status(_running(heartbeat_age=6), now=NOW,
+                            min_stale_sec=st.min_stale_sec(os.environ)) == st.STUCK
 
 
 def test_interval_multiple_still_wins_over_a_low_floor(monkeypatch):
     monkeypatch.setenv("VMN_EXP_MIN_STALE_SEC", "5")
-    assert st.stale_after_sec(_running(0, interval=10)) == 30
+    assert st.stale_after_sec(_running(0, interval=10), st.min_stale_sec(os.environ)) == 30
 
 
 @pytest.mark.parametrize("raw", ["", "abc", "-3", "nan"])
 def test_bad_values_keep_the_default_floor(monkeypatch, raw):
     monkeypatch.setenv("VMN_EXP_MIN_STALE_SEC", raw)
-    assert st.stale_after_sec(_running(0)) == st.MIN_STALE_SEC
+    assert st.stale_after_sec(_running(0), st.min_stale_sec(os.environ)) == st.MIN_STALE_SEC
 
 
 def test_unset_keeps_the_default_floor(monkeypatch):
     monkeypatch.delenv("VMN_EXP_MIN_STALE_SEC", raising=False)
-    assert st.stale_after_sec(_running(0)) == st.MIN_STALE_SEC
+    assert st.stale_after_sec(_running(0), st.min_stale_sec(os.environ)) == st.MIN_STALE_SEC

@@ -36,6 +36,7 @@ from vmn_exp.ui.http_params import attachment, clamp_page, media_type
 from vmn_exp.ui.readers.experiment_detail import run_media
 from vmn_exp.ui.readers.histograms import histogram_of
 from vmn_exp.ui.responses import json_response
+from vmn_exp.ui.security import contained_artifact_path
 from vmn_exp.ui.slow_reads import slow_read
 
 DEFAULT_TABLE_PAGE = 100
@@ -43,12 +44,12 @@ SIGNED_URL_SEC = 300
 REDIRECT = "redirect"
 
 
-def signed_redirect(ws, app_name, verstr, name):
+def signed_redirect(ws, app_name, verstr, name, env):
     """A 302 to a presigned GET of *name* for a ``downloads: redirect`` store
     workspace, None to stream it instead; 404 when the object is missing."""
     if ws.kind != "store" or ws.downloads != REDIRECT:
         return None
-    presign = getattr(open_store(ws.store, RUNS), "presign_artifact", None)
+    presign = getattr(open_store(ws.store, RUNS, env=env), "presign_artifact", None)
     if presign is None:
         return None
     is_image = media_type(name).startswith("image/")
@@ -61,7 +62,7 @@ def signed_redirect(ws, app_name, verstr, name):
 
 def load_table(storage, app_name, verstr, path):
     """The table document artifact *path*, or an HTTPException."""
-    local = storage.artifact_local_path(app_name, verstr, path)
+    local = contained_artifact_path(storage, app_name, verstr, path)
     if not local:
         raise HTTPException(404, f"Table {path} not found")
     try:

@@ -1,6 +1,7 @@
 """Storage URIs and the scheme registry: ``s3://``, ``file://``, ``gs://``,
 ``az://`` and third-party schemes declared under the ``vmn_exp.storage``
 entry-point group."""
+import os
 import builtins
 import sys
 from importlib.metadata import EntryPoint
@@ -9,6 +10,8 @@ import pytest
 
 from vmn_exp.storage import registry
 from vmn_exp.storage.uri import parse_store_uri, s3_uri
+
+_REAL_STORAGE_ENTRY_POINTS = registry._storage_entry_points  # the fixture below replaces it
 
 
 @pytest.fixture(autouse=True)
@@ -69,7 +72,7 @@ def test_s3_uri_builds_the_bucket_shorthand():
 def test_file_store_opens_a_local_storage(tmp_path):
     from vmn_exp.storage.local import LocalSnapshotStorage
 
-    store = registry.open_store(f"file://{tmp_path}", area="runs")
+    store = registry.open_store(f"file://{tmp_path}", area="runs", env=os.environ)
     assert isinstance(store, LocalSnapshotStorage)
     assert store.create_exclusive("app", "1.0.0-dev.a.b", {"verstr": "x"}, {})
     assert not store.create_exclusive("app", "1.0.0-dev.a.b", {"verstr": "x"}, {})
@@ -77,7 +80,7 @@ def test_file_store_opens_a_local_storage(tmp_path):
 
 def test_unknown_scheme_names_the_known_ones():
     with pytest.raises(ValueError) as err:
-        registry.open_store("nope://b/p")
+        registry.open_store("nope://b/p", env=os.environ)
     msg = str(err.value)
     assert "nope" in msg and "s3" in msg and "vmn_exp.storage" in msg
 
@@ -90,7 +93,7 @@ def test_register_store_adds_a_scheme():
         return "store"
 
     registry.register_store("mem", factory)
-    assert registry.open_store("mem://x/y", area="snapshots") == "store"
+    assert registry.open_store("mem://x/y", area="snapshots", env=os.environ) == "store"
     assert seen == [("x", "y", "snapshots")]
 
 
@@ -101,7 +104,7 @@ def test_entry_point_declares_a_scheme(monkeypatch):
     ep = EntryPoint("mem", "fake_vmn_store_plugin:make", registry.ENTRY_POINT_GROUP)
     monkeypatch.setattr(registry, "_storage_entry_points", lambda: [ep])
 
-    assert registry.open_store("mem://bkt") == ("plugin", "bkt")
+    assert registry.open_store("mem://bkt", env=os.environ) == ("plugin", "bkt")
     assert "mem" in registry.known_schemes()
 
 
@@ -109,8 +112,22 @@ def test_broken_entry_point_is_reported_with_its_target(monkeypatch):
     ep = EntryPoint("mem", "no.such.module_xyz:make", registry.ENTRY_POINT_GROUP)
     monkeypatch.setattr(registry, "_storage_entry_points", lambda: [ep])
     with pytest.raises(ImportError) as err:
-        registry.open_store("mem://bkt")
+        registry.open_store("mem://bkt", env=os.environ)
     assert "no.such.module_xyz:make" in str(err.value)
+
+
+def test_plugin_schemes_are_read_from_the_entry_point_group_only(monkeypatch):
+    calls = []
+
+    def recording_entry_points(**kwargs):
+        calls.append(kwargs)
+        return []
+
+    monkeypatch.setattr(registry, "_storage_entry_points", _REAL_STORAGE_ENTRY_POINTS)
+    monkeypatch.setattr(registry, "entry_points", recording_entry_points)
+
+    assert registry._storage_entry_points() == []
+    assert calls == [{"group": registry.ENTRY_POINT_GROUP}]
 
 
 def _hide_modules(monkeypatch, *prefixes):
@@ -135,6 +152,6 @@ def _hide_modules(monkeypatch, *prefixes):
 def test_missing_sdk_names_the_extra(monkeypatch, uri, extra, package):
     _hide_modules(monkeypatch, "google.cloud", "azure", "boto3")
     with pytest.raises(ImportError) as err:
-        registry.open_store(uri)
+        registry.open_store(uri, env=os.environ)
     assert f"vmn-exp-sdk[{extra}]" in str(err.value)
     assert package in str(err.value)

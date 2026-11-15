@@ -98,6 +98,32 @@ describe("Jobs | Single runs | All runs", () => {
     await screen.findByRole("link", { name: "solo" });
     expect(options()).toEqual(["Runs", "All runs"]);
     expect(pressed(/^Runs/)).toBe("true");
+    expect(lastOpts()).toEqual(expect.objectContaining({ top: "singles" }));
+  });
+
+  it("kind=jobs in the URL does not bring the Jobs table back for an app without outer runs", async () => {
+    m.facets.mockResolvedValue({ ...FACETS, parented: 0, jobs: 0, singles: 3 });
+    m.experimentsPaged.mockResolvedValue(jobsPage([singleRow(1, { name: "solo" })]));
+    renderExperiments("/ws/test/app/my-app?kind=jobs");
+    await screen.findByRole("link", { name: "solo" });
+    expect(lastOpts()).toEqual(expect.objectContaining({ top: "singles" }));
+    expect(screen.getByText(/vmn-exp list my\/app --query 'kind = "single"'/)).toBeInTheDocument();
+  });
+
+  it("an app whose facets answer with no runs at all keeps the Jobs view", async () => {
+    m.facets.mockResolvedValue({ ...FACETS, total: 0, parented: 0, jobs: 0, singles: 0 });
+    m.experimentsPaged.mockResolvedValue(jobsPage([]));
+    renderExperiments();
+    await waitFor(() => expect(m.experimentsPaged).toHaveBeenCalled());
+    expect(options()).toEqual(["Runs", "All runs"]);
+    expect(lastOpts()).toEqual(expect.objectContaining({ top: true }));
+  });
+
+  it("facets without jobs and singles counts keep the Jobs view", async () => {
+    m.facets.mockResolvedValue(FACETS);
+    renderExperiments();
+    await screen.findByRole("link", { name: "grid" });
+    expect(options()).toEqual(["Runs", "All runs"]);
     expect(lastOpts()).toEqual(expect.objectContaining({ top: true }));
   });
 

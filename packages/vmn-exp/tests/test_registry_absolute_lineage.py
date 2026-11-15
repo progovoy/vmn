@@ -9,6 +9,7 @@ from test_sdk_usage import FakeRun, _clean_env, _storage  # noqa: F401 (autouse 
 from vmn_exp.registry.lineage import app_indexes, run_lineage
 from vmn_exp.registry.store import ensure_model, register_version
 from vmn_exp.sdk.usage import use_model
+from vmn_exp.core.real_io import RealClock
 
 URI = "s3://bucket/models/clf.pt"
 DIGEST = "sha256:" + "c" * 64
@@ -34,7 +35,7 @@ def _snapshot(storage):
 
 def _lineage(storage, app, verstr, snapshot):
     registry = _snapshot(storage) if snapshot else None
-    return run_lineage(storage, app, verstr, app_indexes(storage), registry=registry)
+    return run_lineage(storage, app, verstr, app_indexes(storage, clock=RealClock()), registry=registry)
 
 
 @pytest.mark.parametrize("path", [URI, "/data/models/clf.pt"])

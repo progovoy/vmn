@@ -14,7 +14,7 @@ from vmn_exp.core.step_metric import create_define_metric_entry
 METHODS = ("grid", "random", "bayes")
 DISTRIBUTIONS = ("uniform", "log_uniform", "int_uniform", "normal", "categorical")
 _GOALS = {"min": "min", "minimize": "min", "max": "max", "maximize": "max"}
-_EARLY_TERMINATE_DEFAULTS = {"min_iter": 3, "min_trials": 1, "check_interval_sec": 10.0}
+_EARLY_TERMINATE_DEFAULTS = {"min_iter": 3, "min_trials": 1, "eta": 3, "check_interval_sec": 10.0}
 
 
 class SpecError(ValueError):
@@ -177,13 +177,24 @@ def _positive_int(value, field):
 
 
 def _early_terminate(conf):
-    if not isinstance(conf, dict) or conf.get("type") != "median":
-        kind = conf.get("type") if isinstance(conf, dict) else conf
-        raise SpecError(f"early_terminate.type must be median, got {kind!r}")
+    kind = conf.get("type") if isinstance(conf, dict) else conf
+    if kind not in ("median", "asha"):
+        raise SpecError(f"early_terminate.type must be median or asha, got {kind!r}")
     merged = dict(_EARLY_TERMINATE_DEFAULTS, **{k: v for k, v in conf.items() if k != "type"})
-    return {
-        "type": "median",
+    rule = {
+        "type": kind,
         "min_iter": _positive_int(merged["min_iter"], "early_terminate.min_iter"),
-        "min_trials": _positive_int(merged["min_trials"], "early_terminate.min_trials"),
         "check_interval_sec": float(merged["check_interval_sec"]),
     }
+    if kind == "median":
+        rule["min_trials"] = _positive_int(merged["min_trials"], "early_terminate.min_trials")
+    else:
+        rule["eta"] = _eta(merged["eta"])
+    return rule
+
+
+def _eta(value):
+    eta = _positive_int(value, "early_terminate.eta")
+    if eta < 2:
+        raise SpecError(f"early_terminate.eta must be an integer >= 2, got {value!r}")
+    return eta

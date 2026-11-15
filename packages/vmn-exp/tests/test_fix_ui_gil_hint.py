@@ -4,6 +4,7 @@ When a watched index is large and the GIL is on, the ui says once how to run
 it on a free-threaded Python (3.15t, at every size: plan 31 D2)."""
 import logging
 import threading
+import time
 from types import SimpleNamespace
 
 from vmn_exp.ui import gil_hint
@@ -67,7 +68,7 @@ class _Index:
 
 def test_the_refresher_notes_each_refreshed_index_size():
     noted = []
-    refresher = Refresher(interval_sec=0.01, idle_sec=5)
+    refresher = Refresher(interval_sec=0.01, idle_sec=5, clock=time.monotonic)
     refresher.gil_hint = SimpleNamespace(note=noted.append)
     try:
         index = _Index(LARGE_STORE_RECORDS)

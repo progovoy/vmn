@@ -13,6 +13,7 @@ class _AreaLessStorage(SnapshotStorage):
     """Implements the abstract methods only: ``in_area`` raises."""
 
     def save(self, *a, **k): ...
+    def create_exclusive(self, *a, **k): return True
     def load_record(self, *a, **k): return None, None
     def list_snapshots(self, *a, **k): return []
     def update_note(self, *a, **k): ...

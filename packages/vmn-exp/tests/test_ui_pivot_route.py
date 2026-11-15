@@ -10,6 +10,7 @@ import yaml
 
 pytest.importorskip("fastapi")
 from fastapi.testclient import TestClient
+from vmn_exp.core.real_io import real_io
 
 APP = "app"
 URL = f"/api/v1/workspaces/ws/apps/{APP}/experiments-pivot"
@@ -56,7 +57,7 @@ def client(tmp_path):
     _record(root, 9, tags={"date": "d3"})
     manager = WorkspaceManager(str(tmp_path / "data"))
     manager.attach_path("ws", root)
-    return TestClient(create_app(manager))
+    return TestClient(create_app(manager, io=real_io()))
 
 
 def _get(client, status=200, **params):

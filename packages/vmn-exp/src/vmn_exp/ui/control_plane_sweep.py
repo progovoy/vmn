@@ -11,7 +11,6 @@ A failed sweep is logged and retried on the next tick.
 """
 import logging
 import threading
-import time
 
 from vmn_exp.ui.audit import audit_key
 from vmn_exp.ui.config import DEFAULT_AUDIT_RETENTION_DAYS
@@ -23,7 +22,7 @@ _LOGGER = logging.getLogger(__name__)
 
 
 class ControlPlaneSweeper:
-    def __init__(self, store, retention_days=DEFAULT_AUDIT_RETENTION_DAYS, clock=time.time,
+    def __init__(self, store, retention_days=DEFAULT_AUDIT_RETENTION_DAYS, *, clock,
                  interval_sec=SWEEP_INTERVAL_SEC):
         self.store = store
         self.retention_days = retention_days
@@ -65,9 +64,10 @@ class ControlPlaneSweeper:
                 return
 
 
-def install(app, store, retention_days):
-    """``app.state.sweeper``, sweeping from the server's start to its shutdown."""
-    sweeper = app.state.sweeper = ControlPlaneSweeper(store, retention_days)
+def install(app, store, retention_days, clock):
+    """``app.state.sweeper``, sweeping from the server's start to its shutdown
+    on *clock* (epoch seconds)."""
+    sweeper = app.state.sweeper = ControlPlaneSweeper(store, retention_days, clock=clock)
     app.router.on_startup.append(sweeper.start)
     app.router.on_shutdown.append(sweeper.stop)
     return sweeper

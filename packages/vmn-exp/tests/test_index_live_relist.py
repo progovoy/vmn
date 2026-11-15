@@ -7,8 +7,11 @@ import os
 
 import pytest
 
-from test_index_journal_hint import _journaled, _make, _reset, clock, spy, st  # noqa: F401
+from test_index_journal_hint import (  # noqa: F401
+    RECONCILE_SEC, _journaled, _make, _reset, clock, spy, st,
+)
 from vmn_exp.core import index_sweep, status
+from vmn_exp.core.index import ExperimentIndex
 
 APP = "app"
 TICK = 1
@@ -23,22 +26,22 @@ def _gaps(index, spy, clock, live, span):
     listed = []
     for _ in range(span):
         _reset(spy)
-        clock.now += TICK
+        clock.advance(TICK)
         index.refresh()
         if {live} in spy["list_files"]:
-            listed.append(clock.now)
+            listed.append(clock.monotonic())
     return {round(b - a) for a, b in zip(listed, listed[1:])}
 
 
 def test_a_default_heartbeat_run_is_relisted_every_30_seconds_not_10(st, spy, clock):
     live = _make(st, 1, _running(30))
-    index = _journaled(st).refresh()
+    index = _journaled(st, clock).refresh()
     assert _gaps(index, spy, clock, live, 100) == {30}
 
 
 def test_a_short_interval_run_is_relisted_at_the_floor(st, spy, clock):
     live = _make(st, 1, _running(5))
-    index = _journaled(st).refresh()
+    index = _journaled(st, clock).refresh()
     assert _gaps(index, spy, clock, live, 40) == {index_sweep.LIVE_RELIST_SEC}
 
 
@@ -46,7 +49,7 @@ def test_a_long_interval_run_is_relisted_at_its_interval(st, spy, clock):
     # 600 s beats go stuck after 1800 s: listing at the cadence the run
     # writes at sees every beat, well inside half that window.
     live = _make(st, 1, _running(600))
-    index = _journaled(st).refresh()
+    index = _journaled(st, clock).refresh()
     assert _gaps(index, spy, clock, live, 1900) == {600}
 
 
@@ -54,13 +57,13 @@ def test_a_tight_stale_window_caps_the_period_below_the_floor(st, spy, clock, mo
     # floor 1 s: a 2 s heartbeat goes stuck after 6 s, so it is listed every 3 s.
     monkeypatch.setenv(status.MIN_STALE_ENV, "1")
     live = _make(st, 1, _running(2))
-    index = _journaled(st).refresh()
+    index = _journaled(st, clock).refresh()
     assert _gaps(index, spy, clock, live, 12) == {3}
 
 
 def test_an_unknown_interval_takes_the_status_default(st, spy, clock):
     live = _make(st, 1, "state: running\nheartbeat_interval_sec: soon\n")
-    index = _journaled(st).refresh()
+    index = _journaled(st, clock).refresh()
     assert _gaps(index, spy, clock, live, 100) == {int(status.DEFAULT_HEARTBEAT_INTERVAL_SEC)}
 
 
@@ -71,14 +74,27 @@ class Wall:
         self.clock, self.base = clock, datetime.datetime.now(datetime.timezone.utc)
 
     def __call__(self, now=None):
-        return now or self.base + datetime.timedelta(seconds=self.clock.now - 1000.0)
+        return now or self.base + datetime.timedelta(seconds=self.clock.monotonic() - 1000.0)
+
+    def now(self):
+        return self()
+
+    def monotonic(self):
+        return self.clock.monotonic()
+
+    def time(self):
+        return self().timestamp()
 
 
 @pytest.fixture
-def wall(clock, monkeypatch):
-    w = Wall(clock)
-    monkeypatch.setattr(status, "_now", w)
-    return w
+def wall(clock):
+    return Wall(clock)
+
+
+def _journaled_on(st, wall):
+    index = ExperimentIndex(st, APP, full_sweep_sec=RECONCILE_SEC, clock=wall)
+    index.journaled = True
+    return index
 
 
 def _beat(st, verstr, interval, wall):
@@ -95,16 +111,16 @@ def test_a_beating_run_never_reads_stuck_and_a_silent_one_soon_does(st, spy, clo
                                                                     interval):
     live = _make(st, 1, None)
     _beat(st, live, interval, wall)
-    index = _journaled(st).refresh()
+    index = _journaled_on(st, wall).refresh()
     window = status.stale_after_sec({"heartbeat_interval_sec": interval})
     for offset in range(1, int(3 * window) + 1, TICK):
-        clock.now += TICK
+        clock.advance(TICK)
         if offset % interval == 0:
             _beat(st, live, interval, wall)
         index.refresh()
-        assert index.snapshot().status_of(live) == status.RUNNING, offset
+        assert index.snapshot().status_of(live, wall()) == status.RUNNING, offset
 
     for offset in range(1, int(window) + TICK + 1, TICK):
-        clock.now += TICK
+        clock.advance(TICK)
         index.refresh()
-    assert index.snapshot().status_of(live) == status.STUCK
+    assert index.snapshot().status_of(live, wall()) == status.STUCK

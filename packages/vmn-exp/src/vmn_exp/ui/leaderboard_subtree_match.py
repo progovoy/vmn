@@ -55,5 +55,5 @@ def _hits(base, bucket, slots, query, archived):
     patched = base.patched(bucket)
     at = range(len(base.rows)) if slots is None else sorted(slots)
     rows = [patched.get(i, base.rows[i]) for i in at]
-    passing = filtered(base.snapshot, rows, Filters(query=query, archived=archived))
+    passing = filtered(base.snapshot, rows, Filters(query=query, archived=archived), base.now_of())
     return Counter(row["root"] or row["verstr"] for row in passing)

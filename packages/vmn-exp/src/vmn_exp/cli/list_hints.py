@@ -1,13 +1,11 @@
 #!/usr/bin/env python3
 """``vmn-exp list --query`` matching nothing: the board's "did you mean
-tags.<field>?" hints (:mod:`vmn_exp.core.query_hints`), on stderr."""
-import sys
-
+tags.<field>?" hints (:mod:`vmn_exp.core.query_hints`), for stderr."""
 from vmn_exp.core.query_hints import hints, row_equalities
 
 
-def print_query_hints(query, rows_of):
-    """Hint at *query*'s row-field equalities from the rows *rows_of()*
+def print_query_hints(query, rows_of, err):
+    """Hint to *err* at *query*'s row-field equalities from the rows *rows_of()*
     lists — asked only when it has one to hint at."""
     if not row_equalities(query):
         return
@@ -17,4 +15,4 @@ def print_query_hints(query, rows_of):
         return any((row.get(prefix) or {}).get(field) == value for row in rows)
 
     for line in hints((query,), carries):
-        print(line, file=sys.stderr)
+        err(line)

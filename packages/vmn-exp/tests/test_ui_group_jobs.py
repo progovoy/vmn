@@ -6,25 +6,24 @@ of every child of the group's jobs, pooled: plan 34 §1)."""
 import statistics
 
 import pytest
+from fakes.clock import FakeClock
 from job_rollup_reference import annotated, unit_value, units_of
 from leaderboard_fleet import T0, Fleet
 from vmn_exp.ui.leaderboard_cache import LeaderboardCache
 from vmn_exp.ui.leaderboard_group_fields import COUNT_KEYS, COUNT_OF
 
-from vmn_exp.core import status as status_mod
 
 SCHEMA = {"loss": {"goal": "min", "primary": True}}
 FAILED = ("failed", "stuck")
 
 
 @pytest.fixture
-def board(monkeypatch):
-    monkeypatch.setattr(status_mod, "_now", lambda now=None: now or T0)
+def board():
     fleet = Fleet(3)
     fleet.seed_jobs(9, 40, T0, live=12)
     for _ in range(30):
         fleet.append(state=fleet.ended(T0))
-    return fleet, LeaderboardCache()
+    return fleet, LeaderboardCache(now=FakeClock(T0).now)
 
 
 def _rows(cache, snap, group, key, **params):
@@ -42,7 +41,7 @@ def _expected(cache, snap, rows):
     runs = sum(summaries[j["verstr"]]["total"] for j in jobs) + len(singles)
     failed = sum(sum(summaries[j["verstr"]]["counts"][s] for s in FAILED) for j in jobs)
     failed += sum(1 for s in singles if s["status"] in FAILED)
-    every = annotated(snap)
+    every = annotated(snap, T0)
     bests = sorted(value for j in jobs for unit, _ in units_of(every, j["verstr"], "children")
                    if (value := unit_value(every, unit, "loss", "best", False)) is not None)
     return counts, runs, failed, bests
@@ -98,6 +97,7 @@ def test_job_fields_follow_new_generations(board):
         fleet.mutate(T0, 5, reparent=False)
         snap = fleet.snapshot()
         got = cache.groups(snap, SCHEMA, "branch", top=True)["groups"]
-        fresh = LeaderboardCache().groups(snap, SCHEMA, "branch", top=True)["groups"]
+        fresh = LeaderboardCache(now=FakeClock(T0).now).groups(
+            snap, SCHEMA, "branch", top=True)["groups"]
         fields = ("key", "job_counts", "runs", "failed", "job_aggregates")
         assert [[g[f] for f in fields] for g in got] == [[g[f] for f in fields] for g in fresh]

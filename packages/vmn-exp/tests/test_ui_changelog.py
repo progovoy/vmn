@@ -11,6 +11,7 @@ from exp_helpers import (
     _run_vmn_init,
     _stamp_app,
 )
+from vmn_exp.core.real_io import real_io
 
 
 def _client(app_layout):
@@ -19,7 +20,7 @@ def _client(app_layout):
 
     manager = WorkspaceManager(os.path.join(app_layout.base_dir, "ui_data"))
     manager.attach_path("main", app_layout.repo_path)
-    return TestClient(create_app(manager))
+    return TestClient(create_app(manager, io=real_io()))
 
 
 def test_group_commits_sections_and_breaking():

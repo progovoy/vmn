@@ -5,8 +5,8 @@ A record is a directory (or key prefix) ``<base>/<verstr>/`` holding
 ``metadata.yml``, the patches, the per-writer JSONL logs, ``run_state.yml`` and
 ``artifacts/``. ``metadata.yml`` is written last and is what makes a record
 exist: a claimed but unfinished record, or what a deleted one left behind, is
-invisible. Backends: :mod:`snapshot_storage_local`, :mod:`snapshot_storage_s3`,
-and the local-first :mod:`snapshot_storage_cached`.
+invisible. Backends: :mod:`vmn_exp.storage.local`, :mod:`vmn_exp.storage.s3`,
+and the local-first :mod:`vmn_exp.storage.cached`.
 
 The defaults here keep duck-typed or older backends working; the real
 backends override them with cheaper, atomic versions.
@@ -109,12 +109,12 @@ class SnapshotStorage(ABC):
         metadata, _ = self.load_record(app_name, verstr)
         return metadata is not None
 
+    @abstractmethod
     def create_exclusive(self, app_name, verstr, metadata, patches):
-        """Save only if *verstr* is free. Backends override this atomically."""
-        if self.exists(app_name, verstr):
-            return False
-        self.save(app_name, verstr, metadata, patches)
-        return True
+        """Save only if *verstr* is free, atomically: of any number of racing
+        writers exactly one gets True (a conditional create, never check
+        then save). :mod:`vmn_exp.storage.conformance` checks it."""
+        ...
 
     # -- child markers (:mod:`vmn_exp.storage.child_markers`) ------------------
 

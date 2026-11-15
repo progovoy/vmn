@@ -41,7 +41,7 @@ def test_status_best_comes_from_the_trials_nested_sdk_run(app_layout, tmp_path, 
 
     trials = _trials(app_layout, sweep)
     assert len(trials) == 3
-    assert all("loss" not in t["metrics"] for t in trials)  # it lives one level down
+    assert all("loss" in t["metrics"] for t in trials)  # adopted: the trial holds it
     status = _status(app_layout, sweep, capsys)
     assert status["best"]["params"] == {"x": 1}
     assert status["best"]["value"] == pytest.approx(1.25)

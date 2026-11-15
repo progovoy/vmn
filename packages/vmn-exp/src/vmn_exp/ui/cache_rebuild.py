@@ -7,15 +7,19 @@ half-built cache: SQLite builds a new generation file beside the live one and
 flips the pointer to it (:mod:`vmn_exp.core.sqlite_files`; the old file goes
 once nothing holds it open); Postgres publishes each scope as one transaction
 under a generation past any a follower holds (the shadow generation). Without
-a persisted cache the rebuild only lives in memory.
+a persisted cache the rebuild only lives in memory. Each target's stores run
+on its *index_clock* (see :class:`~vmn_exp.core.index_store.SqliteStore`).
 """
 from vmn_exp.core import sqlite_files
 from vmn_exp.core.index_store import SqliteStore
 
 
 class MemoryTarget:
+    def __init__(self, index_clock=None):
+        self._index_clock = index_clock
+
     def store_for(self, app):
-        return SqliteStore(None)
+        return SqliteStore(None, clock=self._index_clock)
 
     def built(self, app, index):
         pass
@@ -28,13 +32,13 @@ class MemoryTarget:
 
 
 class SqliteSwap:
-    def __init__(self, path):
-        self.path = path
+    def __init__(self, path, index_clock=None):
+        self.path, self._index_clock = path, index_clock
         self._new = sqlite_files.new_generation(path)
         self._stores = []
 
     def store_for(self, app):
-        store = SqliteStore(self._new)
+        store = SqliteStore(self._new, clock=self._index_clock)
         self._stores.append(store)
         return store
 
@@ -48,16 +52,16 @@ class SqliteSwap:
         sqlite_files.sweep(self.path)
 
     def live_store(self, app):
-        return SqliteStore(self.path)
+        return SqliteStore(self.path, clock=self._index_clock)
 
 
 class PgShadow:
-    def __init__(self, store, health, scope_of):
+    def __init__(self, store, health, scope_of, index_clock=None):
         self._store, self._health, self._scope_of = store, health, scope_of
-        self._built = {}
+        self._built, self._index_clock = {}, index_clock
 
     def store_for(self, app):
-        return SqliteStore(None)
+        return SqliteStore(None, clock=self._index_clock)
 
     def built(self, app, index):
         self._built[app] = index.records

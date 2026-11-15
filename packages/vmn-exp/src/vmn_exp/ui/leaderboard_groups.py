@@ -101,7 +101,7 @@ class Grouping:
         spec = self.spec
         members, summaries = dict(self.members), dict(self.summaries)
         dirty, dropped = self._dropped(members, summaries, left)
-        joined_rows = spec.filtered(base.snapshot, joined)
+        joined_rows = spec.filtered(base.snapshot, joined, base.now_of())
         with_metric = self.with_metric - spec.carrying(dropped) + spec.carrying(joined_rows)
         if bool(with_metric) != self.has_metric:
             return None
@@ -145,7 +145,7 @@ class Grouping:
         """This grouping with the bucket's filtered changed rows placed in."""
         spec, changed = self.spec, base.changed_at(bucket)
         live = dict(zip(base.patch.changed, changed))
-        rows = spec.filtered(base.snapshot, changed)
+        rows = spec.filtered(base.snapshot, changed, base.now_of())
         with_metric = self.with_metric + spec.carrying(rows)
         key, ranked = spec.row_key(base.position, bool(with_metric))
         if ranked != self.ranked:  # only live rows carry the metric
@@ -215,8 +215,8 @@ class Grouping:
         i = self.base.position.get(key_text(group))
         if i is None or (self.live is None and i in self._changed):
             return summary
-        original = self.row_of(key_text(group))
-        return summary.with_rows(self.spec.filtered(self.base.snapshot, [original]))
+        base, original = self.base, self.row_of(key_text(group))
+        return summary.with_rows(self.spec.filtered(base.snapshot, [original], base.now_of()))
 
     def _aggregates_of(self, group):
         found = self._aggregates.get(group)

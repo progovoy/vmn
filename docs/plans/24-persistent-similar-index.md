@@ -1,5 +1,7 @@
 # Plan 24: similar runs on SQLite FTS5 (intent search over 100k+ old runs)
 
+Status: **done** (2026-10-16), with the unmet budgets listed in the plans index.
+
 > Plan 18 records what an experiment is for (`intent`) and ranks past runs against it.
 > Recording is sound. An intent is a log entry of the run, so it syncs, pushes and
 > copies with it, and the experiment index folds it into the `intent_of` side table of

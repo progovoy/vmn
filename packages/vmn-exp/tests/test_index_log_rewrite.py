@@ -19,6 +19,7 @@ from vmn_exp.core.intent import build_intent_entry
 from vmn_exp.core.manage import tag_run
 from vmn_exp.core.writer import append_to_log, create_log_entry, flush_log, own_stream
 from vmn_exp.storage import buffered
+from writer_args import process_writer
 
 APP = "app"
 V = "0.0.1-dev.aaa1111.bbb2222"
@@ -57,8 +58,8 @@ def _host_a_shipped(tmp_path, *entries):
     a = cached_host(tmp_path, "a")
     a.save(APP, V, meta(V), {})
     for e in entries:
-        assert a.append_log_entry(APP, V, own_stream(a, APP, V), e)
-    a.sync_log_to_remote(APP, V, own_stream(a, APP, V))
+        assert a.append_log_entry(APP, V, own_stream(a, APP, V, writer=process_writer()), e)
+    a.sync_log_to_remote(APP, V, own_stream(a, APP, V, writer=process_writer()))
     return a
 
 
@@ -123,12 +124,12 @@ def test_an_index_over_a_cache_whose_ship_failed_matches_a_full_read_after_the_n
     _host_a_shipped(tmp_path, entry(1))
     b = cached_host(tmp_path, "b")
     _remote_listing_fails_once(b)
-    assert b.append_log_entry(APP, V, own_stream(b, APP, V), _note(LONG, 10))  # local copy: LONG only
+    assert b.append_log_entry(APP, V, own_stream(b, APP, V, writer=process_writer()), _note(LONG, 10))  # local copy: LONG only
     index = ExperimentIndex(b, APP).refresh()
     with pytest.raises(RuntimeError):
-        b.sync_log_to_remote(APP, V, own_stream(b, APP, V))  # its listing fails
+        b.sync_log_to_remote(APP, V, own_stream(b, APP, V, writer=process_writer()))  # its listing fails
 
-    b.sync_log_to_remote(APP, V, own_stream(b, APP, V))
+    b.sync_log_to_remote(APP, V, own_stream(b, APP, V, writer=process_writer()))
 
     remote = sorted((e for es in s3_storage().load_logs_by_writer(APP, V).values() for e in es),
                     key=lambda e: e["timestamp"])
@@ -146,13 +147,13 @@ def test_a_persisted_index_refolds_a_log_another_process_merged(tmp_path, bucket
     _host_a_shipped(tmp_path, _params(1, lr=0.1))
     died = cached_host(tmp_path, "b")  # its seed failed; it appended, never shipped
     _remote_listing_fails_once(died)
-    assert died.append_log_entry(APP, V, own_stream(died, APP, V), _note(LONG, 10))
+    assert died.append_log_entry(APP, V, own_stream(died, APP, V, writer=process_writer()), _note(LONG, 10))
     cache = str(tmp_path / "idx.sqlite")
     ExperimentIndex(cached_host(tmp_path, "b"), APP, cache_path=cache).refresh()
 
     later = cached_host(tmp_path, "b")  # a one-shot append + flush merges
-    assert later.append_log_entry(APP, V, own_stream(later, APP, V), _note("b1", 11))
-    later.sync_log_to_remote(APP, V, own_stream(later, APP, V))
+    assert later.append_log_entry(APP, V, own_stream(later, APP, V, writer=process_writer()), _note("b1", 11))
+    later.sync_log_to_remote(APP, V, own_stream(later, APP, V, writer=process_writer()))
 
     reader = cached_host(tmp_path, "b")
     rows = ExperimentIndex(reader, APP, cache_path=cache).refresh().rows()
@@ -191,12 +192,12 @@ def test_an_index_that_read_the_remote_copy_refolds_when_the_local_copy_outgrows
     _remote_listing_fails_once(b)
     intent = {"timestamp": "2026-01-01T00:00:10Z", "type": "intent",
               "text": "try focal loss " + "x" * 400}
-    assert b.append_log_entry(APP, V, own_stream(b, APP, V), intent)  # the local copy: just the intent
+    assert b.append_log_entry(APP, V, own_stream(b, APP, V, writer=process_writer()), intent)  # the local copy: just the intent
     assert _view(index.refresh().snapshot()) == _view(direct_snapshot(b, APP))
     with pytest.raises(RuntimeError):
-        b.sync_log_to_remote(APP, V, own_stream(b, APP, V))  # its listing fails
+        b.sync_log_to_remote(APP, V, own_stream(b, APP, V, writer=process_writer()))  # its listing fails
 
-    b.sync_log_to_remote(APP, V, own_stream(b, APP, V))
+    b.sync_log_to_remote(APP, V, own_stream(b, APP, V, writer=process_writer()))
     want = _view(direct_snapshot(b, APP))
     assert want["intent"] is not None and want["features"] is not None
     assert _view(index.refresh().snapshot()) == want
@@ -211,22 +212,22 @@ def test_list_after_a_flaky_add_and_a_merging_tag_shows_every_entry(
     writer._WRITER_ID = None
     a = cached_host(tmp_path, "a")
     a.save(APP, V, meta(V), {})
-    append_to_log(a, APP, V, create_log_entry("create", params={"lr": 0.1, "layers": 4}))
-    flush_log(a, APP, V)
+    append_to_log(a, APP, V, create_log_entry("create", params={"lr": 0.1, "layers": 4}), writer=process_writer())
+    flush_log(a, APP, V, writer=process_writer())
 
     b = cached_host(tmp_path, "b")  # `vmn-exp add --intent`, network down
     _remote_offline_for(b, 2)
     append_to_log(b, APP, V, dict(build_intent_entry("why: " + "y" * 600, ["k"]),
-                                  timestamp="2026-01-01T00:00:05Z"))
+                                  timestamp="2026-01-01T00:00:05Z"), writer=process_writer())
     with pytest.raises(RuntimeError):
-        flush_log(b, APP, V)
+        flush_log(b, APP, V, writer=process_writer())
 
     def listed():
         return experiment_index.indexed_snapshot(cached_host(tmp_path, "b"), APP,
                                                  wait=True).rows
 
     listed()  # `vmn-exp list`
-    assert tag_run(cached_host(tmp_path, "b"), APP, V, {"k": "v"})  # network back
+    assert tag_run(cached_host(tmp_path, "b"), APP, V, {"k": "v"}, writer=process_writer())  # network back
 
     rows, truth = listed(), direct_rows(cached_host(tmp_path, "b"), APP)[0]
     assert rows[0]["params"] == truth[0]["params"] == {"lr": 0.1, "layers": 4}

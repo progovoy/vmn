@@ -34,7 +34,7 @@ class JobGroups:
         self._jobs = {}  # {group key: [(job row, summary)]}
         snapshot = grouping.base.snapshot
         key_of = spec.key_of(snapshot)
-        for row in spec.filtered(snapshot, rows):
+        for row in spec.filtered(snapshot, rows, grouping.base.now_of()):
             self._jobs.setdefault(key_of(row), []).append((row, summaries[row["verstr"]]))
         self._fields = {}
 

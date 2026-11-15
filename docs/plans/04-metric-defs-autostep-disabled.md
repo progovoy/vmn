@@ -1,5 +1,7 @@
 # Plan 4 + 7: finish `define_metric`, auto-incrementing step, disabled mode
 
+Status: **done** (2026-09-29; confirmed in code 2026-11-11).
+
 > **Base: `master`** (re-verified at 0096782, after the `feature-parity` merge and 157d864 code store).
 > `SDK=` `packages/vmn-exp-sdk/src/vmn_exp`, `APP=` `packages/vmn-exp/src/vmn_exp`, `WEB=` `packages/vmn-exp/webui/src`.
 > `SDK/sdk/run.py` is 603 lines; `class Run(MetricDefinitions, RunArtifacts, RunMedia, RunAlerts)` (`run.py:220`)

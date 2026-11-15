@@ -7,8 +7,11 @@ git checkout.  No app_layout fixture means no Docker dependency.
 Test 5 requires ray (pytest.importorskip) and is expected to skip in environments
 where ray is not installed.
 """
+import os
+from datetime import datetime, timezone
 import pytest
 import yaml
+from vmn_exp.core.real_io import RealClock
 
 
 # ---------------------------------------------------------------------------
@@ -86,7 +89,7 @@ def test_outer_and_inner_run_linkage(container):
     finally:
         recorder.finish()
 
-    storage = open_storage(root=str(container), area="runs")
+    storage = open_storage(root=str(container), area="runs", clock=RealClock(), env=os.environ)
     meta, _ = storage.load(APP_NAME, inner_id)
     assert meta.get("parent") == outer_id, (
         f"inner run parent should be outer run id {outer_id!r}, got {meta.get('parent')!r}"
@@ -227,7 +230,7 @@ def test_trial_error_marks_run_failed(container):
     assert state.get("exit_code") == 1, (
         f"error trial must have exit_code=1, got {state.get('exit_code')!r}"
     )
-    status = derive_status(state)
+    status = derive_status(state, now=datetime.now(timezone.utc))
     assert status == FAILED, f"error trial status should be {FAILED!r}, got {status!r}"
 
 
@@ -289,7 +292,7 @@ def test_real_ray_tune_run_with_vmn_callback(tmp_path, monkeypatch):
         recorder.finish()
         ray.shutdown()
 
-    storage = open_storage(root=str(store), area="runs")
+    storage = open_storage(root=str(store), area="runs", clock=RealClock(), env=os.environ)
     runs = storage.list_snapshots(APP_NAME)
     # 1 outer run + 2 inner runs (one per grid search value) = 3 total
     assert len(runs) == 3, f"expected 3 runs (1 outer + 2 inner), got {len(runs)}"

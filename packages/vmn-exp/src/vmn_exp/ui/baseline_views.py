@@ -153,7 +153,7 @@ class BaselineViews:
         body, tag = self._compared(snapshot, schema, verstr, to, self.rule(snapshot, match, by))
         if not attention or body["baseline"] is None:
             return body, tag
-        pinned_key = tuple(map(tuple, attention_key(attention)))
+        pinned_key = tuple(map(tuple, attention_key(attention, self._cache.now())))
         shares = self._attention(snapshot, schema, body, attention, pinned_key)
         return dict(body, attention=shares), _tag(tag, pinned_key)
 

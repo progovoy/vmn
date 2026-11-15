@@ -7,6 +7,7 @@ import pytest
 from moto import mock_aws
 
 from vmn_exp.snapshot import open_storage
+from vmn_exp.core.real_io import RealClock
 
 BUCKET = "vmn-bucket"
 V = "0.0.1-dev.aaa.bbb"
@@ -26,7 +27,7 @@ def _host(tmp_path, name):
     return open_storage(
         s3_uri(BUCKET, "exp"),
         root=str(tmp_path / name),
-        area="runs",
+        area="runs", clock=RealClock(), env=os.environ,
     )
 
 

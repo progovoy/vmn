@@ -11,6 +11,7 @@ from fastapi.testclient import TestClient
 from pg_fixture import pg_dsn, pg_server_dsn  # noqa: F401
 from vmn_exp.ui.auth import AuthenticatorChain
 from vmn_exp.ui.auth.principal import VIEWER, Principal
+from vmn_exp.core.real_io import real_io
 
 SEARCH = "/api/v1/search"
 
@@ -57,7 +58,7 @@ def _client(tmp_path, auth=False, **kw):
             _run(str(root), app, verstr, loss, note)
         manager.attach_path(ws, str(root))
     chain = AuthenticatorChain([_Fixed()]) if auth else None
-    return TestClient(create_app(manager, auth=chain, **kw))
+    return TestClient(create_app(manager, io=real_io(), auth=chain, **kw))
 
 
 def _hits(response):

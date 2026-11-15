@@ -13,6 +13,7 @@ from vmn_exp.reports import published, store
 from vmn_exp.reports.log import set_archived, set_pinned, set_title
 from vmn_exp.ui.auth.authz import require
 from vmn_exp.ui.auth.principal import ADMIN, EDITOR, VIEWER
+from vmn_exp.ui.http_params import page_of
 from vmn_exp.ui.security import safe_app_name
 from vmn_exp.ui.reports_publish import validate_publish
 from vmn_exp.ui.request_author import author_of
@@ -41,7 +42,7 @@ def _conflict(rev, body, author):
     return JSONResponse({"rev": rev, "body": body, "author": author or {}}, status_code=409)
 
 
-def register(app, api_prefix, any_exp_storage, report_index):
+def register(app, api_prefix, any_exp_storage, report_index, io):
     """*any_exp_storage(ws_name)* returns the workspace's experiment storage,
     *report_index(ws_name)* its refreshed :class:`ReportIndex`."""
     base = f"{api_prefix}/workspaces/{{ws_name}}/reports"
@@ -67,9 +68,12 @@ def register(app, api_prefix, any_exp_storage, report_index):
         return storage, found
 
     @app.get(base, dependencies=[require(VIEWER)])
-    def list_reports_route(ws_name: str, archived: bool = False):
-        rows = report_index(ws_name).reports()
-        return {"reports": [r for r in rows if bool(r.get("archived")) == archived]}
+    def list_reports_route(ws_name: str, archived: bool = False, offset: int = 0,
+                           limit: int = None):
+        rows = [r for r in report_index(ws_name).reports()
+                if bool(r.get("archived")) == archived]
+        page, total = page_of(rows, offset, limit)
+        return {"reports": page} if total is None else {"reports": page, "total": total}
 
     @app.get(f"{api_prefix}/workspaces/{{ws_name}}/apps/{{app_tag}}/reports",
              dependencies=[require(VIEWER)])
@@ -88,7 +92,8 @@ def register(app, api_prefix, any_exp_storage, report_index):
         title, text = (body or {}).get("title"), (body or {}).get("body", "")
         if not isinstance(title, str) or not title.strip() or not isinstance(text, str):
             raise HTTPException(400, "title (non-empty) and body must be strings")
-        rid = store.create(any_exp_storage(ws_name), title, text, actor=author_of(request))
+        rid = store.create(any_exp_storage(ws_name), title, text, random=io.random,
+                           actor=author_of(request, io.env, io.host), env=io.env, host=io.host)
         return {"rid": rid, "rev": 1}
 
     @app.get(f"{base}/{{rid}}", dependencies=[require(VIEWER)])
@@ -120,7 +125,7 @@ def register(app, api_prefix, any_exp_storage, report_index):
         if base_rev > report["rev"]:
             return _conflict(report["rev"], report["body"], report.get("author"))
         result = store.save(storage, rid, base_rev, text, str(body.get("message") or ""),
-                            actor=author_of(request))
+                            actor=author_of(request, io.env, io.host), env=io.env, host=io.host)
         if isinstance(result, store.Conflict):
             return _conflict(result.rev, result.body, result.author)
         return {"rev": result}
@@ -132,7 +137,8 @@ def register(app, api_prefix, any_exp_storage, report_index):
         rev, data = validate_publish(storage, body or {})
         if store.revision(storage, rid, rev) is None:
             raise HTTPException(404, f"Revision {rev} of {rid!r} not found")
-        published.publish(storage, rid, rev, data, actor=author_of(request))
+        published.publish(storage, rid, rev, data, actor=author_of(request, io.env, io.host),
+                          env=io.env, host=io.host)
         return {"rev": rev}
 
     @app.patch(f"{base}/{{rid}}", dependencies=[require(EDITOR)])
@@ -141,11 +147,11 @@ def register(app, api_prefix, any_exp_storage, report_index):
         body = body or {}
         _check_patch(body)
         storage, _ = _report(ws_name, rid)
-        actor = author_of(request)
+        actor = author_of(request, io.env, io.host)
         setters = {"title": set_title, "archived": set_archived, "pinned": set_pinned}
         for field, setter in setters.items():
             if field in body:
-                setter(storage, rid, body[field], actor=actor)
+                setter(storage, rid, body[field], actor=actor, env=io.env, host=io.host)
         return {}
 
     @app.delete(f"{base}/{{rid}}", dependencies=[require(ADMIN)])

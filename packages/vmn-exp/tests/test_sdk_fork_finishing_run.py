@@ -22,7 +22,8 @@ import os, sys, threading, time
 from vmn_exp.snapshot import LocalSnapshotStorage
 from vmn_exp.storage.cached import CachedSnapshotStorage
 from vmn_exp.sdk import context, fork_safety
-from vmn_exp.sdk.run import Run
+from vmn_exp.sdk.run import Run, _real_process_hooks
+from vmn_exp.core.real_io import RealClock, RealHost, RealRandom
 
 FINISHING = threading.Event()
 IN_FLIGHT = threading.Event()
@@ -41,7 +42,8 @@ class SlowSync(CachedSnapshotStorage):
 
 storage = SlowSync(LocalSnapshotStorage(sys.argv[1], area="runs"))
 storage.save("app", "0.0.1-dev.a.b", {"verstr": "0.0.1-dev.a.b"}, {})
-run = Run(storage, "app", "0.0.1-dev.a.b", 60, sync_interval_sec=0)
+run = Run(storage, "app", "0.0.1-dev.a.b", 60, sync_interval_sec=0, clock=RealClock(), host=RealHost(), random=RealRandom(),
+          env=os.environ, install_hooks=_real_process_hooks())
 run._open()
 run.log_note("logged")
 

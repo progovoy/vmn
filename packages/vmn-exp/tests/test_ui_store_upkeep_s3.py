@@ -3,6 +3,7 @@ one log object per stream and its metrics on a ``.vmx`` is never read again,
 in this process or the next one."""
 import datetime
 import json
+import time
 
 import pytest
 import yaml
@@ -17,6 +18,8 @@ from vmn_exp.core.writer import create_run  # noqa: E402
 from vmn_exp.storage import s3_stats  # noqa: E402
 from vmn_exp.storage.s3 import S3SnapshotStorage  # noqa: E402
 from vmn_exp.ui.store_upkeep import AppUpkeep  # noqa: E402
+from vmn_exp.core.real_io import RealClock
+from writer_args import process_suffix, process_writer
 
 APP = "my_app"
 CODE = "0.0.1-dev.abc.def"
@@ -48,11 +51,11 @@ def _now():
 
 def _dead_run(storage, segments=3):
     """A failed run with *segments* log segments and as many metric segments."""
-    verstr = create_run(storage, APP, CODE, {"timestamp": _now()}, {})
+    verstr = create_run(storage, APP, CODE, {"timestamp": _now()}, {}, writer=process_writer(), suffix=process_suffix())
     for seq in range(1, segments + 1):
         line = json.dumps({"type": "params", "timestamp": _now(), "params": {f"p{seq}": seq}})
         storage.put_log_segment(APP, verstr, "w", seq, (line + "\n").encode())
-        w = MetricWriter(storage, APP, verstr, "w")
+        w = MetricWriter(storage, APP, verstr, "w", clock=time.time)
         w.add("loss", 1.0 / seq, step=seq)
         w.flush()
     state = {"state": "finished", "pid": 1, "host": "h", "started_at": _now(),
@@ -73,10 +76,10 @@ def test_compacted_dead_runs_are_not_read_again_in_this_or_the_next_process(stor
     for _ in range(3):
         _dead_run(storage)
     snap = experiment_index.indexed_snapshot(storage, APP, wait=True)
-    assert AppUpkeep(storage, APP).run(snap)["compacted"] == 3
+    assert AppUpkeep(storage, APP, time.monotonic, now=RealClock().now).run(snap)["compacted"] == 3
 
     calls.clear()
-    counts = AppUpkeep(storage, APP).run(snap)  # a restarted server
+    counts = AppUpkeep(storage, APP, time.monotonic, now=RealClock().now).run(snap)  # a restarted server
 
     assert _log_gets(calls) == []
     assert _misses(calls) == []
@@ -86,10 +89,10 @@ def test_compacted_dead_runs_are_not_read_again_in_this_or_the_next_process(stor
 def test_a_restarted_upkeep_lists_each_compacted_run_at_most_twice(storage, calls):
     verstrs = [_dead_run(storage) for _ in range(2)]
     snap = experiment_index.indexed_snapshot(storage, APP, wait=True)
-    AppUpkeep(storage, APP).run(snap)
+    AppUpkeep(storage, APP, time.monotonic, now=RealClock().now).run(snap)
 
     calls.clear()
-    AppUpkeep(storage, APP).run(snap)
+    AppUpkeep(storage, APP, time.monotonic, now=RealClock().now).run(snap)
 
     reads = [c for c in calls if c.operation in ("GetObject", "HeadObject")]
     assert reads == []

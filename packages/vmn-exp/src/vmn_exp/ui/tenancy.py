@@ -13,7 +13,6 @@ outlives its transaction.
 """
 import contextlib
 import contextvars
-import secrets
 from dataclasses import dataclass
 
 SINGLE_TENANT_ORG = 0
@@ -87,9 +86,9 @@ def bind_org(conn, org_id):
     conn.execute("SELECT set_config('app.org_id', %s, true)", (str(int(org_id)),))
 
 
-def create_org(conn, name):
+def create_org(conn, name, random):
     """A new org with a fresh external id (the AssumeRole confused-deputy guard)."""
-    external_id = f"vmn-{secrets.token_hex(16)}"
+    external_id = f"vmn-{random.token_hex(16)}"
     (org_id,) = conn.execute(
         "INSERT INTO vmn_orgs (name, external_id) VALUES (%s, %s) RETURNING id",
         (name, external_id),
@@ -114,21 +113,36 @@ def org_of(conn, principal_id):
     return row[0] if row else None
 
 
-def install_org_middleware(app, tenancy):
-    """Set ``request.state.org_id`` from the principal; in multi tenancy a
-    principal without an org is refused (403)."""
+class OrgBinding:
+    """Plain ASGI (a BaseHTTPMiddleware leaves cyclic garbage per request):
+    ``request.state.org_id`` from the principal, and in multi tenancy
+    :func:`current_org` for the request; a principal without an org is
+    refused (403). ``scope["state"]`` is what ``request.state`` wraps."""
 
-    @app.middleware("http")
-    async def bind_org(request, call_next):
-        principal = getattr(request.state, "principal", None)
+    def __init__(self, app, tenancy):
+        self.app = app
+        self.tenancy = tenancy
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+        state = scope.setdefault("state", {})
+        principal = state.get("principal")
         org_id = getattr(principal, "org_id", SINGLE_TENANT_ORG)
-        if tenancy == "multi" and principal is not None and not org_id:
+        if self.tenancy != "multi":
+            state["org_id"] = SINGLE_TENANT_ORG
+            await self.app(scope, receive, send)
+        elif principal is not None and not org_id:
             from fastapi.responses import JSONResponse
 
-            return JSONResponse({"detail": "No organization for this principal"}, 403)
-        if tenancy != "multi":
-            request.state.org_id = SINGLE_TENANT_ORG
-            return await call_next(request)
-        request.state.org_id = org_id
-        with org_context(org_id):
-            return await call_next(request)
+            await JSONResponse({"detail": "No organization for this principal"}, 403)(scope, receive, send)
+        else:
+            state["org_id"] = org_id
+            with org_context(org_id):
+                await self.app(scope, receive, send)
+
+
+def install_org_middleware(app, tenancy):
+    """Install :class:`OrgBinding` on *app*."""
+    app.add_middleware(OrgBinding, tenancy=tenancy)

@@ -14,6 +14,7 @@ from exp_helpers import (
     _stamp_app,
     extract_dev_verstr,
 )
+from vmn_exp.core.real_io import real_io
 
 
 def _make_dirty(app_layout, filename, content):
@@ -54,7 +55,7 @@ def _client(app_layout, token=None, extra_paths=None):
     manager.attach_path("main", app_layout.repo_path)
     for name, path in (extra_paths or {}).items():
         manager.attach_path(name, path)
-    app = create_app(manager, token=token)
+    app = create_app(manager, io=real_io(), token=token)
     return TestClient(app)
 
 

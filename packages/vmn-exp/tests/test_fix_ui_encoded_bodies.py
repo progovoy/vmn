@@ -13,6 +13,7 @@ from fastapi.testclient import TestClient
 from vmn_exp.snapshot import LocalSnapshotStorage
 from vmn_exp.ui import responses
 from vmn_exp.storage.areas import local_store_root
+from vmn_exp.core.real_io import real_io
 
 APP = "app"
 
@@ -29,7 +30,7 @@ def test_identical_list_requests_encode_their_body_once(tmp_path, monkeypatch):
         st.save(APP, v, {"verstr": v, "timestamp": f"2026-01-01T00:{i // 60:02d}:{i % 60:02d}Z"}, {})
     manager = WorkspaceManager(str(tmp_path / "data"))
     manager.attach_path("ws", str(root))
-    app = create_app(manager, background_refresh=True)
+    app = create_app(manager, io=real_io(), background_refresh=True)
     renders, compressions = [], []
     real_render, real_compress = responses.render_json, gzip.compress
     monkeypatch.setattr(responses, "render_json", lambda p: renders.append(1) or real_render(p))

@@ -7,11 +7,10 @@ import datetime
 import random
 
 import pytest
+from fakes.clock import FakeClock
 from leaderboard_fleet import T0, Fleet
 from vmn_exp.ui.leaderboard_cache import LeaderboardCache
 from vmn_exp.ui.leaderboard_jobs import JOB_SORTS
-
-from vmn_exp.core import status as status_mod
 
 SCHEMAS = [{}, {"loss": {"goal": "min", "primary": True}}]
 CASES = [
@@ -24,11 +23,6 @@ CASES = [
     dict(top=True, match_subtree=True, query='status = "failed"'),
 ]
 DATES = ("timestamp", "started_at", "finished_at")
-
-
-@pytest.fixture(autouse=True)
-def _clock(monkeypatch):
-    monkeypatch.setattr(status_mod, "_now", lambda now=None: now or T0)
 
 
 def _sort_data(row, sort):
@@ -64,7 +58,7 @@ def _page_through(seed, schema, params, limit=7):
     fleet.seed(40, T0, sweeps=2, live=4)
     if "scope" in params:
         params = dict(params, scope=jobs[params["scope"]])
-    cache = LeaderboardCache()
+    cache = LeaderboardCache(now=FakeClock(T0).now)
     now, got, orders = T0, [], []
     snap = fleet.snapshot()
     cursor = None
@@ -99,7 +93,7 @@ def test_paging_by_cursor_while_mutating_yields_each_unmoved_row_once(seed, case
 def test_without_changes_cursor_paging_equals_the_full_order():
     fleet = Fleet(3)
     jobs = fleet.seed(80, T0)
-    cache, snap = LeaderboardCache(), fleet.snapshot()
+    cache, snap = LeaderboardCache(now=FakeClock(T0).now), fleet.snapshot()
     for schema in SCHEMAS:
         for params in CASES:
             if "scope" in params:
@@ -119,7 +113,7 @@ def test_without_changes_cursor_paging_equals_the_full_order():
 def test_an_offset_page_carries_a_next_cursor_and_the_last_page_none():
     fleet = Fleet(4)
     fleet.seed(30, T0)
-    cache, snap = LeaderboardCache(), fleet.snapshot()
+    cache, snap = LeaderboardCache(now=FakeClock(T0).now), fleet.snapshot()
     first = cache.page(snap, {}, limit=10, sort="loss")
     rest = cache.page(snap, {}, limit=10, sort="loss", cursor=first["next_cursor"])
     assert rest["rows"] == cache.page(snap, {}, limit=10, offset=10, sort="loss")["rows"]
@@ -129,7 +123,7 @@ def test_an_offset_page_carries_a_next_cursor_and_the_last_page_none():
 def test_a_cursor_from_another_sort_or_filter_is_refused():
     fleet = Fleet(5)
     fleet.seed(30, T0)
-    cache, snap = LeaderboardCache(), fleet.snapshot()
+    cache, snap = LeaderboardCache(now=FakeClock(T0).now), fleet.snapshot()
     cursor = cache.page(snap, {}, limit=5, sort="loss")["next_cursor"]
     for other in (dict(sort="acc"), dict(sort="loss", order="asc"),
                   dict(sort="loss", status="running"), dict(sort="loss", query="idx > 1"),
@@ -144,7 +138,7 @@ def test_a_cursor_from_another_sort_or_filter_is_refused():
 def test_a_gone_cursor_row_resumes_after_the_page_rows_still_there():
     fleet = Fleet(6)
     fleet.seed(30, T0, live=0)
-    cache = LeaderboardCache()
+    cache = LeaderboardCache(now=FakeClock(T0).now)
     page = cache.page(fleet.snapshot(), {}, limit=10)
     seen = [r["verstr"] for r in page["rows"]]
     fleet.remove(fleet.index(seen[-1]))

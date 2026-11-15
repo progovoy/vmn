@@ -38,7 +38,6 @@ from vmn_exp.core.metric_stream import MetricWriter
 from vmn_exp.core.writer import (
     claim_record,
     create_tags_entry,
-    flush_log,
     save_run_state,
     sync_to_remote,
 )
@@ -222,7 +221,7 @@ def _write_all(
     # valid MLflow data and must be preserved per the import spec.
     metrics, entries = split_metric_entries(entries)
     if metrics:
-        record_metric_entries(MetricWriter(storage, app_name, verstr, IMPORT_WRITER), metrics)
+        record_metric_entries(MetricWriter(storage, app_name, verstr, IMPORT_WRITER, clock=None), metrics)
     storage.append_log_entries(app_name, verstr, IMPORT_WRITER, entries)
 
     save_run_state(storage, app_name, verstr, _build_run_state(run))
@@ -230,7 +229,6 @@ def _write_all(
     if not skip_artifacts and not run.get("artifact_remote"):
         _copy_local_artifacts(storage, app_name, verstr, run.get("artifact_dir"))
 
-    flush_log(storage, app_name, verstr)
     sync_to_remote(storage, app_name, verstr, IMPORT_WRITER)
     compact_writer(storage, app_name, verstr, IMPORT_WRITER)
 
@@ -248,6 +246,7 @@ def import_run(
     skip_artifacts: bool = False,
     refresh_features: bool = False,
     commit_changes: Callable[[str], dict[str, Any] | None] | None = None,
+    writer: str | None = None,
 ) -> Literal["created", "skipped", "resumed", "refreshed"]:
     """Write a vmn-exp record from a neutral MLflow run dict.
 
@@ -265,7 +264,7 @@ def import_run(
         artifact URIs are never copied regardless).
     refresh_features:
         When ``True``, an already-imported run lacking them gets its features
-        and note instead of being skipped.
+        (appended as *writer*, a ``get_writer_id``) and note instead of being skipped.
     commit_changes:
         ``source_commit -> changes | None`` (``CommitChanges`` over a checkout).
 
@@ -296,7 +295,7 @@ def import_run(
             logs = _logs_by_writer(storage, app_name, verstr)
             if _has_import_log(storage, app_name, verstr, logs):
                 if refresh_features and refresh_record(
-                        storage, app_name, verstr, run, existing, logs, commit):
+                        storage, app_name, verstr, run, existing, logs, commit, writer=writer):
                     return "refreshed"
                 return "skipped"
             # Partial: claimed but log never written — resume

@@ -1,22 +1,16 @@
 #!/usr/bin/env python3
-"""Experiment tracking for reproducible research, built on snapshot infrastructure."""
+"""Experiment tracking for reproducible research, built on snapshot infrastructure.
+
+This module holds the shared argument and storage helpers and the
+``vmn-exp`` action dispatch; each command lives in its own module (plan 44
+G15) and is imported back here, where tests and other modules find it."""
 import os
-import shutil
-import sys
 from dataclasses import dataclass
-from types import SimpleNamespace
 from typing import List, Optional
 
 import yaml
 
-from vmn_exp.cli import fork
-from vmn_exp.cli.code_record import load_code_record
-from vmn_exp.cli.manage import (
-    MANAGE_ACTIONS,
-    experiment_manage,
-    refuse_stray_refs,
-)
-from vmn_exp.cli.prune import experiment_prune as _experiment_prune
+from vmn_exp.cli.manage import experiment_manage
 
 # `vmn-exp run` lives in its own module; these names stay importable from here.
 from vmn_exp.cli.run import (  # noqa: F401
@@ -25,116 +19,65 @@ from vmn_exp.cli.run import (  # noqa: F401
     _parse_metrics,
     experiment_run,
 )
-from vmn_exp.cli.define_metric_args import define_metric_entry
-from vmn_exp.cli.duration_text import duration_text
-from vmn_exp.cli.finish_args import apply_finish, finish_flags_error
-from vmn_exp.cli.intent_arg import append_intent, read_intent
-from vmn_exp.cli.list_hints import print_query_hints
-from vmn_exp.cli.media_view import describe_media_entry, media_lines
-from vmn_exp.cli.views import (
-    PATCH_MAX_BYTES,
-    dumps,
-    error_lines,
-    event_log,
-    format_metric_lines,
-    format_number,
-    metrics_schema,
-    patch_payload,
-    policy_conflict,
-    print_patch,
-    show_payload,
-    shown_policies,
-    with_policy,
-)
-from vmn_exp.core.app_conf import experiment_conf
-from vmn_exp.core.field_sort import field_sort
-from vmn_exp.core.identity import known_identity
-from vmn_exp.core.snapshot_features import EXPERIMENT_FILE, write_features_file
+from vmn_exp.cli.exp_parser.actions import MANAGE_ACTIONS
+from vmn_exp.cli.exp_parser.ownership import refuse_usage_errors
+from vmn_exp.cli.intent_arg import read_intent
+from vmn_exp.cli.snapshot_arg import from_snapshot_metadata
 from vmn_exp.core.storage_resolve import _get_experiment_storage, store_uri
 from vmn_exp.storage.store_marker import require_store
-from vmn_exp.gitmode import capture
-from vmn_exp.gitmode.checkout import record_run
-from vmn_exp.gitmode.coldstart import DIRTY_OK
-from vmn_exp.gitmode.features import capture_features
-from vmn_exp.snapshot import (
-    _diff_real_tree,
-    _diff_with_external_tool,
-    _restore_with_safety_net,
-    get_git_difftool,
-)
-import vmn_exp.core.index_list as index_list
+from vmn_exp.gitmode.coldstart import cold_start_notice, init_tracking
 import vmn_exp.core.writer as experiment_writer
-from vmn_exp.core.from_snapshot import (
-    create_from_snapshot as _experiment_create_from_snapshot,
-)
-from vmn_exp.core.fold import fold_inputs_dict, fold_log, fold_metrics
-from vmn_exp.core.log import (
-    DATE_SORTS,
-    IDX_SORT,
-    effective_params,
-    filter_archived,
-    load_log,
-    merged_log_view,
-    sort_by_metric,
-)
-from vmn_exp.core.load_progress import incomplete_text
-from vmn_exp.core.metric_entries import is_metric_entry
-from vmn_exp.core.metric_schema import effective_schema
-from vmn_exp.core.metric_summary import SchemaPolicies
-from vmn_exp.core.output_log import OUTPUT_LOG_PATH
-from vmn_exp.core.query import QueryError
-from vmn_exp.core.refs import (
-    placement_snapshot,
-    point_placement,
-    recent_verstrs,
-    resolve_experiment,
-    resolve_parent,
-    storage_index,
-    tree_links,
-)
-from vmn_exp.core.status import (
-    CREATED,
-    STUCK,
-    load_run_state,
-    run_state_observed_at,
-    status_fields,
-)
-from vmn_exp.core.tree import subtree_status, sweep_incomplete
-from vmn_exp.core.writer import (
-    append_to_log,
-    compute_artifact_info,
-    create_log_entry,
-    flush_log,
-    merge_conf_into_params,
-    save_artifact,
-)
-from version_stamp.api import (
-    VMN_LOGGER,
-    export_tree,
-    measure_runtime_decorator,
-    now_iso,
-    relative_timestamp,
-)
-from vmn_exp.storage.files import FILE_TREES, safe_verstr
+from vmn_exp.core.refs import resolve_experiment, resolve_parent
+from vmn_exp.core.writer import append_to_log, get_writer_id, merge_conf_into_params
+from version_stamp.api import VMN_LOGGER, measure_runtime_decorator, now_iso
 from vmn_exp.cli.inputs_arg import parse_input_arg
-from vmn_exp.cli.provenance import (
-    format_env_oneliner,
-    format_inputs_lines,
-    print_provenance_diff_section,
-    refuse_no_code,
-)
 from vmn_exp.core.inputs import create_input_entry
 
+# Names tests and other modules import, or patch, on this module.
+from vmn_exp.core.from_snapshot import (  # noqa: F401
+    create_from_snapshot as _experiment_create_from_snapshot,
+)
+from vmn_exp.core.status import load_run_state, min_stale_sec  # noqa: F401
+from version_stamp.api import export_tree, relative_timestamp  # noqa: F401
 
-def _append_inputs(storage, app_name, verstr, inputs_list):
-    """Append one input log entry per ``--input`` argument."""
+# The commands, one module each.
+from vmn_exp.cli.compare_view import (  # noqa: F401
+    _resolve_experiment_bundles,
+    experiment_compare,
+    experiment_diff,
+)
+from vmn_exp.cli.experiment_create import (  # noqa: F401
+    _experiment_create_core,
+    experiment_add,
+    experiment_create,
+)
+from vmn_exp.cli.experiment_export import (  # noqa: F401
+    experiment_export,
+    experiment_prune,
+    experiment_restore,
+)
+from vmn_exp.cli.experiment_show import (  # noqa: F401
+    _describe_log_entry,
+    _print_status_block,
+    experiment_show,
+)
+from vmn_exp.cli.list_layout import (  # noqa: F401
+    _format_list_row,
+    _list_rows,
+    _status_token,
+    experiment_list,
+)
+
+
+def _append_inputs(storage, app_name, verstr, inputs_list, writer):
+    """Append one input log entry per ``--input`` argument, as *writer*."""
     if not inputs_list:
         return
     ts = now_iso()
     for raw in inputs_list:
         name, uri, digest = parse_input_arg(raw)
         entry = create_input_entry(uri, name=name, digest=digest, ts=ts)
-        append_to_log(storage, app_name, verstr, entry)
+        append_to_log(storage, app_name, verstr, entry, writer)
 
 
 @dataclass
@@ -204,13 +147,14 @@ def _new_app_guard_error(app_name, other_apps):
     )
 
 
-def _resolve_parent(storage, app_name, args):
-    """``--parent``, else the enclosing run's ``VMN_EXPERIMENT_ID``: ``(parent, err)``."""
+def _resolve_parent(storage, app_name, args, env):
+    """``--parent``, else the enclosing run's ``VMN_EXPERIMENT_ID`` in *env*:
+    ``(parent, err)``."""
     return resolve_parent(
         storage,
         app_name,
         getattr(args, "parent", None),
-        os.environ.get("VMN_EXPERIMENT_ID"),
+        env.get("VMN_EXPERIMENT_ID"),
     )
 
 
@@ -265,7 +209,7 @@ def _export_conf_writer_id(writer_id):
     experiment_writer._WRITER_ID = None  # re-read on the next log append
 
 
-def experiment_storage_params(vcs, args):
+def experiment_storage_params(vcs, args, env):
     """The storage params of *args*, conf.yml's filling the gaps."""
     params = {
         "store": getattr(args, "store", None),
@@ -275,7 +219,7 @@ def experiment_storage_params(vcs, args):
         "experiment_dir": getattr(args, "experiment_dir", None),
         "writer_id": getattr(args, "writer_id", None),
     }
-    merge_conf_into_params(vcs, params)
+    merge_conf_into_params(vcs, params, env)
     _export_conf_writer_id(params.get("writer_id"))
     return params
 
@@ -283,14 +227,14 @@ def experiment_storage_params(vcs, args):
 def auto_init(vmn_ctx):
     """Initialize the repo and the app when either is untracked (a zero-setup
     cold start). Returns 1 on failure, None otherwise."""
-    from version_stamp.api import auto_init_if_needed, init_needed
+    from version_stamp.api import init_needed
 
     vcs = vmn_ctx.vcs
     repo_missing, app_missing = init_needed(vcs)
 
     # A brand-new app name in a repo that already has other apps is far more
     # likely a typo than a deliberate new app, and unlike `vmn show`/`vmn goto`
-    # this path commits, tags and pushes as a side effect. Refuse unless the
+    # this path commits and tags (and pushes, with a remote). Refuse unless the
     # repo is genuinely uninitialized (no other app could exist yet) or the
     # user opted in with --new-app.
     if app_missing and not repo_missing and not getattr(vmn_ctx.args, "new_app", False):
@@ -299,12 +243,27 @@ def auto_init(vmn_ctx):
             VMN_LOGGER.error(_new_app_guard_error(vcs.name, other_apps))
             return 1
 
-    # The init commits and pushes: a CI checkout detached at a remote tip
-    # commits on that branch, as `vmn stamp` does.
-    if repo_missing or app_missing:
-        vcs.ensure_on_branch()
-    err, _ = auto_init_if_needed(vcs, extra_optional=DIRTY_OK)
-    return err or None
+    if not (repo_missing or app_missing):
+        return None
+    return _announced_init(vcs, repo_missing, app_missing) or None
+
+
+def _announced_init(vcs, repo_missing, app_missing):
+    """Init, pushing only when there is a remote to push to (plan 17 F6: a CI
+    checkout's first run publishes its baseline), and say what it did."""
+    from version_stamp.api import auto_init_if_needed
+
+    remote = vcs.backend.selected_remote
+    remote_name = remote.name if remote is not None else None
+    notice = cold_start_notice(
+        vcs.name, repo_missing, app_missing, pushed=remote is not None, remote=remote_name,
+    )
+    if remote is not None:
+        VMN_LOGGER.info(notice)
+    err, _ = init_tracking(vcs, auto_init_if_needed, push=remote is not None)
+    if remote is None and not err:
+        VMN_LOGGER.info(notice)
+    return err
 
 
 # Actions that never write the store (they take no repo lock either).
@@ -313,29 +272,29 @@ READ_ONLY_ACTIONS = frozenset({"list", "show", "compare", "diff", "export", "imp
                                "export-metrics", "similar"})
 
 
-def _open_checked_storage(vcs, params, action, args=None):
+def _open_checked_storage(vcs, params, action, args=None, *, clock, env):
     """The experiment storage; a read-only action refuses a configured store
     that doesn't exist (a mistyped URI) instead of listing nothing."""
     writer = action not in READ_ONLY_ACTIONS or getattr(args, "compact", False)
-    storage = _get_experiment_storage(vcs, params, writer=writer)
+    storage = _get_experiment_storage(vcs, params, writer=writer, clock=clock, env=env)
     if not writer:
         require_store(storage, store_uri(params))
     return storage
 
 
 @measure_runtime_decorator
-def handle_experiment(vmn_ctx):
+def handle_experiment(vmn_ctx, io):
     vcs = vmn_ctx.vcs
     args = vmn_ctx.args
     action = args.action
+    usage_error = refuse_usage_errors(args)
+    if usage_error:
+        return usage_error
 
-    params = experiment_storage_params(vcs, args)
+    params = experiment_storage_params(vcs, args, io.env)
 
     # Auto-init for create/run (zero-setup cold start), unless from_snapshot mode.
-    from_snapshot = getattr(args, "from_snapshot", None) or os.environ.get(
-        "VMN_SNAPSHOT_METADATA"
-    )
-    if action in ("create", "run") and not from_snapshot:
+    if action in ("create", "run") and not from_snapshot_metadata(args, io.env):
         # A bad intent must fail before the cold start stamps a baseline.
         if read_intent(args)[1]:
             return 1
@@ -344,45 +303,43 @@ def handle_experiment(vmn_ctx):
             return err
 
     try:
-        storage = _open_checked_storage(vcs, params, action, args)
+        storage = _open_checked_storage(vcs, params, action, args, clock=io.clock, env=io.env)
     except ValueError as exc:
         VMN_LOGGER.error(str(exc))
         return 1
 
     if action in MANAGE_ACTIONS:
-        return experiment_manage(_app_name(vcs, args), storage, args)
-    if refuse_stray_refs(args):
-        return 1
+        return experiment_manage(_app_name(vcs, args), storage, args, get_writer_id(io.env, io.host))
     if action == "create":
-        return experiment_create(
-            vcs, params, storage, args, repo_lock=getattr(vmn_ctx, "repo_lock", None)
-        )
+        return experiment_create(vcs, params, storage, args,
+                                 repo_lock=getattr(vmn_ctx, "repo_lock", None), clock=io.clock,
+                                 env=io.env, host=io.host)
     elif action == "run":
         return experiment_run(
-            vcs, params, storage, args, repo_lock=getattr(vmn_ctx, "repo_lock", None)
+            vcs, params, storage, args, repo_lock=getattr(vmn_ctx, "repo_lock", None), io=io
         )
     elif action == "rerun":
         from vmn_exp.cli.rerun import experiment_rerun
 
         return experiment_rerun(
-            vcs, params, storage, args, repo_lock=getattr(vmn_ctx, "repo_lock", None)
+            vcs, params, storage, args, repo_lock=getattr(vmn_ctx, "repo_lock", None), io=io
         )
     elif action == "add":
-        return experiment_add(vcs, params, storage, args)
+        return experiment_add(vcs, params, storage, args, io)
     elif action == "list":
-        return experiment_list(vcs, params, storage, args)
+        return experiment_list(vcs, params, storage, args, io.console, io.clock, min_stale_sec(io.env))
     elif action == "show":
-        return experiment_show(vcs, params, storage, args)
+        return experiment_show(vcs, params, storage, args, io.console, io.clock, min_stale_sec(io.env))
     elif action == "compare":
-        return experiment_compare(vcs, params, storage, args)
+        return experiment_compare(vcs, params, storage, args, io.console)
     elif action == "diff":
-        return experiment_diff(vcs, params, storage, args)
+        return experiment_diff(vcs, params, storage, args, io.console)
     elif action == "restore":
-        return experiment_restore(vcs, params, storage, args)
+        return experiment_restore(vcs, params, storage, args, io.clock, io.env)
     elif action == "export":
-        return experiment_export(vcs, params, storage, args)
+        return experiment_export(vcs, params, storage, args, io.console, io.env, io.host)
     elif action == "prune":
-        return experiment_prune(vcs, params, storage, args)
+        return experiment_prune(vcs, params, storage, args, io.clock)
     elif action == "importance":
         from vmn_exp.cli.importance import experiment_importance
 
@@ -390,25 +347,25 @@ def handle_experiment(vmn_ctx):
     elif action == "watch":
         from vmn_exp.cli.watch import experiment_watch
 
-        return experiment_watch(vcs, storage, _app_name(vcs, args), args)
+        return experiment_watch(vcs, storage, _app_name(vcs, args), args, io.clock, io.env)
     elif action == "rewind":
-        return experiment_rewind(vcs, params, storage, args)
+        return experiment_rewind(vcs, params, storage, args, io)
     elif action == "export-metrics":
         from vmn_exp.cli.export_metrics import experiment_export_metrics
 
         return experiment_export_metrics(storage, _app_name(vcs, args), args)
     elif action == "compact":
-        return experiment_compact(vcs, params, storage, args)
+        return experiment_compact(vcs, params, storage, args, io.clock, min_stale_sec(io.env))
     elif action == "push":
-        return experiment_push(vcs, params, storage, args)
+        return experiment_push(vcs, params, storage, args, io.clock, io.env)
     elif action == "lineage":
         from vmn_exp.cli.lineage import experiment_lineage
 
         return experiment_lineage(storage, _app_name(vcs, args), args)
     elif action == "similar":
-        return experiment_similar(vcs, params, storage, args)
+        return experiment_similar(vcs, params, storage, args, io.clock)
     elif action == "similar-backfill":
-        return experiment_similar_backfill(vcs, params, storage, args)
+        return experiment_similar_backfill(vcs, params, storage, args, io)
     elif action == "backfill-children":
         return experiment_backfill_children(vcs, params, storage, args)
     else:
@@ -416,213 +373,23 @@ def handle_experiment(vmn_ctx):
         return 1
 
 
-# ---------------------------------------------------------------------------
-# create
-# ---------------------------------------------------------------------------
 
-
-@measure_runtime_decorator
-def experiment_create(vcs, params, storage, args, repo_lock=None):
-    """Create a run; ``repo_lock`` is the per-repo lock the CLI entry point
-    acquired, handed back once the run is written (see :func:`experiment_run`)."""
-    extra = {}
-    if getattr(args, "file", None):
-        extra.update(_parse_notes_file(args.file))
-
-    from_snapshot = getattr(args, "from_snapshot", None) or os.environ.get(
-        "VMN_SNAPSHOT_METADATA"
-    )
-    app_name = _app_name(vcs, args)
-    parent, err = _resolve_parent(storage, app_name, args)
-    if err is not None:
-        return err
-    source, err = fork.fork_source(storage, app_name, args)
-    if err is not None:
-        return err
-    intent, err = read_intent(args)
-    if err is not None:
-        return err
-
-    verstr, err = _experiment_create_core(
-        vcs,
-        storage,
-        note=args.note,
-        from_snapshot=from_snapshot,
-        extra_create_data=extra or None,
-        parent=parent,
-        name=getattr(args, "run_name", None),
-        capture_env=getattr(args, "capture_env", None),
-    )
-    if err is not None:
-        return err
-    fork.seed(storage, app_name, verstr, source)
-    if intent:
-        append_intent(storage, app_name, verstr, intent)
-
-    if getattr(args, "metrics", None):
-        append_to_log(
-            storage,
-            app_name,
-            verstr,
-            create_log_entry("metrics", values=_parse_metrics(args.metrics)),
-        )
-
-    _append_inputs(storage, app_name, verstr, getattr(args, "inputs", None))
-
-    # One-shot command: nothing else will flush this to the remote later.
-    flush_log(storage, app_name, verstr)
-
-    # The run is written: the hint below only reads, so other vmn commands
-    # need not wait for it.
-    if repo_lock is not None:
-        repo_lock.release()
-    from vmn_exp.cli.similar_hint import print_hint
-
-    print_hint(storage, app_name, verstr, args, experiment_conf(vcs))
-    print(verstr)
-    return 0
-
-
-def _experiment_create_core(
-    vcs,
-    storage,
-    note=None,
-    from_snapshot=None,
-    extra_create_data=None,
-    parent=None,
-    name=None,
-    capture_env=None,
-    python_exe=None,
-):
-    """Create the experiment record (snapshot + initial log entry).
-
-    Returns (verstr, error_code). error_code is None on success.
-    When from_snapshot is set, reads identity from vmn_metadata.yml (no git needed).
-
-    *capture_env* follows the same precedence as ``start_run(capture_env=...)``:
-    ``None`` = check opt-out chain, ``True`` = force on, ``False`` = force off.
-    *python_exe*, when given, is probed instead of the current interpreter.
-    """
-    from vmn_exp.core.env import (
-        capture_env_safe,
-        should_capture,
-    )
-
-    exp_conf = experiment_conf(vcs)
-
-    if from_snapshot:
-        app_name = _app_name(vcs)
-        env = capture_env_safe() if should_capture(capture_env, exp_conf) else None
-        return _experiment_create_from_snapshot(
-            storage,
-            app_name,
-            from_snapshot,
-            note=note,
-            extra_create_data=extra_create_data,
-            parent=parent,
-            name=name,
-            env=env,
-        )
-
-    captured, err = capture.capture_snapshot(vcs)
-    if err is not None:
-        return None, err
-
-    # Capture env before the record is created (env capture is read-only).
-    env = (
-        capture_env_safe(python_exe) if should_capture(capture_env, exp_conf) else None
-    )
-    code = capture.ensure_code(storage, vcs, captured)
-    verstr = record_run(
-        vcs, storage, captured, code, note, extra_create_data, parent, name, env=env,
-        features=capture_features(vcs, captured),
-    )
-    return verstr, None
-
-
-# ---------------------------------------------------------------------------
-# add
-# ---------------------------------------------------------------------------
-
-
-@measure_runtime_decorator
-def experiment_add(vcs, params, storage, args):
-    verstr, err = _resolve_experiment_version(storage, vcs, args, default_latest=True)
-    if err:
-        VMN_LOGGER.error(err)
-        return 1
-
-    app_name = _app_name(vcs, args)
-    try:
-        definition = define_metric_entry(args)
-    except ValueError as e:
-        VMN_LOGGER.error(str(e))
-        return 1
-    err = finish_flags_error(args)
-    if err:
-        VMN_LOGGER.error(err)
-        return 1
-    intent, err = read_intent(args)
-    if err is not None:
-        return err
-    if definition:
-        append_to_log(storage, app_name, verstr, definition)
-        VMN_LOGGER.info(f"Defined metric {definition['name']} for {verstr}")
-
-    if args.metrics:
-        entry = create_log_entry("metrics", values=_parse_metrics(args.metrics))
-        append_to_log(storage, app_name, verstr, entry)
-        VMN_LOGGER.info(f"Added metrics to {verstr}")
-
-    if args.note:
-        entry = create_log_entry("note", text=args.note)
-        append_to_log(storage, app_name, verstr, entry)
-        VMN_LOGGER.info(f"Added note to {verstr}")
-
-    if args.attach:
-        if not os.path.isfile(args.attach):
-            VMN_LOGGER.error(f"Artifact file not found: {args.attach}")
-            return 1
-        info = compute_artifact_info(args.attach)
-        save_artifact(storage, app_name, verstr, args.attach)
-        entry = create_log_entry("artifact", **info)
-        append_to_log(storage, app_name, verstr, entry)
-        VMN_LOGGER.info(f"Attached {info['path']} to {verstr}")
-
-    if args.file:
-        notes_data = _parse_notes_file(args.file)
-        entry = create_log_entry("structured", **notes_data)
-        append_to_log(storage, app_name, verstr, entry)
-        VMN_LOGGER.info(f"Added structured entry to {verstr}")
-
-    _append_inputs(storage, app_name, verstr, getattr(args, "inputs", None))
-
-    if intent:
-        append_intent(storage, app_name, verstr, intent)
-        VMN_LOGGER.info(f"Added intent to {verstr}")
-
-    # One-shot command: nothing else will flush this to the remote later.
-    flush_log(storage, app_name, verstr)
-
-    return apply_finish(storage, app_name, verstr, args)
-
-
-def experiment_rewind(vcs, params, storage, args):
+def experiment_rewind(vcs, params, storage, args, io):
     from vmn_exp.cli.rewind import experiment_rewind as rewind
 
-    return rewind(storage, _app_name(vcs, args), args)
+    return rewind(storage, _app_name(vcs, args), args, io.clock, get_writer_id(io.env, io.host), min_stale_sec(io.env))
 
 
-def experiment_similar(vcs, params, storage, args):
+def experiment_similar(vcs, params, storage, args, clock):
     from vmn_exp.cli.similar import experiment_similar as similar
 
-    return similar(vcs, storage, _app_name(vcs, args), args)
+    return similar(vcs, storage, _app_name(vcs, args), args, clock)
 
 
-def experiment_similar_backfill(vcs, params, storage, args):
+def experiment_similar_backfill(vcs, params, storage, args, io):
     from vmn_exp.cli.similar_backfill import experiment_similar_backfill as backfill
 
-    return backfill(storage, _app_name(vcs, args), args)
+    return backfill(storage, _app_name(vcs, args), args, io.clock, get_writer_id(io.env, io.host))
 
 
 def experiment_backfill_children(vcs, params, storage, args):
@@ -631,597 +398,13 @@ def experiment_backfill_children(vcs, params, storage, args):
     return backfill(storage, _app_name(vcs, args), args)
 
 
-def experiment_compact(vcs, params, storage, args):
+def experiment_compact(vcs, params, storage, args, clock, stale_sec):
     from vmn_exp.cli.compact import experiment_compact as compact
 
-    return compact(storage, _app_name(vcs, args), args)
+    return compact(storage, _app_name(vcs, args), args, clock, stale_sec)
 
 
-def experiment_push(vcs, params, storage, args):
+def experiment_push(vcs, params, storage, args, clock, env):
     from vmn_exp.cli.push import experiment_push as push
 
-    return push(vcs, params, _app_name(vcs, args), args)
-
-
-# ---------------------------------------------------------------------------
-# list
-# ---------------------------------------------------------------------------
-
-
-def _status_token(node):
-    """A run's own status, plus its subtree's when the two disagree, and how
-    far an incomplete sweep got (``created (16/20 incomplete)``)."""
-    status = node["status"]
-    tree_status = node.get("tree_status")
-    token = f"{status}/{tree_status}" if tree_status and tree_status != status else status
-    if tree_status == CREATED and sweep_incomplete(node):
-        token += f" ({node['sweep_trials']}/{node['sweep_planned']} incomplete)"
-    return token + _lost_text(node)
-
-
-def _lost_text(tree):
-    """`` · 2 lost``: an outer run's lost runs (plan 34 §3), else empty."""
-    lost = tree.get("lost_below")
-    return f" · {lost} lost" if lost else ""
-
-
-def _list_rows(index_rows, last, sort, schema):
-    """Rows for ``list``: ``idx`` is the storage index ``@N`` resolves, fixed
-    before ``--last``/sort/``--top`` touch the order. Sorting runs on the flat
-    rows, where the date fields (``timestamp``, ``started_at``, ...) live."""
-    shown = index_rows[-last:] if last else index_rows
-    if sort and sort not in (*DATE_SORTS, IDX_SORT) and not field_sort(sort) and not any(
-        sort in row["metrics"] for row in shown
-    ):
-        VMN_LOGGER.warning(f"Sort key '{sort}' not found in any experiment")
-    return [
-        {"idx": row["idx"], "meta": row, "metrics": row["metrics"]}
-        for row in sort_by_metric(shown, schema, sort=sort)
-    ]
-
-
-def _metric_columns(schema, rows):
-    """Schema-declared metrics first, then the rest alphabetically."""
-    keys = set()
-    for row in rows:
-        keys.update(row["metrics"])
-    columns = list(schema or {})
-    return columns + sorted(k for k in keys if k not in columns)
-
-
-def _format_list_row(row, node, columns, policies):
-    meta, metrics = row["meta"], row["metrics"]
-    note = meta.get("note") or meta.get("create_note") or ""
-    shown = shown_policies(metrics, meta.get("metric_policy"), policies)
-    went_back = meta.get("step_restarts") or {}
-    metric_str = "  ".join(
-        f"{k}={with_policy(format_number(metrics[k]), shown[k])}"
-        + (" (steps went back)" if k in went_back else "")
-        for k in columns
-        if k in metrics
-    )
-    note_str = f" - {note}" if note else ""
-    name_str = f" '{meta['name']}'" if meta.get("name") else ""
-    archived_str = " [archived]" if meta.get("archived") else ""
-    return (
-        f"{'  ' * node['depth']}[{row['idx']}] {meta['verstr']}{name_str}{archived_str}  "
-        f"{_status_token(node)}  ({relative_timestamp(meta['timestamp'])})  "
-        f"{metric_str}{note_str}"
-    )
-
-
-def _listed(storage, app_name, args, schema):
-    """``(rows, declared schema, app has runs, loading)``: the annotated runs
-    the query and archived filter keep, in storage order — from the persisted
-    index (only ``--last``'s without a query), else from a snapshot, whose
-    ``loading`` it is (None when whole or from the persisted rows)."""
-    query, archived = getattr(args, "query", None), getattr(args, "archived", False)
-    view = index_list.list_view(
-        storage, app_name, query, archived, getattr(args, "last", None), schema
-    )
-    if view is not None:
-        return (*view, None)
-    matching, declared, any_runs, loading = index_list.snapshot_listing(
-        storage, app_name, query, schema, with_create_note=True
-    )
-    return filter_archived(matching, archived), declared, any_runs, loading
-
-
-@measure_runtime_decorator
-def experiment_list(vcs, params, storage, args):
-    app_name = _app_name(vcs, args)
-    schema = metrics_schema(vcs, storage, app_name)
-    try:
-        matching, declared, any_runs, loading = _listed(storage, app_name, args, schema)
-    except QueryError as e:
-        VMN_LOGGER.error(f"Invalid --query: {e}")
-        return 1
-    as_json = getattr(args, "json", False)
-    if loading is not None:
-        print(incomplete_text(loading), file=sys.stderr)
-    if not any_runs and not as_json:
-        if loading is None:
-            print(f"No experiments found for {app_name}")
-        return 0
-
-    rows = _list_rows(
-        matching, getattr(args, "last", None), args.sort, effective_schema(schema, declared)
-    )
-    if args.top:
-        rows = rows[: args.top]
-    if not matching and getattr(args, "query", None):
-        every = SimpleNamespace(archived=getattr(args, "archived", False))
-        print_query_hints(args.query, lambda: _listed(storage, app_name, every, schema)[0])
-
-    if as_json:
-        print(dumps([row["meta"] for row in rows]))
-        return 0
-
-    columns, policies = _metric_columns(schema, rows), SchemaPolicies(schema)
-    for row in rows:
-        print(_format_list_row(row, row["meta"], columns, policies))
-    return 0
-
-
-# ---------------------------------------------------------------------------
-# show
-# ---------------------------------------------------------------------------
-
-
-def _subtree(storage, app_name, verstr, metadata, snapshot=None):
-    """``(run_state, tree fields, observed_at)`` of *verstr*: the parent/child
-    links come from the experiment index (point reads once it is persisted),
-    and run state (with its store write time) is read for the run's subtree
-    only — a handful of rows even when the app has thousands of experiments."""
-    snapshot = point_placement(storage, app_name, snapshot)
-    parent_of, children_of = tree_links(snapshot, verstr, metadata.get("parent"))
-    observed_at = lambda v: run_state_observed_at(storage, app_name, v)  # noqa: E731
-    run_state, tree = subtree_status(
-        verstr,
-        parent_of,
-        lambda v: load_run_state(storage, app_name, v),
-        children_of=children_of,
-        observed_at=observed_at,
-        row_of=snapshot.row,
-    )
-    return run_state, tree, observed_at(verstr)
-
-
-def _print_status_block(storage, app_name, verstr, metadata, snapshot=None):
-    """Derived run status, runner identity and the experiment's nesting."""
-    run_state, tree, observed_at = _subtree(storage, app_name, verstr, metadata, snapshot)
-    fields = status_fields(run_state, observed_at=observed_at)
-    print(f"  Status:    {fields['status']}")
-    if fields["exit_code"] is not None:
-        print(f"  Exit code: {fields['exit_code']}")
-    duration = duration_text(fields)
-    if duration:
-        print(f"  Duration:  {duration}")
-    if fields["pid"]:
-        print(f"  Runner:    pid {fields['pid']} on {fields['host']}")
-    if fields["status"] == STUCK:
-        print(f"  Heartbeat: last seen {relative_timestamp(fields['heartbeat'])}")
-    error = error_lines((run_state or {}).get("error"))
-    if error:
-        print(f"  Error:     {error[0]}")
-        for line in error[1:]:
-            print(f"  {line}")
-
-    if metadata.get("parent"):
-        print(f"  Parent:    {metadata['parent']}")
-
-    if not tree["children"]:
-        return  # no children: nothing to roll up
-    print(f"  Children:  {', '.join(tree['children'])}")
-    if tree["tree_status"] and (tree["tree_status"] != fields["status"] or tree["lost_below"]):
-        print(f"  Subtree:   {tree['tree_status']}{_lost_text(tree)}")
-
-
-@measure_runtime_decorator
-def _print_output_log(storage, app_name, verstr):
-    for artifact in storage.list_artifacts(app_name, verstr):
-        if artifact["name"] == OUTPUT_LOG_PATH:
-            print(f"  Output:    {OUTPUT_LOG_PATH} ({artifact['size']} bytes)")
-
-
-def experiment_show(vcs, params, storage, args):
-    app_name = _app_name(vcs, args)
-    snapshot = point_placement(storage, app_name)
-    verstr, err = _resolve_experiment_version(
-        storage, vcs, args, default_latest=True, snapshot=snapshot
-    )
-    if err:
-        VMN_LOGGER.error(err)
-        return 1
-
-    metadata, patches = storage.load(app_name, verstr)
-    if metadata is None:
-        VMN_LOGGER.error(f"Experiment {verstr} not found")
-        return 1
-
-    log = load_log(storage, app_name, verstr)
-    schema = metrics_schema(vcs, storage, app_name)
-    if getattr(args, "json", False):
-        return _print_show_json(
-            storage, app_name, verstr, metadata, patches, log, args, snapshot, schema
-        )
-
-    print(f"Experiment: {verstr}")
-    print(f"  Branch:    {metadata.get('branch') or '?'}")
-    base_commit = (metadata.get("base_commit") or "?")[:7]
-    print(f"  Base:      {metadata.get('base_version') or '?'} ({base_commit})")
-    print(f"  Created:   {metadata.get('timestamp', '?')}")
-    if metadata.get("note"):
-        print(f"  Note:      {metadata['note']}")
-    if metadata.get("has_dep_patches"):
-        print("  Deps:      patches captured")
-    env_summary = metadata.get("env")
-    if env_summary:
-        print(f"  Env:       {format_env_oneliner(env_summary)}")
-    _print_output_log(storage, app_name, verstr)
-    _print_status_block(storage, app_name, verstr, metadata, snapshot)
-    fork.print_lineage(metadata, log)
-
-    # Patch stats
-    for ptype in ("working_tree", "local_commits"):
-        if patches.get(ptype):
-            lines = patches[ptype].count("\n")
-            print(f"  {ptype}: {lines} lines")
-
-    # Fold log once for both inputs and metrics
-    _fold = fold_log(log)
-    inputs = fold_inputs_dict(_fold)
-    if inputs:
-        print("\n  Inputs:")
-        for ln in format_inputs_lines(inputs):
-            print(f"  {ln}")
-
-    metrics, summary, overrides = fold_metrics(_fold, schema)
-    if metrics:
-        print("\n  Metrics:")
-        shown = shown_policies(metrics, overrides, SchemaPolicies(schema))
-        for line in format_metric_lines(metrics, summary, shown):
-            print(f"    {line}")
-
-    media = media_lines(log)
-    if media:
-        print("\n  Media:")
-        for line in media:
-            print(f"    {line}")
-
-    events = event_log(log)
-    if events:
-        _print_log(events, getattr(args, "full_log", False))
-    if getattr(args, "patch", False):
-        print_patch(verstr, metadata, patches, getattr(args, "max_bytes", PATCH_MAX_BYTES))
-    return 0
-
-
-SHOW_LOG_TAIL = 50
-
-
-def _print_show_json(
-    storage, app_name, verstr, metadata, patches, log, args, snapshot, schema
-):
-    run_state, tree, observed_at = _subtree(storage, app_name, verstr, metadata, snapshot)
-    idx = storage_index(storage, app_name, verstr, snapshot)
-    tail = None if getattr(args, "full_log", False) else SHOW_LOG_TAIL
-    payload = show_payload(
-        idx, metadata, patches, log, run_state, tree, tail,
-        observed_at=observed_at, schema=schema,
-    )
-    if getattr(args, "patch", False):
-        payload["patch"] = patch_payload(
-            metadata, patches, getattr(args, "max_bytes", PATCH_MAX_BYTES))
-    print(dumps(payload))
-    return 0
-
-
-def _print_log(log, full):
-    """The log, newest ``SHOW_LOG_TAIL`` entries unless *full*."""
-    print(f"\n  Log ({len(log)} entries):")
-    offset = 0 if full else max(len(log) - SHOW_LOG_TAIL, 0)
-    shown = merged_log_view(log, offset)["entries"]
-    hidden = offset
-    if hidden:
-        print(f"    ({hidden} earlier entries hidden, use --full-log)")
-    for entry in shown:
-        ts = relative_timestamp(entry.get("timestamp", ""))
-        print(f"    [{ts}] {_describe_log_entry(entry)}")
-
-
-def _describe_log_entry(entry):
-    etype = entry.get("type", "?")
-    if is_metric_entry(entry) or etype == "params":
-        vals = entry.get("params" if etype == "params" else "values") or {}
-        return f"{etype}: " + ", ".join(f"{k}={v}" for k, v in vals.items())
-    if etype == "error":
-        return f"error: {entry.get('exception', '?')}: {entry.get('message', '')}"
-    if etype == "note":
-        return f"note: {entry.get('text', '')}"
-    if etype == "alert":
-        text = entry.get("text")
-        head = f"alert [{entry.get('level', 'info')}]: {entry.get('title', '')}"
-        return f"{head}: {text}" if text else head
-    if etype == "artifact":
-        return f"artifact: {entry.get('path', '?')} ({entry.get('size', 0)} bytes)"
-    media = describe_media_entry(entry)
-    if media:
-        return media
-    if etype == "create":
-        note = entry.get("note") or ""
-        return f"created{': ' + note if note else ''}"
-    return etype
-
-
-# ---------------------------------------------------------------------------
-# compare
-# ---------------------------------------------------------------------------
-
-
-def _load_metadata(storage, app_name, verstr):
-    """An experiment's metadata alone — no patches or untracked tarball."""
-    return storage.load_metadata(app_name, verstr)
-
-
-def _load_experiment_bundle(storage, vcs, verstr, app_name=None, light=False):
-    """Load (meta, patches, log) for an experiment, or None (logging) on error.
-
-    *light* skips the patches (``None`` in their slot): what compare needs.
-    """
-    app_name = app_name or (_app_name(vcs))
-    if light:
-        meta, patches = _load_metadata(storage, app_name, verstr), None
-    else:
-        meta, patches = storage.load(app_name, verstr)
-    if meta is None:
-        VMN_LOGGER.error(f"Experiment {verstr} not found")
-        return None
-    return meta, patches, load_log(storage, app_name, verstr)
-
-
-def _resolve_experiment_bundles(
-    storage, vcs, versions, count, cap=None, app_name=None, light=False
-):
-    """Resolve (meta, patches, log) bundles for compare/diff.
-
-    Uses the given ``-v`` versions (each resolved), or the ``count`` most recent
-    when none are given; ``cap`` limits how many are taken. Returns the list, or
-    None (logging) on error — at least two experiments are required. *light*
-    loads no patches.
-    """
-    app_name = app_name or (_app_name(vcs))
-
-    if len(versions) == 1:
-        VMN_LOGGER.error(
-            "Need at least 2 experiments — pass -v <a> -v <b> or none for the latest"
-        )
-        return None
-
-    if versions:
-        verstrs = []
-        snapshot = placement_snapshot(storage, app_name)
-        for v in versions[:cap] if cap else versions:
-            resolved, err = _resolve_experiment_version(
-                storage, vcs, _VersionStub(version=[v]), snapshot=snapshot
-            )
-            if err:
-                VMN_LOGGER.error(err)
-                return None
-            verstrs.append(resolved)
-    else:
-        if count < 2:
-            VMN_LOGGER.error(f"Need at least 2 experiments, got {count}")
-            return None
-        verstrs = recent_verstrs(storage, app_name, count)
-        if len(verstrs) < 2:
-            VMN_LOGGER.error("Need at least 2 experiments")
-            return None
-
-    bundles = []
-    for verstr in verstrs:
-        bundle = _load_experiment_bundle(
-            storage, vcs, verstr, app_name=app_name, light=light
-        )
-        if bundle is None:
-            return None
-        bundles.append(bundle)
-    return bundles
-
-
-def _metrics_with_policies(log, schema, policies):
-    """A run's summary metrics and the policy behind each value (None: ``last``)."""
-    metrics, _, overrides = fold_metrics(fold_log(log), schema)
-    return metrics, shown_policies(metrics, overrides, policies)
-
-
-def _compare_cell(metrics, shown, key):
-    """A compare table's cell: ``0.2 (min)``, ``-`` without a value."""
-    return "-" if metrics.get(key) is None else with_policy(format_number(metrics[key]), shown[key])
-
-
-@measure_runtime_decorator
-def experiment_compare(vcs, params, storage, args):
-    versions = getattr(args, "version", None) or []
-    last = getattr(args, "last", None) or getattr(args, "top", None)
-    app_name = _app_name(vcs, args)
-
-    experiments = _resolve_experiment_bundles(
-        storage, vcs, versions, count=last or 2, app_name=app_name, light=True
-    )
-    if experiments is None:
-        return 1
-
-    # Metrics comparison table
-    schema = metrics_schema(vcs, storage, app_name)
-    policies = SchemaPolicies(schema)
-    all_keys = set()
-    exp_metrics = []
-    for meta, patches, log in experiments:
-        m, shown = _metrics_with_policies(log, schema, policies)
-        exp_metrics.append((m, shown))
-        all_keys.update(m.keys())
-
-    if schema:
-        col_order = [k for k in schema if k in all_keys]
-        for k in sorted(all_keys):
-            if k not in col_order:
-                col_order.append(k)
-    else:
-        col_order = sorted(all_keys)
-
-    if col_order:
-        headers = ["metric"] + [e[0]["verstr"][-20:] for e in experiments]
-        col_widths = [max(len(h), 12) for h in headers]
-        header_line = "  ".join(h.ljust(w) for h, w in zip(headers, col_widths))
-        print(header_line)
-        print("-" * len(header_line))
-
-        for key in col_order:
-            row = [key] + [_compare_cell(m, shown, key) for m, shown in exp_metrics]
-            line = "  ".join(str(v).ljust(w) for v, w in zip(row, col_widths))
-            conflict = policy_conflict(shown[key] for m, shown in exp_metrics if m.get(key) is not None)
-            print(f"{line}  {conflict}" if conflict else line)
-
-    if len(experiments) == 2:
-        v1 = experiments[0][0]["verstr"]
-        v2 = experiments[1][0]["verstr"]
-        print(f"\nRun 'vmn-exp diff {app_name} -v {v1} -v {v2}' for a code diff.")
-
-    return 0
-
-
-# ---------------------------------------------------------------------------
-# diff
-# ---------------------------------------------------------------------------
-
-
-def _delta_text(key, a, b, p1, p2):
-    """``loss 0.2 (min) -> 0.9 (summaries differ: min vs last)``: each value
-    naming its policy (None: ``last``), the second side the conflict."""
-    if a is not None and b is not None:
-        p2 = policy_conflict((p1, p2)) or p2
-    return f"{key} {with_policy(format_number(a), p1)} -> {with_policy(format_number(b), p2)}"
-
-
-def _print_delta_line(label, d1, d2, policies=({}, {})):
-    p1, p2 = policies
-    parts = []
-    for k in sorted(set(d1) | set(d2)):
-        a, b = d1.get(k), d2.get(k)
-        if a != b:
-            parts.append(_delta_text(k, a, b, p1.get(k), p2.get(k)))
-    if parts:
-        print(f"{label}: " + "   ".join(parts))
-
-
-@measure_runtime_decorator
-def experiment_diff(vcs, params, storage, args):
-    """Show a real code diff between two experiments, with a params/metrics delta."""
-    versions = getattr(args, "version", None) or []
-    exps = _resolve_experiment_bundles(storage, vcs, versions, count=2, cap=2)
-    if exps is None:
-        return 1
-    (meta1, patches1, log1), (meta2, patches2, log2) = exps
-    v1, v2 = meta1["verstr"], meta2["verstr"]
-    app_name = _app_name(vcs, args)
-
-    print(f"Comparing {v1} -> {v2}\n")
-    _print_delta_line("params", effective_params(log1), effective_params(log2))
-    schema = metrics_schema(vcs, storage, app_name)
-    policies = SchemaPolicies(schema)
-    (m1, shown1), (m2, shown2) = (_metrics_with_policies(log, schema, policies) for log in (log1, log2))
-    _print_delta_line("metrics", m1, m2, (shown1, shown2))
-
-    print_provenance_diff_section(storage, app_name, v1, meta1, v2, meta2)
-    print()
-
-    # Refuse code diff for runs with no code snapshot (e.g. MLflow imports)
-    for meta in (meta1, meta2):
-        rc = refuse_no_code(meta, action="diff")
-        if rc is not None:
-            return rc
-
-    tool = getattr(args, "tool", None) or get_git_difftool(vcs)
-    if tool:
-        return _diff_with_external_tool(
-            tool, vcs, v1, meta1, patches1, v2, meta2, patches2
-        )
-    return _diff_real_tree(vcs, v1, meta1, patches1, v2, meta2, patches2)
-
-
-# ---------------------------------------------------------------------------
-# restore
-# ---------------------------------------------------------------------------
-
-
-@measure_runtime_decorator
-def experiment_restore(vcs, params, storage, args):
-    verstr, err = _resolve_experiment_version(storage, vcs, args, default_latest=True)
-    if err:
-        VMN_LOGGER.error(err)
-        return 1
-
-    record = load_code_record(
-        vcs, params, verstr, app_name=_app_name(vcs, args), exp_storage=storage
-    )
-    if record is None:
-        return 1
-    return _restore_with_safety_net(vcs, dict(params, force=args.force), *record)
-
-
-# ---------------------------------------------------------------------------
-# export
-# ---------------------------------------------------------------------------
-
-
-@measure_runtime_decorator
-def experiment_export(vcs, params, storage, args):
-    verstr, err = _resolve_experiment_version(storage, vcs, args, default_latest=True)
-    if err:
-        VMN_LOGGER.error(err)
-        return 1
-
-    app_name = _app_name(vcs, args)
-    metadata, patches = storage.load(app_name, verstr)
-    if metadata is None:
-        VMN_LOGGER.error(f"Experiment {verstr} not found")
-        return 1
-
-    rc = refuse_no_code(metadata, action="export")
-    if rc is not None:
-        return rc
-
-    log = load_log(storage, app_name, verstr)
-    # Who exported: a git-free run of the tree may name no one else.
-    exported_by = known_identity(vcs.backend.repo_path)
-
-    def write_experiment_files(dest):
-        with open(os.path.join(dest, EXPERIMENT_FILE), "w") as f:
-            yaml.dump({"metadata": metadata, "log": log, "exported_by": exported_by},
-                      f, sort_keys=False)
-        write_features_file(dest, log, exported_by)
-        record_dir = storage.local_record_dir(app_name, verstr)
-        for tree in FILE_TREES if record_dir else ():
-            src = os.path.join(record_dir, tree)
-            if os.path.isdir(src):
-                shutil.copytree(src, os.path.join(dest, tree), dirs_exist_ok=True)
-
-    output_path, err = export_tree(
-        vcs, (metadata, patches), safe_verstr(verstr), args.output,
-        write_experiment_files,
-    )
-    if err:
-        return err
-    print(output_path)
-    return 0
-
-
-# ---------------------------------------------------------------------------
-# prune
-# ---------------------------------------------------------------------------
-
-
-@measure_runtime_decorator
-def experiment_prune(vcs, params, storage, args):
-    return _experiment_prune(vcs, params, storage, args, _app_name(vcs, args))
+    return push(vcs, params, _app_name(vcs, args), args, clock, env)

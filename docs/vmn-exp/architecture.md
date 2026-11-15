@@ -88,7 +88,7 @@ flowchart TB
         vcore --- plug
     end
 
-    subgraph P3["📦 vmn-exp  —  <code>vmn_exp.cli · ui · snapshot · importers · gitmode</code>"]
+    subgraph P3["📦 vmn-exp  —  <code>vmn_exp.cli · ui · snapshot · importers · gitmode · reports</code>"]
         ecli["<code>vmn-exp</code> CLI<br/>supervisor · sweeps · push · rerun"]
         eui["<code>vmn-exp ui</code><br/>FastAPI + React web app"]
         gm["<code>gitmode</code><br/>cold start · snapshot capture"]
@@ -232,11 +232,11 @@ sequenceDiagram
     X->>S: runs/: claim the run (atomic create_exclusive)
     end
     note over X: lock released
-    X->>J: spawn with VMN_EXPERIMENT_ID,<br/>VMN_METRICS_FILE, VMN_APP_NAME
+    X->>J: spawn with VMN_EXPERIMENT_ID,<br/>VMN_METRICS_FILE, VMN_APP_NAME,<br/>VMN_EXP_ADOPT_RUN_ID, VMN_EXP_ADOPT_PID
     par while the child lives
         J-->>X: stdout/stderr (tee'd to outputs/output.log)
         J-->>X: key=value lines in $VMN_METRICS_FILE
-        J->>S: (optional) start_run() opens an inner run under VMN_EXPERIMENT_ID
+        J->>S: (optional) start_run() in the direct child records into this run, in its own stream
         X->>S: heartbeat run_state.yml + sys_* metrics (every 30s)
         X->>S: ship new log lines / metric segments
     end
@@ -268,9 +268,13 @@ stateDiagram-v2
 ## Outer runs and inner runs
 
 A run created while `VMN_EXPERIMENT_ID` is set becomes an inner run of that
-run, so nesting falls out of how you launch jobs. An outer run's
-`tree_status` rolls up its subtree (`failed > stuck > running > created >
-succeeded`).
+run, so nesting falls out of how you launch jobs. The one exception is the
+first plain `start_run()` in the process `vmn-exp run`, `vmn-exp rerun` or a
+sweep agent's trial started itself (its direct child): it records into the supervisor's run, in a stream of its own
+(`<writer>-sdk~<owner>`), instead of opening an inner run; the supervisor
+still writes the run's state. `--no-adopt` or `VMN_EXP_ADOPT=0` turn that off.
+An outer run's `tree_status` rolls up its subtree (`failed > stuck > running >
+created > succeeded`).
 
 ```mermaid
 flowchart TB
@@ -348,8 +352,9 @@ Full layout: [experiments.md](experiments.md).
 
 `vmn-exp ui` folds every run into one row (params, metric summaries, tags,
 status) and keeps those rows in an index cache, so the leaderboard answers
-from memory even at 100k runs. Logs, series, artifacts and code are read from
-the store on demand. The cache can be deleted at any time and is rebuilt
+from memory; measured sizes and their memory cost are in
+[ui.md](ui.md#large-stores-run-the-ui-on-free-threaded-python). Logs, series,
+artifacts and code are read from the store on demand. The cache can be deleted at any time and is rebuilt
 from the store.
 
 ```mermaid
@@ -391,7 +396,7 @@ flowchart LR
   API tokens, roles and an optional Postgres cache shared by replicas
   ([server.md](server.md)). Jobs still write only to the store.
 
-See [ui.md](ui.md) for the flags and the HTTP API.
+See [ui.md](ui.md) for the flags and [ui-api.md](ui-api.md) for the HTTP API.
 
 ### CLI and SDK reads: the per-host index
 
@@ -421,3 +426,14 @@ flowchart LR
 
 Deleting the file costs one rebuild, never data
 ([The experiment index](experiments.md#the-experiment-index-per-host-cache)).
+
+In code the index is `ExperimentIndex` in `vmn_exp/core/index.py`, a facade
+assembled from mixins that keep all state on the index:
+`core/index_surface.py` (properties, freshness, the snapshots it serves),
+`core/index_refresh.py` (refreshing: from storage, a follower's cache, an I/O helper process),
+`core/index_load.py` (loading what a listing hands a refresh, chunk by chunk),
+`core/index_publish.py` (applying a refresh's changes, publishing snapshots),
+`core/index_persist.py` (reading back and saving its SQLite file) and
+`core/index_read.py` (reading the records a refresh hands it).
+`core/index_direct.py` builds the same snapshot by reading every record, the
+fallback when the index is unavailable.

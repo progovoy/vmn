@@ -1,6 +1,7 @@
 """Fakes shared by the journal resume / relisting tests: a local store that
 says it is remote (so a journaled index lists behind serving), spied on, and
 an in-memory change journal."""
+import os
 import threading
 import time
 
@@ -75,7 +76,7 @@ class Spy:
 
 
 def storage(tmp_path):
-    return LocalSnapshotStorage(str(tmp_path / "store"), area="runs")
+    return LocalSnapshotStorage(str(tmp_path / "store"), area="runs", env=os.environ)
 
 
 def make(st, i):

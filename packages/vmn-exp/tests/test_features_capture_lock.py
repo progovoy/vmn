@@ -27,9 +27,9 @@ def test_start_run_captures_features_before_taking_the_repo_lock(app_layout, mon
             finally:
                 held.pop()
 
-    def capture(vcs, captured):
+    def capture(vcs, captured, *env_host):
         captures.append(bool(held))
-        return real_capture(vcs, captured)
+        return real_capture(vcs, captured, *env_host)
 
     monkeypatch.setattr(checkout, "get_repo_lock", lock)
     monkeypatch.setattr(checkout, "capture_features", capture)

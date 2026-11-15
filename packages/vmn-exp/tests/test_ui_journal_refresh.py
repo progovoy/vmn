@@ -1,5 +1,6 @@
 """Plan 11 §5.2 / phase 2c: the ui reads one change journal per workspace and
 routes its entries by ``(area, app)`` to the watched indexes' ``hint``."""
+import os
 import time
 
 import pytest
@@ -11,6 +12,8 @@ from vmn_exp.storage.local import LocalSnapshotStorage
 from vmn_exp.storage.open import open_storage
 from vmn_exp.ui.journal_follow import WorkspaceJournal
 from vmn_exp.ui.refresher import Refresher
+from vmn_exp.core.real_io import RealClock, RealRandom
+from vmn_exp.core.real_io import real_io
 
 FINISHED = "state: finished\nexit_code: 0\n"
 
@@ -29,7 +32,7 @@ class FakeIndex:
 
 @pytest.fixture
 def store(tmp_path):
-    return journaled(LocalSnapshotStorage(str(tmp_path), "runs"), writer_id="w1")
+    return journaled(LocalSnapshotStorage(str(tmp_path), "runs"), writer_id="w1", clock=time.time)
 
 
 @pytest.fixture
@@ -49,7 +52,8 @@ def _write(store, app, verstr):
 
 
 def _journal(list_fn, cache=None, **kw):
-    return WorkspaceJournal(list_fn, cache or SqliteStore(":memory:"), "ws", **kw)
+    return WorkspaceJournal(list_fn, cache or SqliteStore(":memory:"), "ws",
+                            **{"clock": time.time, **kw})
 
 
 def test_entries_are_routed_to_the_watched_scope_only(store, lists):
@@ -138,12 +142,12 @@ def test_the_refresher_shows_a_new_run_through_the_journal(tmp_path):
     from vmn_exp.core.index import ExperimentIndex
 
     root = str(tmp_path / "store")
-    writer = open_storage(None, root, area="runs")
+    writer = open_storage(None, root, area="runs", clock=RealClock(), env=os.environ)
     _write(writer, "app", "1.0.0-dev.a")
-    reader = open_storage(None, root, area="runs", writer=False)
+    reader = open_storage(None, root, area="runs", writer=False, clock=RealClock(), env=os.environ)
     index = ExperimentIndex(reader, "app", full_sweep_sec=3600)
     journal = _journal(journal_list_fn(reader))
-    refresher = Refresher(interval_sec=0.02, idle_sec=60)
+    refresher = Refresher(interval_sec=0.02, idle_sec=60, clock=time.monotonic)
     try:
         assert len(refresher.snapshot(index, journal).rows) == 1
         names = []
@@ -195,8 +199,8 @@ def test_reports_and_comments_scopes_feed_the_reports_index(store, lists):
     journal.watch(FakeIndex("app"))
     reports = FakeReports()
     journal.feed_reports(reports)
-    rid = rstore.create(store, "T", "")
-    comments.add(store, ("run", "trainer", "0.1.0-dev.a"), "hi")
+    rid = rstore.create(store, "T", "", random=RealRandom(), env=real_io().env, host=real_io().host)
+    comments.add(store, ("run", "trainer", "0.1.0-dev.a"), "hi", random=RealRandom(), env=real_io().env, host=real_io().host)
     _write(store, "app", "1.0.0-dev.a")
     journal.tick()
     [(entries, overflow, cursor)] = reports.feeds

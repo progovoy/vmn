@@ -11,6 +11,7 @@ from fastapi.testclient import TestClient
 from vmn_exp.core.ranges import MAX_RANGES, ranges_view
 from vmn_exp.sdk import start_run
 from vmn_exp.sdk.ranks import NoOpRun
+from vmn_exp.core.real_io import real_io
 
 API = "/api/v1/workspaces/main/apps"
 
@@ -100,7 +101,7 @@ def test_run_detail_carries_the_ranges_bounded(app_layout):
     _record(app_layout, "0.0.1-exp.1", ranges)
     manager = WorkspaceManager(os.path.join(app_layout.base_dir, "ui_data"))
     manager.attach_path("main", app_layout.repo_path)
-    client = TestClient(create_app(manager, use_index=False))
+    client = TestClient(create_app(manager, io=real_io(), use_index=False))
     detail = client.get(f"{API}/{app_layout.app_name}/experiments/0.0.1-exp.1").json()
     assert detail["ranges"][0] == {"name": "r0", "start_step": 0, "end_step": 2}
     assert len(detail["ranges"]) == MAX_RANGES

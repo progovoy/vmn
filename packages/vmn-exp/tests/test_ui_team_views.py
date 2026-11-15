@@ -13,6 +13,7 @@ from vmn_exp.core.app_settings_store import write_settings  # noqa: E402
 from vmn_exp.storage.areas import RUNS  # noqa: E402
 from vmn_exp.storage.local import LocalSnapshotStorage  # noqa: E402
 from vmn_exp.storage.open import open_storage  # noqa: E402
+from vmn_exp.core.real_io import RealClock, real_io
 
 APP = "app"
 BASE = f"/api/v1/workspaces/ws/apps/{APP}"
@@ -40,11 +41,11 @@ def store(tmp_path):
     from vmn_exp.ui.workspaces import WorkspaceManager
 
     uri = f"file://{tmp_path}/store"
-    storage = open_storage(uri, area=RUNS)
+    storage = open_storage(uri, area=RUNS, clock=RealClock(), env=os.environ)
     _run(storage, 1)
     manager = WorkspaceManager(str(tmp_path / "data"))
     manager.add_store("ws", uri)
-    return (lambda: TestClient(create_app(manager))), storage
+    return (lambda: TestClient(create_app(manager, io=real_io()))), storage
 
 
 def _status(client, **params):
@@ -55,7 +56,7 @@ def _status(client, **params):
 
 def test_the_status_carries_the_team_views(store):
     client_of, storage = store
-    write_settings(storage, APP, SETTINGS)
+    write_settings(storage, APP, SETTINGS, env=real_io().env, host=real_io().host)
     assert _status(client_of()).json()["views"] == SERVED
 
 
@@ -66,7 +67,7 @@ def test_no_views_no_field(store):
 
 def test_a_settings_change_moves_the_views_and_the_etag(store):
     client_of, storage = store
-    write_settings(storage, APP, SETTINGS)
+    write_settings(storage, APP, SETTINGS, env=real_io().env, host=real_io().host)
     client = client_of()
     first = _status(client)
     r = client.put(f"{BASE}/settings", json={"text": "ui: {views: []}\n"})
@@ -78,7 +79,7 @@ def test_a_settings_change_moves_the_views_and_the_etag(store):
 
 def test_a_scoped_status_carries_no_views(store):
     client_of, storage = store
-    write_settings(storage, APP, SETTINGS)
+    write_settings(storage, APP, SETTINGS, env=real_io().env, host=real_io().host)
     body = _status(client_of(), scope="0.0.1-dev.abc1234.def5678.r1").json()
     assert "views" not in body
 
@@ -91,12 +92,12 @@ def test_a_checkout_conf_names_team_views_too(tmp_path):
     (root / ".git").mkdir(parents=True)
     storage = LocalSnapshotStorage(str(root / ".vmn" / "store"), "runs")
     _run(storage, 1)
-    write_settings(storage, APP, SETTINGS)
+    write_settings(storage, APP, SETTINGS, env=real_io().env, host=real_io().host)
     os.makedirs(root / ".vmn" / APP)
     views = [{"name": "failed", "page": "jobs", "search": "status=failed"}]
     with open(root / ".vmn" / APP / "conf.yml", "w") as f:
         yaml.dump({"conf": {"experiment": {"ui": {"views": views}}}}, f)
     manager = WorkspaceManager(str(tmp_path / "data"))
     manager.attach_path("ws", str(root))
-    assert _status(TestClient(create_app(manager))).json()["views"] == [
+    assert _status(TestClient(create_app(manager, io=real_io()))).json()["views"] == [
         {"name": "failed", "page": "jobs", "search": "?status=failed", "default": False}]

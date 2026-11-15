@@ -15,6 +15,7 @@ import types
 import pytest
 
 from vmn_exp.sdk import sysmetrics
+from vmn_exp.core.real_io import RealClock
 
 _MB = 1024 * 1024
 
@@ -83,7 +84,7 @@ def test_the_first_cpu_sample_is_not_a_spurious_zero(monkeypatch):
     root = _FakeProc(1, rss_mb=100, busy=87.0)
     _use(monkeypatch, psutil=_fake_psutil(root))
 
-    collector = sysmetrics.build_collector(1)
+    collector = sysmetrics.build_collector(1, clock=RealClock())
     values = collector()  # immediately, as the first heartbeat tick does
 
     assert values["sys_cpu_percent"] == pytest.approx(87.0)
@@ -92,7 +93,7 @@ def test_the_first_cpu_sample_is_not_a_spurious_zero(monkeypatch):
 def test_a_child_born_since_the_last_sample_is_counted(monkeypatch):
     root = _FakeProc(1, rss_mb=100, busy=10.0)
     _use(monkeypatch, psutil=_fake_psutil(root))
-    collector = sysmetrics.build_collector(1)
+    collector = sysmetrics.build_collector(1, clock=RealClock())
     collector()
 
     # A dataloader worker spawned after that sample, which has burned CPU since.
@@ -112,7 +113,7 @@ def test_forked_workers_sharing_pages_are_not_counted_n_times(monkeypatch):
     root.kids = [_FakeProc(p, rss_mb=400, uss_mb=10) for p in (2, 3, 4)]
     _use(monkeypatch, psutil=_fake_psutil(root))
 
-    values = sysmetrics.build_collector(1)()
+    values = sysmetrics.build_collector(1, clock=RealClock())()
 
     assert values["sys_rss_mb"] == pytest.approx(420 + 3 * 10)
 
@@ -165,7 +166,7 @@ def test_gpu_metrics_respect_cuda_visible_devices(monkeypatch):
     monkeypatch.setenv("CUDA_VISIBLE_DEVICES", "2,3")
     _use(monkeypatch, psutil=_fake_psutil(_FakeProc(1, 10)), pynvml=_fake_pynvml(_FOUR))
 
-    values = sysmetrics.build_collector(1)()
+    values = sysmetrics.build_collector(1, clock=RealClock())()
 
     assert values["sys_gpu_node_mem_mb"] == pytest.approx(3000 + 4000)
     assert values["sys_gpu_node_util_percent"] == pytest.approx(25.0)
@@ -175,7 +176,7 @@ def test_cuda_visible_devices_by_uuid(monkeypatch):
     monkeypatch.setenv("CUDA_VISIBLE_DEVICES", "GPU-b")
     _use(monkeypatch, psutil=_fake_psutil(_FakeProc(1, 10)), pynvml=_fake_pynvml(_FOUR))
 
-    values = sysmetrics.build_collector(1)()
+    values = sysmetrics.build_collector(1, clock=RealClock())()
 
     assert values["sys_gpu_node_mem_mb"] == pytest.approx(2000)
 
@@ -184,7 +185,7 @@ def test_no_visible_devices_reports_no_gpu_metrics(monkeypatch):
     monkeypatch.setenv("CUDA_VISIBLE_DEVICES", "")
     _use(monkeypatch, psutil=_fake_psutil(_FakeProc(1, 10)), pynvml=_fake_pynvml(_FOUR))
 
-    values = sysmetrics.build_collector(1)()
+    values = sysmetrics.build_collector(1, clock=RealClock())()
 
     assert not any(k.startswith("sys_gpu") for k in values)
 
@@ -197,7 +198,7 @@ def test_one_unsupported_nvml_query_keeps_the_other_values(monkeypatch):
         pynvml=_fake_pynvml(_FOUR[:2], broken_util=(0,)),
     )
 
-    values = sysmetrics.build_collector(1)()
+    values = sysmetrics.build_collector(1, clock=RealClock())()
 
     assert values["sys_gpu_node_mem_mb"] == pytest.approx(3000)
     assert values["sys_gpu_node_util_percent"] == pytest.approx(0.0)  # device 1 only
@@ -211,7 +212,7 @@ def test_gpu_memory_is_attributed_to_the_run_process_tree(monkeypatch):
     pynvml = _fake_pynvml(_FOUR[:2], running)
     _use(monkeypatch, psutil=_fake_psutil(root), pynvml=pynvml)
 
-    values = sysmetrics.build_collector(10)()
+    values = sysmetrics.build_collector(10, clock=RealClock())()
 
     assert values["sys_gpu_mem_mb"] == pytest.approx(300 + 200)
     assert values["sys_gpu_node_mem_mb"] == pytest.approx(3000)
@@ -223,6 +224,6 @@ def test_every_reported_key_is_a_declared_sys_metric(monkeypatch):
     pynvml = _fake_pynvml(_FOUR, {0: [(10, 1)]})
     _use(monkeypatch, psutil=_fake_psutil(root), pynvml=pynvml)
 
-    values = sysmetrics.build_collector(10)()
+    values = sysmetrics.build_collector(10, clock=RealClock())()
 
     assert values and all(k in sysmetrics.SYS_METRIC_NAMES for k in values)

@@ -2,17 +2,16 @@
 like its ``top_q``: from the cached job rollups (no recount over the rows),
 and a run deep in a tree moving re-judges the rows above it."""
 import pytest
+from fakes.clock import FakeClock
 from leaderboard_fleet import T0, Fleet, finished, running
 from vmn_exp.ui.leaderboard_cache import LeaderboardCache
 
-from vmn_exp.core import status as status_mod
 
 SCHEMA = {"loss": {"goal": "min", "primary": True}}
 
 
 @pytest.fixture
-def board(monkeypatch):
-    monkeypatch.setattr(status_mod, "_now", lambda now=None: now or T0)
+def board():
     fleet = Fleet(7)
     launch = fleet.append(state=finished(1))
     fleet.append(parent=launch, state=finished(1))
@@ -22,7 +21,7 @@ def board(monkeypatch):
     fleet.append(parent=date, state=running(T0, age=3600))
     done = fleet.append(state=finished(0))
     fleet.append(parent=done, state=finished(0))
-    return fleet, (launch, hung, date, done), LeaderboardCache()
+    return fleet, (launch, hung, date, done), LeaderboardCache(now=FakeClock(T0).now)
 
 
 def _kept(cache, snap, query, **params):

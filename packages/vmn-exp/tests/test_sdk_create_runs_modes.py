@@ -12,6 +12,7 @@ from vmn_exp.sdk import create_run, create_runs, current_run, start_run
 from vmn_exp.sdk.reader import list_runs
 from vmn_exp.storage.open import open_storage
 from vmn_exp.storage.uri import s3_uri
+from vmn_exp.core.real_io import RealClock
 
 BUCKET = "ml-exps"
 ENV_KEYS = ("VMN_EXPERIMENT_ID", "VMN_APP_NAME", "VMN_EXPERIMENT_BUCKET",
@@ -84,7 +85,7 @@ def test_a_scratch_dir_launcher_ships_the_create_entries_to_the_bucket(tmp_path,
     trials = create_runs("trainer", [{"name": "t0", "params": {"lr": 0.1},
                                       "tags": {"kind": "trial"}}])
 
-    bucket = open_storage(s3_uri(BUCKET, "vmn"), area="runs")
+    bucket = open_storage(s3_uri(BUCKET, "vmn"), area="runs", clock=RealClock(), env=os.environ)
     row = _rows("trainer", bucket)[trials[0]]
     assert (row["name"], row["params"]["lr"], row["tags"]) == ("t0", 0.1, {"kind": "trial"})
     assert os.path.isdir(tmp_path / "scratch" / "runs" / "trainer")

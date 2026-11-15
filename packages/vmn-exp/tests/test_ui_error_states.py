@@ -11,6 +11,7 @@ import pytest
 
 fastapi = pytest.importorskip("fastapi")
 from fastapi.testclient import TestClient
+from vmn_exp.core.real_io import real_io
 
 
 def _client(tmp_path, ws_path=None):
@@ -20,7 +21,7 @@ def _client(tmp_path, ws_path=None):
 
     manager = WorkspaceManager(str(tmp_path / "ui_data"))
     manager.attach_path("main", ws_path or str(tmp_path / "repo"))
-    return TestClient(create_app(manager))
+    return TestClient(create_app(manager, io=real_io()))
 
 
 # ---- K5: non-repo workspace -> 409 ----------------------------------------

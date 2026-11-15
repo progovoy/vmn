@@ -6,6 +6,7 @@ It used to die on the spot, orphaning the child and leaving the run claiming
 the signal on record, and the child must not outlive its supervisor.
 """
 
+from datetime import datetime, timezone
 import os
 import signal
 import subprocess
@@ -125,7 +126,7 @@ def test_sigterm_is_forwarded_and_the_run_is_recorded_failed(app_layout, tmp_pat
     assert state["exit_code"] == 128 + signal.SIGTERM
     assert state["signal"] == "SIGTERM"
     assert state["received_signal"] == "SIGTERM"
-    assert st.derive_status(state) == st.FAILED
+    assert st.derive_status(state, now=datetime.now(timezone.utc)) == st.FAILED
     assert [e for e in log if e["type"] == "run"][-1]["exit_code"] == state["exit_code"]
 
 
@@ -172,7 +173,7 @@ def test_child_ignoring_sigterm_is_killed_after_the_grace_period(app_layout, tmp
     state, _ = _final(app_layout, verstr)
     assert state["exit_code"] == 128 + signal.SIGKILL
     assert state["signal"] == "SIGKILL"
-    assert st.derive_status(state) == st.FAILED
+    assert st.derive_status(state, now=datetime.now(timezone.utc)) == st.FAILED
 
 
 def test_sigint_sent_to_the_supervisor_alone_reaches_the_child(app_layout, tmp_path):
@@ -188,7 +189,7 @@ def test_sigint_sent_to_the_supervisor_alone_reaches_the_child(app_layout, tmp_p
     state, _ = _final(app_layout, verstr)
     assert state["received_signal"] == "SIGINT"
     assert state["exit_code"] not in (None, 0)
-    assert st.derive_status(state) == st.FAILED
+    assert st.derive_status(state, now=datetime.now(timezone.utc)) == st.FAILED
 
 
 def test_child_killed_by_a_signal_records_the_shell_exit_code(app_layout, capfd):

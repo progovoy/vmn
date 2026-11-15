@@ -10,6 +10,7 @@ from version_stamp.core import logging as vmn_logging
 from vmn_exp.core import identity
 from vmn_exp.core import writer as experiment_writer
 from vmn_exp.core.features import FEATURES_VERSION
+from vmn_exp.core.real_io import real_io
 
 LOCAL_COMMITS = (
     "From 1111111111111111111111111111111111111111 Mon Sep 17 00:00:00 2001\n"
@@ -53,7 +54,7 @@ def test_a_rerun_without_an_email_is_the_rerunners_host_not_the_original_committ
     tmp_path,
 ):
     entry = gitmode_features.rerun_features(
-        _vcs(tmp_path), [], {}, {"local_commits": LOCAL_COMMITS})
+        _vcs(tmp_path), [], {}, {"local_commits": LOCAL_COMMITS}, env=real_io().env, host=real_io().host)
     assert entry["changed"]["files"] == ["train.py"]
     assert entry["author"] == {"writer": "rerun-host", "os_user": "bob", "source": "host"}
 
@@ -61,7 +62,7 @@ def test_a_rerun_without_an_email_is_the_rerunners_host_not_the_original_committ
 def test_vmn_exp_author_still_names_the_rerunner(tmp_path, monkeypatch):
     monkeypatch.setenv(identity.AUTHOR_ENV, "bob@x.io")
     entry = gitmode_features.rerun_features(
-        _vcs(tmp_path), [], {}, {"local_commits": LOCAL_COMMITS})
+        _vcs(tmp_path), [], {}, {"local_commits": LOCAL_COMMITS}, env=real_io().env, host=real_io().host)
     assert entry["author"]["git_user_email"] == "bob@x.io"
     assert entry["author"]["source"] == "env"
 
@@ -74,7 +75,7 @@ def test_copying_the_originals_features_parses_none_of_its_patches(
 
     monkeypatch.setattr(gitmode_features, "features_from_patches", _no_parse)
     entry = gitmode_features.rerun_features(
-        _vcs(tmp_path), [_original_features()], {}, {"local_commits": LOCAL_COMMITS})
+        _vcs(tmp_path), [_original_features()], {}, {"local_commits": LOCAL_COMMITS}, env=real_io().env, host=real_io().host)
     assert entry["source"] == "rerun"
     assert entry["changed"] == {"files": ["train.py"]}
     assert entry["commits"] == ["tune lr"]

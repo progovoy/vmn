@@ -5,6 +5,7 @@ import threading
 
 import pytest
 from version_stamp.core.logging import init_stamp_logger
+from vmn_exp.core.real_io import real_io
 from vmn_exp.ui import backup_cli
 from vmn_exp.ui.control_plane import SQLiteControlPlane
 
@@ -41,7 +42,7 @@ def test_backup_during_writes_opens_verifies_and_holds_earlier_rows(tmp_path):
     writer.start()
     try:
         dest = str(tmp_path / "backup" / "cp.db")
-        assert backup_cli.handle_backup(_args(dest, "--db", f"sqlite:///{src}")) == 0
+        assert backup_cli.handle_backup(env={}, args=_args(dest, "--db", f"sqlite:///{src}")) == 0
     finally:
         stop.set()
         writer.join()
@@ -55,23 +56,23 @@ def test_backup_defaults_to_the_data_dir_control_plane(tmp_path):
     data_dir = tmp_path / "ui"
     SQLiteControlPlane.in_data_dir(str(data_dir)).put("token", "a", {"id": "a"})
     dest = tmp_path / "b.db"
-    assert backup_cli.handle_backup(_args(str(dest), "--data-dir", str(data_dir))) == 0
+    assert backup_cli.handle_backup(env={}, args=_args(str(dest), "--data-dir", str(data_dir))) == 0
     assert sqlite3.connect(dest).execute("SELECT id FROM vmn_api_tokens").fetchall() == [("a",)]
 
 
 def test_backup_refuses_a_missing_control_plane(tmp_path):
     dest = tmp_path / "b.db"
-    assert backup_cli.handle_backup(_args(str(dest), "--data-dir", str(tmp_path / "none"))) == 1
+    assert backup_cli.handle_backup(env={}, args=_args(str(dest), "--data-dir", str(tmp_path / "none"))) == 1
     assert not dest.exists()
 
 
 def test_backup_needs_exactly_one_path():
-    assert backup_cli.handle_backup(_args()) == 2
+    assert backup_cli.handle_backup(env={}, args=_args()) == 2
 
 
 def test_postgres_prints_the_pg_dump_command_without_the_password(capsys):
     dsn = "postgresql://vmn:s3cret@db.example:5433/vmnexp?sslmode=require"
-    assert backup_cli.handle_backup(_args("/backups/cp.dump", "--db", dsn)) == 0
+    assert backup_cli.handle_backup(env={}, args=_args("/backups/cp.dump", "--db", dsn)) == 0
     out = capsys.readouterr().out
     assert out.strip() == (
         "pg_dump --host db.example --port 5433 --username vmn --dbname vmnexp"
@@ -82,5 +83,5 @@ def test_postgres_prints_the_pg_dump_command_without_the_password(capsys):
 def test_ui_dispatches_backup(tmp_path, monkeypatch):
     from vmn_exp.ui import cli
 
-    monkeypatch.setattr(backup_cli, "handle_backup", lambda args: 7)
-    assert cli.handle_ui(_args(str(tmp_path / "b.db"))) == 7
+    monkeypatch.setattr(backup_cli, "handle_backup", lambda args, env: 7)
+    assert cli.handle_ui(_args(str(tmp_path / "b.db")), real_io()) == 7

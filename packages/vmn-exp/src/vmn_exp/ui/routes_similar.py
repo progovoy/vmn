@@ -30,7 +30,6 @@ verstr, name, score, reasons, signals, group_size, goal, author, timestamp,
 status, note, intent}`` — ``intent`` the first 2 KB of its text and its
 keywords (:func:`vmn_exp.core.similar_search.intent_excerpt`, the CLI's), or None.
 """
-import time
 
 from fastapi import HTTPException, Request
 from vmn_exp.core.query import QueryError
@@ -66,16 +65,17 @@ def _item(payload):
             "intent": _intent(payload["intent"])}
 
 
-def _answer(request, scope_of, scopes, target, top, archived, query=None, weights=None):
+def _answer(request, scope_of, scopes, target, top, archived, clock, query=None, weights=None):
     """The *top* items most like *target* over *scopes* — ``(workspace, app,
     snapshot, conf schema)`` — keyed by ``(workspace, app)``, so apps of one
     name in two workspaces stay apart; *weights* are the conf's overrides."""
-    deadline = time.monotonic() + SEARCH_DEADLINE_SEC
+    deadline = clock.monotonic() + SEARCH_DEADLINE_SEC
     try:
         built = [scope_of((ws, app), app, snap, schema, deadline)
                  for ws, app, snap, schema in scopes]
         found = search(None, None, built, target, top=top + 1, query=query, weights=weights,
-                       include_archived=archived, deadline=deadline, with_features=False)
+                       include_archived=archived, deadline=deadline, with_features=False,
+                       clock=clock)
     except QueryError as e:
         raise HTTPException(400, str(e)) from None
     except SimilarDeadlineExceeded:
@@ -101,7 +101,7 @@ def _checked_text(text):
         raise HTTPException(400, f"text is over {MAX_TEXT_BYTES} bytes")
 
 
-def register(app, prefix, app_inputs, scopes_of, segment, weights_of, scope_of):
+def register(app, prefix, app_inputs, scopes_of, segment, weights_of, scope_of, clock):
     """Add the routes; *app_inputs(ws_name, app_tag)* → ``(app_name,
     snapshot, conf schema)``, *scopes_of(ws_names)* yields ``(ws_name,
     app_name, snapshot, conf schema)`` of every app of those workspaces,
@@ -126,7 +126,7 @@ def register(app, prefix, app_inputs, scopes_of, segment, weights_of, scope_of):
             raise HTTPException(404, f"{verstr} is not a run of {app_name}")
         target = target_from_snapshot(snapshot, verstr, app=(ws_name, app_name))
         return _answer(request, scope_of, scopes(ws_name, app_name, snapshot, schema, all_apps),
-                       target, top, archived, q, weights_of(ws_name, app_name))
+                       target, top, archived, clock, q, weights_of(ws_name, app_name))
 
     @app.get(f"{prefix}/workspaces/{{ws_name}}/apps/{{app_tag}}/similar",
              dependencies=[require(VIEWER)])
@@ -137,7 +137,7 @@ def register(app, prefix, app_inputs, scopes_of, segment, weights_of, scope_of):
         _checked_text(text)
         app_name, snapshot, schema = app_inputs(ws_name, app_tag)
         return _answer(request, scope_of, scopes(ws_name, app_name, snapshot, schema, all_apps),
-                       text_target(text), top, archived, q)
+                       text_target(text), top, archived, clock, q)
 
     @app.get(f"{prefix}/similar", dependencies=[require(VIEWER)])
     def similar_text(request: Request, text: str = "", top: int = DEFAULT_TOP,
@@ -146,4 +146,4 @@ def register(app, prefix, app_inputs, scopes_of, segment, weights_of, scope_of):
         _checked_text(text)
         names = sorted(viewable(request, [ws.name for ws in app.state.manager.list()]))
         return _answer(request, scope_of, list(scopes_of(names)), text_target(text), top,
-                       archived, q)
+                       archived, clock, q)

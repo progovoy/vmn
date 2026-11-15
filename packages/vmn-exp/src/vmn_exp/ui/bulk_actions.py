@@ -44,10 +44,10 @@ class BulkSpec:
         return [self.action, self.app_name] + [
             f"{k}={self.body[k]}" for k in QUERY_KEYS if self.body.get(k)]
 
-    def filters(self):
+    def filters(self, now):
         """The list's filters; archive/unarchive see every run and pick by state."""
         archived = self.action != "exp_tag" or bool(self.body.get("archived"))
-        return dict(scope=self.body.get("scope"), query=pinned(self.body.get("q")),
+        return dict(scope=self.body.get("scope"), query=pinned(self.body.get("q"), now),
                     status=self.body.get("status"), archived=archived)
 
     def pending(self, row):
@@ -94,11 +94,12 @@ class BulkSpec:
             logs.append(output)
         return "".join(logs)
 
-    def apply(self, storage, batch, hint):
-        """Act on *batch* in a store; the log text."""
-        actions = [build_store_action(self.action, self.app_name, body)
+    def apply(self, storage, batch, hint, now, env, host):
+        """Act on *batch* in a store, judging runs at *now*, as the writer of
+        *env* and *host*; the log text."""
+        actions = [build_store_action(self.action, self.app_name, body, env, host)
                    for body in self._bodies(batch)]
-        return "\n".join(_built(action, err).run(storage, hint) for action, err in actions)
+        return "\n".join(_built(action, err).run(storage, hint, now) for action, err in actions)
 
 
 def _built(value, err):

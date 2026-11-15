@@ -6,6 +6,7 @@ is written directly, with no heartbeat and no ``running`` state first. A run
 another attempt is still heartbeating (by both clocks), or one that already
 finished, is refused unless forced.
 """
+from datetime import datetime, timezone
 import os
 import time
 
@@ -16,9 +17,10 @@ from s3_helpers import cached_host, meta, mocked_bucket, s3_storage
 from vmn_exp.core.log import experiment_row
 from vmn_exp.core.status import RUN_STATE_FILE, load_run_state, status_fields
 from vmn_exp.sdk import manage
-from vmn_exp.sdk.run import Run
+from vmn_exp.sdk.run import Run, _real_process_hooks
 from vmn_exp.snapshot import LocalSnapshotStorage
 from vmn_exp.storage.cached import CachedSnapshotStorage
+from vmn_exp.core.real_io import RealClock, RealHost, RealRandom
 
 APP = "app"
 VERSTR = "0.0.1-dev.aaaaaaa.bbbbbbb"
@@ -37,7 +39,7 @@ def _state(storage):
 
 
 def _status(storage):
-    return status_fields(_state(storage))
+    return status_fields(_state(storage), now=datetime.now(timezone.utc))
 
 
 def _row(storage):
@@ -142,7 +144,7 @@ def test_finish_refuses_a_finished_run(storage):
 
 
 def test_force_finishes_a_live_run_and_its_heartbeats_stop(storage):
-    run = Run(storage, APP, VERSTR, 60)
+    run = Run(storage, APP, VERSTR, 60, clock=RealClock(), host=RealHost(), random=RealRandom(), env=os.environ, install_hooks=_real_process_hooks())
     run._open()
     try:
         manage.finish_run(APP, VERSTR, 143, end_reason="evicted", force=True,

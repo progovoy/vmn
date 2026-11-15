@@ -11,6 +11,7 @@ from test_ui_store_upkeep import APP, _Index, _run, _snap, storage  # noqa: F401
 from vmn_exp.core import metric_compact
 from vmn_exp.ui import store_upkeep
 from vmn_exp.ui.store_upkeep import AppUpkeep, StoreUpkeep
+from vmn_exp.core.real_io import RealClock
 
 
 def _store_fails_reading(monkeypatch, bad):
@@ -50,7 +51,7 @@ def test_a_failed_child_marker_names_the_app_and_both_runs(storage, monkeypatch,
         raise OSError("denied")
 
     monkeypatch.setattr(storage, "mark_child", boom)
-    AppUpkeep(storage, APP).run(_snap(storage))
+    AppUpkeep(storage, APP, time.monotonic, now=RealClock().now).run(_snap(storage))
 
     assert any(APP in m and kid in m and outer in m for m in _warnings(caplog))
 
@@ -62,7 +63,7 @@ def test_a_failed_compaction_names_the_app_and_the_run(storage, monkeypatch, cap
         raise OSError("denied")
 
     monkeypatch.setattr(store_upkeep, "compact_record", boom)
-    AppUpkeep(storage, APP).run(_snap(storage))
+    AppUpkeep(storage, APP, time.monotonic, now=RealClock().now).run(_snap(storage))
 
     assert any(APP in m and dead in m for m in _warnings(caplog))
 
@@ -72,7 +73,7 @@ def test_a_failed_upkeep_pass_names_the_app(storage, monkeypatch, caplog):  # no
         raise RuntimeError("bug")
 
     monkeypatch.setattr(AppUpkeep, "run", boom)
-    upkeep, index = StoreUpkeep(interval_sec=0), _Index()
+    upkeep, index = StoreUpkeep(interval_sec=0, clock=time.monotonic, now=RealClock().now), _Index()
     try:
         upkeep.note(index, storage, APP)
         upkeep.refreshed(index, _snap(storage))

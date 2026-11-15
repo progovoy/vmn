@@ -2,7 +2,7 @@
 
 Single source of truth for the resolution order shared by:
 - ``vmn-exp``  (vmn_exp.cli.experiment._get_experiment_storage)
-- ``vmn-exp model`` (vmn_exp.registry.cli._get_storage)
+- ``vmn-exp model`` (vmn_exp.cli.model_cmd._get_storage)
 - ``vmn-exp import-mlflow`` (vmn_exp.importers.cli._get_storage)
 - SDK (vmn_exp.sdk.models._resolve_storage)
 
@@ -20,11 +20,61 @@ Without a local root the store is used directly; a ``file://`` store is the root
 """
 from __future__ import annotations
 
-import os
-
 from version_stamp.store import config as store_config
+from version_stamp.store.config import STORE_ENV
 
+from vmn_exp.core.app_conf import experiment_conf
 from vmn_exp.storage.areas import DEFAULT_ROOT, RUNS, local_store_root
+
+# vmn-exp's own params in conf ``experiment.storage`` (param -> conf key);
+# the store params resolve through ``version_stamp.store.config``.
+_STORAGE_CONF_KEYS = {
+    "experiment_dir": "experiment_dir",
+    "writer_id": "writer_id",
+}
+
+# Store param -> its legacy ``VMN_EXPERIMENT_*`` name. Each is read after its
+# ``VMN_STORE*`` twin (``STORE_ENV`` holds both, in order).
+STORAGE_ENV = {key: names[-1] for key, names in STORE_ENV.items()}
+
+
+def _fill_store_params(params, env, conf):
+    """Set each unset store param *params* gets from *env* and *conf*
+    (``version_stamp.store.config.store_params``); unset ones stay absent."""
+    resolved = store_config.store_params(params, env, conf)
+    for key in STORE_ENV:
+        if resolved[key] and not params.get(key):
+            params[key] = resolved[key]
+
+
+def merge_env_into_params(params, env):
+    """Fill unset store params from *env*'s ``VMN_STORE*``, then
+    ``VMN_EXPERIMENT_*`` (flags override env).
+
+    A pod has no conf.yml and often no checkout; the environment is how it is
+    pointed at a bucket.
+    """
+    _fill_store_params(params, env, {})
+
+
+def _store_conf(vcs):
+    """The conf sections of *vcs* that name a store, as core reads them."""
+    return {"store": getattr(vcs, "store", None) or {},
+            "experiment": experiment_conf(vcs)}
+
+
+def merge_conf_into_params(vcs, params, env):
+    """Fill unset storage params: CLI flags, then *env*, then conf.yml — the
+    store ones through ``version_stamp.store.config`` (conf ``store`` before
+    the legacy ``experiment.storage``), ``experiment_dir``/``writer_id`` from
+    ``experiment.storage``."""
+    _fill_store_params(params, env, _store_conf(vcs))
+    storage_conf = experiment_conf(vcs).get("storage", {}) or {}
+    for key, conf_key in _STORAGE_CONF_KEYS.items():
+        if not params.get(key):
+            conf_val = storage_conf.get(conf_key)
+            if conf_val:
+                params[key] = conf_val
 
 
 def resolve_experiment_storage(
@@ -35,6 +85,8 @@ def resolve_experiment_storage(
     prefix: "str | None" = None,
     endpoint_url: "str | None" = None,
     repo_root: "str | None" = None,
+    clock,
+    env,
 ):
     """Return a configured snapshot storage for experiments.
 
@@ -50,10 +102,12 @@ def resolve_experiment_storage(
         Caller-supplied repo root (skips the auto-detect step).  Pass
         ``False`` to suppress auto-detect entirely (useful in tests or when
         the caller is certain there is no git checkout).
+    clock:
+        What a direct-to-bucket store's log buffer times its flushes on.
+    env:
+        The environment ``VMN_EXPERIMENT_*`` and ``VMN_EXP_OFFLINE`` are read from.
     """
-    from vmn_exp.core.writer import merge_env_into_params
-
-    root = dir or os.environ.get("VMN_EXPERIMENT_DIR")
+    root = dir or env.get("VMN_EXPERIMENT_DIR")
     if not root and repo_root is not False:
         root = _repo_store(repo_root if repo_root is not None else try_repo_root())
 
@@ -63,8 +117,8 @@ def resolve_experiment_storage(
         "prefix": prefix,
         "endpoint_url": endpoint_url,
     }
-    merge_env_into_params(params)
-    return _open(root, params)
+    merge_env_into_params(params, env)
+    return _open(root, params, clock=clock, env=env)
 
 
 def store_uri(params, default_prefix=DEFAULT_ROOT):
@@ -73,28 +127,29 @@ def store_uri(params, default_prefix=DEFAULT_ROOT):
     return store_config.store_uri(params, default_prefix)
 
 
-def drop_remote_if_offline(params, root):
-    """*params* without their remote store under ``VMN_EXP_OFFLINE``.
+def drop_remote_if_offline(params, root, env):
+    """*params* without their remote store under *env*'s ``VMN_EXP_OFFLINE``.
 
     conf.yml is committed and shared with compute nodes that may have no
     network, so offline mode must win over it. Offline, runs record to the
     local root alone (``vmn exp push`` uploads them later): ValueError when
     there is none. Never a silent fallback when a remote is unreachable.
     """
-    if store_config.offline_mode(os.environ) and not root:
+    if store_config.offline_mode(env) and not root:
         raise ValueError(
             f"{store_config.OFFLINE_ENV} records to a local experiment dir: set "
             "VMN_EXPERIMENT_DIR (or --experiment-dir/--dir, or run in a checkout)"
         )
-    return store_config.drop_remote_if_offline(params, os.environ)
+    return store_config.drop_remote_if_offline(params, env)
 
 
-def _open(root, params, writer=True):
+def _open(root, params, writer=True, *, clock, env):
     from vmn_exp.storage.open import open_storage
 
-    params = drop_remote_if_offline(params, root)
+    params = drop_remote_if_offline(params, root, env)
     return open_storage(store_uri(params), root, area=RUNS, buffer_logs=True,
-                        writer=writer, lent_options=store_config.store_options(params))
+                        writer=writer, lent_options=store_config.store_options(params),
+                        clock=clock, env=env)
 
 
 def try_repo_root() -> "str | None":
@@ -112,26 +167,12 @@ def _repo_store(repo_root):
     return local_store_root(repo_root) if repo_root else None
 
 
-def experiment_dir(vcs, params):
-    """The local store root: ``--dir``, ``$VMN_EXPERIMENT_DIR``, else the
-    repo-local store."""
-    return (params.get("experiment_dir") or os.environ.get("VMN_EXPERIMENT_DIR")
+def experiment_dir(vcs, params, env):
+    """The local store root: ``--dir``, *env*'s ``$VMN_EXPERIMENT_DIR``, else
+    the repo-local store."""
+    return (params.get("experiment_dir") or env.get("VMN_EXPERIMENT_DIR")
             or _repo_store(vcs.vmn_root_path if vcs else None))
 
 
-def _get_experiment_storage(vcs, params, writer=True):
-    return _open(experiment_dir(vcs, params), params, writer)
-
-
-def add_storage_flags(parser):
-    """The store flags every storage-opening command takes. ``--prefix`` has
-    no default: :func:`store_uri` supplies it, so an explicit one always wins."""
-    parser.add_argument("--store", default=None,
-                        help="Storage URI: s3://bucket/prefix, gs://..., az://..., "
-                             "file:///dir (or VMN_STORE)")
-    parser.add_argument("--bucket", default=None,
-                        help="S3 bucket name (shorthand for --store s3://BUCKET/PREFIX)")
-    parser.add_argument("--prefix", default=None,
-                        help="S3 key prefix: the store root (default: vmn)")
-    parser.add_argument("--endpoint-url", dest="endpoint_url", default=None,
-                        help="Custom S3 endpoint URL")
+def _get_experiment_storage(vcs, params, writer=True, *, clock, env):
+    return _open(experiment_dir(vcs, params, env), params, writer, clock=clock, env=env)

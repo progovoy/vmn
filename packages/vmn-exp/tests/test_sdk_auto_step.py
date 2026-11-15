@@ -90,7 +90,7 @@ def test_commit_false_shares_the_next_committed_step(app_layout):
 
 def test_system_metrics_carry_no_step_and_consume_none(app_layout, monkeypatch):
     _bootstrap(app_layout)
-    monkeypatch.setattr(sysmetrics, "build_collector", lambda pid=None: lambda: {"sys_cpu_percent": 1.0})
+    monkeypatch.setattr(sysmetrics, "build_collector", lambda pid=None, clock=None: lambda: {"sys_cpu_percent": 1.0})
     with start_run(app_layout.app_name, heartbeat_interval_sec=0.1, system_metrics=True) as run:
         time.sleep(0.8)
         run.log_metric("loss", 1.0)

@@ -1,6 +1,8 @@
 """SearchRowsWriter writes only what moved since its last write (plan 25 F5):
 a heartbeat-only generation re-sends the changed rows, not the app's all."""
 from vmn_exp.ui.search_rows_writer import SearchRowsWriter
+from vmn_exp.core.real_io import RealClock
+from vmn_exp.core.status import MIN_STALE_SEC
 
 
 class _RecordingSql:
@@ -32,7 +34,7 @@ def _row(verstr, loss=1.0):
 
 def _writer():
     sql = _RecordingSql()
-    writer = SearchRowsWriter(sql)
+    writer = SearchRowsWriter(sql, now=RealClock().now, min_stale_sec=MIN_STALE_SEC)
     index = _Index()
     writer.note(index, "ws", "app", dict)
     return writer, sql, index

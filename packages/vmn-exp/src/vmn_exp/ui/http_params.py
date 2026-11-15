@@ -13,6 +13,15 @@ def clamp_page(offset, limit, max_page=MAX_PAGE):
     return max(0, int(offset or 0)), limit
 
 
+def page_of(rows, offset=0, limit=None):
+    """``(rows[offset:offset + limit], len(rows))``, clamped like
+    :func:`clamp_page`; ``(rows, None)`` when no page is asked for."""
+    if not offset and limit is None:
+        return rows, None
+    offset, limit = clamp_page(offset, limit)
+    return rows[offset:None if limit is None else offset + limit], len(rows)
+
+
 def key_list(keys):
     """``"a,b"`` -> ``["a", "b"]``; None (all metrics) when not given."""
     if keys is None:

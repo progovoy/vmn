@@ -10,6 +10,7 @@ from empty_storage import EmptyStorage
 
 from vmn_exp.cli.prune import experiment_prune
 from version_stamp.core.logging import init_stamp_logger
+from vmn_exp.core.real_io import RealClock
 
 
 @pytest.fixture(autouse=True)
@@ -75,7 +76,7 @@ def _args(**kw):
 
 def test_prune_skips_stuck_runs(capfd):
     storage = _Storage({"stuck": _state(10), "done": None})
-    assert experiment_prune(None, {}, storage, _args(), "app") == 0
+    assert experiment_prune(None, {}, storage, _args(), "app", clock=RealClock()) == 0
     assert storage.deleted == ["done"]
     out = capfd.readouterr().out
     assert "Skipping stuck" in out and "--force" in out
@@ -83,7 +84,7 @@ def test_prune_skips_stuck_runs(capfd):
 
 def test_prune_force_deletes_stuck_runs():
     storage = _Storage({"stuck": _state(10)})
-    assert experiment_prune(None, {}, storage, _args(force=True), "app") == 0
+    assert experiment_prune(None, {}, storage, _args(force=True), "app", clock=RealClock()) == 0
     assert storage.deleted == ["stuck"]
 
 
@@ -98,7 +99,7 @@ def test_prune_deletes_remote_runs_concurrently(capfd):
         real(app_name, verstr)
 
     storage.delete = delete
-    assert experiment_prune(None, {}, storage, _args(), "app") == 0
+    assert experiment_prune(None, {}, storage, _args(), "app", clock=RealClock()) == 0
     assert sorted(storage.deleted) == [f"v{i}" for i in range(8)]
     out = capfd.readouterr().out
     assert out.index("Deleted v0") < out.index("Deleted v7")
@@ -112,5 +113,5 @@ def test_a_failed_listing_deletes_nothing():
 
     storage.list_snapshots = fail
     with pytest.raises(ConnectionError):
-        experiment_prune(None, {}, storage, _args(), "app")
+        experiment_prune(None, {}, storage, _args(), "app", clock=RealClock())
     assert storage.deleted == []

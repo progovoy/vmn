@@ -10,6 +10,7 @@ from vmn_exp.core.log import load_log, metric_series
 from vmn_exp.core.metric_stream import MetricWriter
 from vmn_exp.ui.readers import experiment_detail, segment_cache
 from vmn_exp.ui.readers.parsed_logs import ParsedLogs
+import time
 
 APP, V = "app", "1.0.0-dev.a"
 S = "w~o1"
@@ -76,7 +77,7 @@ def test_the_detail_log_lists_again_once(s3, monkeypatch, warm):
 
 def test_run_series_lists_again_once(s3, monkeypatch):
     _segments(s3, 0, 20)
-    w = MetricWriter(s3, APP, V, S)
+    w = MetricWriter(s3, APP, V, S, clock=time.time)
     for step in range(5):
         w.add("loss", 1 / (step + 1), step=step, ts_us=T0 + step)
     w.flush()

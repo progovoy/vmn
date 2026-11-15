@@ -12,6 +12,7 @@ from fastapi.testclient import TestClient  # noqa: E402
 
 from vmn_exp.storage.local import LocalSnapshotStorage  # noqa: E402
 from vmn_exp.ui.experiment_source import ExperimentSource  # noqa: E402
+from vmn_exp.core.real_io import real_io  # noqa: E402
 
 APP = "app"
 PARENT, CHILD = "1.0.0-dev.a", "1.0.0-dev.b"
@@ -61,7 +62,7 @@ def board(tmp_path, monkeypatch):
     manager = WorkspaceManager(str(tmp_path / "data"))
     manager.add_store("st", f"file://{tmp_path / 'store'}")
     loading = _Loading(monkeypatch)
-    return TestClient(create_app(manager)), loading
+    return TestClient(create_app(manager, io=real_io())), loading
 
 
 @pytest.mark.parametrize("url", ANSWERS)

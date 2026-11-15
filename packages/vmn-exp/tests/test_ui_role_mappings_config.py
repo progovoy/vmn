@@ -1,11 +1,13 @@
 """auth.role_mappings from server.yml reach role checks intact (no 500)."""
 import argparse
+import dataclasses
+import os
 
 import pytest
 
 pytest.importorskip("fastapi")
 from fastapi.testclient import TestClient  # noqa: E402
-
+from vmn_exp.core.real_io import RealClock, real_io
 from vmn_exp.storage.areas import RUNS  # noqa: E402
 from vmn_exp.storage.open import open_storage  # noqa: E402
 from vmn_exp.ui.auth.oidc import SESSION_COOKIE, OIDCAuthenticator  # noqa: E402
@@ -14,7 +16,7 @@ from vmn_exp.ui.cli import build_server, server_app  # noqa: E402
 
 
 def _app(tmp_path):
-    storage = open_storage(f"file://{tmp_path / 'store'}", area=RUNS)
+    storage = open_storage(f"file://{tmp_path / 'store'}", area=RUNS, clock=RealClock(), env=os.environ)
     storage.save("app", "0.0.1-dev.abc.r1", {"verstr": "0.0.1-dev.abc.r1"}, {})
     p = tmp_path / "server.yml"
     p.write_text(f"""
@@ -30,7 +32,7 @@ auth:
                               db=None, config=str(p), repo=None, store=None,
                               read_only=False, no_index=True, allowed_host=None)
     manager, cfg, cp = build_server(args, env={})
-    return server_app(manager, cfg, cp, args, env={}, token="t")
+    return server_app(manager, cfg, cp, args, io=dataclasses.replace(real_io(), env={}), token="t")
 
 
 def test_static_token_on_viewer_route_with_role_mappings(tmp_path):

@@ -14,7 +14,7 @@ def _entry(verstr, pos):
 
 
 def _hits(search):
-    return [row["verstr"] for (_, _, row) in search.search(["ws"], "", 10)]
+    return [row["verstr"] for (_, _, row) in search.search(["ws"], "", 10, False, None)]
 
 
 def test_write_keeps_rows_it_was_not_given(pg_dsn):

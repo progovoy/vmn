@@ -5,6 +5,7 @@ import pytest
 pytest.importorskip("fastapi")
 
 from vmn_exp.ui.config import ConfigError, load_config, resolve_config
+from vmn_exp.core.real_io import RealRandom
 
 FULL = """
 server:
@@ -95,6 +96,26 @@ def test_invalid_values_are_errors(tmp_path, text):
         load_config(_write(tmp_path, text))
 
 
+OIDC = "auth: {{oidc: {{issuer: https://idp, client_id: c, {}}}}}\n"
+
+
+def test_oidc_ttls_default_to_12_hours_and_90_days(tmp_path):
+    oidc = load_config(_write(tmp_path, OIDC.format(""))).auth.oidc
+    assert (oidc.session_ttl_hours, oidc.login_token_ttl_days) == (12, 90)
+    oidc = load_config(_write(tmp_path, OIDC.format(
+        "session_ttl_hours: 1, login_token_ttl_days: 7"))).auth.oidc
+    assert (oidc.session_ttl_hours, oidc.login_token_ttl_days) == (1, 7)
+
+
+@pytest.mark.parametrize("ttl", [
+    "session_ttl_hours: 0", "session_ttl_hours: -1", "session_ttl_hours: x",
+    "login_token_ttl_days: 0", "login_token_ttl_days: -5", "login_token_ttl_days: 1.5",
+])
+def test_oidc_ttls_validated_positive(tmp_path, ttl):
+    with pytest.raises(ConfigError, match=ttl.split(":")[0]):
+        load_config(_write(tmp_path, OIDC.format(ttl)))
+
+
 def test_flags_override_file(tmp_path):
     cfg = resolve_config(_args(config=_full(tmp_path), host="10.0.0.1", port=1234,
                                db="sqlite:///other", data_dir="/d"), env={})
@@ -132,3 +153,35 @@ def test_data_dir_expands_user(tmp_path, monkeypatch):
     path = _write(tmp_path, "data_dir: ~/vmn-data\n")
     cfg = resolve_config(_args(config=path), env={})
     assert cfg.data_dir == str(tmp_path / "vmn-data")
+
+
+def _oidc_config(issuer="https://idp.example", public_url="https://vmn.example"):
+    from vmn_exp.ui.config import parse_config
+
+    return parse_config({"server": {"public_url": public_url},
+                         "auth": {"oidc": {"issuer": issuer, "client_id": "c"}}})
+
+
+def test_oidc_issuer_must_be_https():
+    with pytest.raises(ConfigError) as e:
+        _oidc_config(issuer="http://idp.example")
+    assert "auth.oidc.issuer" in str(e.value) and "loopback" in str(e.value)
+    assert _oidc_config(issuer="http://127.0.0.1:5556").auth.oidc.issuer
+
+
+def test_public_url_must_be_https_with_oidc():
+    from vmn_exp.ui.cli import _oidc_chain
+
+    with pytest.raises(ConfigError) as e:
+        _oidc_chain(_oidc_config(public_url="http://vmn.example"), None, env={}, random=RealRandom())
+    assert "server.public_url" in str(e.value)
+    assert _oidc_chain(_oidc_config(public_url="http://localhost:8265"), None, env={}, random=RealRandom())
+
+
+def test_oidc_chain_wires_a_jwks_verifier_on_the_authenticators_http():
+    from vmn_exp.ui.auth.jwks import JwksVerifier
+    from vmn_exp.ui.cli import _oidc_chain
+
+    (oidc,) = _oidc_chain(_oidc_config(), None, env={}, random=RealRandom()).authenticators
+    assert isinstance(oidc.verifier, JwksVerifier)
+    assert oidc.verifier.http is oidc.http

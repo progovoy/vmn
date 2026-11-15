@@ -14,22 +14,22 @@ from vmn_exp.sdk.mode import is_disabled
 NOTICE = "vmn-exp: VMN_MODE=disabled - running the command without recording a run"
 
 
-def exec_if_disabled(args):
-    """Under ``VMN_MODE=disabled`` replace this process with ``args.run_cmd``
-    (1 when there is no command); None otherwise, for the normal ``run``."""
-    if not is_disabled():
+def exec_if_disabled(args, env):
+    """Under *env*'s ``VMN_MODE=disabled`` replace this process with ``args.run_cmd`` in *env*
+    (2, a usage error, when there is no command); None otherwise, for the normal ``run``."""
+    if not is_disabled(None, env):
         return None
     run_cmd = getattr(args, "run_cmd", None)
     if not run_cmd:
         VMN_LOGGER.error(
             "No command to run. Usage: vmn-exp run <app> -- <command> [args...]"
         )
-        return 1
+        return 2
     print(NOTICE, file=sys.stderr)
     sys.stdout.flush()
     sys.stderr.flush()
     from vmn_exp.cli.run import _child_cwd  # the supervisor stack, only when needed
 
-    os.chdir(_child_cwd())
-    os.execvpe(run_cmd[0], run_cmd, dict(os.environ, VMN_METRICS_FILE=os.devnull))
+    os.chdir(_child_cwd(env))
+    os.execvpe(run_cmd[0], run_cmd, dict(env, VMN_METRICS_FILE=os.devnull))
     return 0  # only reached when execvpe is stubbed out

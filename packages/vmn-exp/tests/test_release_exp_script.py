@@ -45,7 +45,14 @@ def test_releases_only_the_exp_packages_with_patch(tmp_path):
         "vmn stamp -r patch vmn_exp",
         "make _build NAME=vmn_exp",
         "make upload NAME=vmn_exp",
+        "make _changelog NAME=vmn_exp",
     ]
+
+
+def test_the_changelog_is_regenerated_after_the_upload(tmp_path):
+    # The changelog is rebuilt from tags, so it runs once the release is out.
+    _, calls = _release(tmp_path, EXP_TAGGED="1")
+    assert calls[-2:] == ["make upload NAME=vmn_exp", "make _changelog NAME=vmn_exp"]
 
 
 def test_the_first_vmn_exp_release_is_minor(tmp_path):

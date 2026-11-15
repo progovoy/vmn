@@ -9,7 +9,7 @@
 > Paths are relative to `packages/vmn-exp/webui/src/` unless they start with
 > `packages/`, `ui/` (= `packages/vmn-exp/src/vmn_exp/ui/`) or `docs/`.
 
-Status: **proposal** (2026-10-12).
+Status: **done** (proposed 2026-10-12, built from 2026-10-13; confirmed in code 2026-11-11).
 
 Sources:
 - The 2026-10-12 review (three passes). It used screenshots of a `uiload` smoke profile

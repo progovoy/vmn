@@ -276,7 +276,7 @@ class CachedSnapshotStorage(CachedChildren, CachedMetrics, CachedLogs, SnapshotS
             return data
         return None
 
-    def _ensure_local_record(self, app_name, verstr):
+    def ensure_local_record(self, app_name, verstr):
         """Whether *verstr* may be written into.
 
         A record that exists nowhere (pruned, never created) is not written:
@@ -299,7 +299,7 @@ class CachedSnapshotStorage(CachedChildren, CachedMetrics, CachedLogs, SnapshotS
         fetching the record first; a one-off owner while there is none (an
         append may still fetch it: its lines then go to a stream of their own,
         never one another copy appends to)."""
-        if self._ensure_local_record(app_name, verstr):
+        if self.ensure_local_record(app_name, verstr):
             owner = self._local.stream_owner(app_name, verstr, writer)
             if owner:
                 return owner
@@ -313,7 +313,7 @@ class CachedSnapshotStorage(CachedChildren, CachedMetrics, CachedLogs, SnapshotS
         (:func:`vmn_exp.core.adopt.adopt_streams`); the owners adopted."""
         from vmn_exp.core.adopt import adopt_streams
 
-        if not self._remote or not self._ensure_local_record(app_name, verstr):
+        if not self._remote or not self.ensure_local_record(app_name, verstr):
             return []
         return adopt_streams(self._local, self._remote, app_name, verstr)
 
@@ -331,7 +331,7 @@ class CachedSnapshotStorage(CachedChildren, CachedMetrics, CachedLogs, SnapshotS
             self._presence.upload_if_missing(app_name, verstr)
 
     def save_file(self, app_name, verstr, filename, data):
-        if not self._ensure_local_record(app_name, verstr):
+        if not self.ensure_local_record(app_name, verstr):
             VMN_LOGGER.debug(f"Not writing {filename}: {verstr} does not exist")
             return False
         self._local.save_file(app_name, verstr, filename, data)
@@ -344,7 +344,7 @@ class CachedSnapshotStorage(CachedChildren, CachedMetrics, CachedLogs, SnapshotS
         return True
 
     def save_artifact_file(self, app_name, verstr, src_path, name=None):
-        if not self._ensure_local_record(app_name, verstr):
+        if not self.ensure_local_record(app_name, verstr):
             return False
         self._local.save_artifact_file(app_name, verstr, src_path, name=name)
         if self.remote_for(app_name, verstr):
@@ -381,3 +381,13 @@ def local_side(storage):
     if isinstance(storage, CachedSnapshotStorage):
         return storage._local
     return None if getattr(storage, "is_remote", lambda: False)() else storage
+
+
+# What a log buffer whose contents did not all reach the remote says.
+SHIP_LATER_HINT = "ship it later with: vmn-exp buffers ship"
+
+
+def is_log_buffer(storage):
+    """Whether *storage*'s local side is a direct-to-bucket log buffer: it
+    holds what this process appended, not a replica of the record."""
+    return isinstance(storage, CachedSnapshotStorage) and not storage._local_is_replica

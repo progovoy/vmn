@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Git backend mixin: changeset, deps, revert, commit history."""
 import configparser
+import functools
 import os
 import re
 from pathlib import Path
@@ -119,6 +120,12 @@ class GitHistoryMixin:
 
     @measure_runtime_decorator
     def remote(self):
+        return self._remote_url
+
+    @functools.cached_property
+    def _remote_url(self):
+        # One `git remote get-url` per backend: selected_remote is fixed at
+        # construction, and the stamper, its deps and a run record all ask.
         return remote_location(self.selected_remote, self.root())
 
     @measure_runtime_decorator

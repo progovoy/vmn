@@ -14,14 +14,14 @@ def test_exp_tag_sets_and_removes():
     assert err is None
     assert cmd == [
         "vmn-exp", "experiment", "tag", "my_app", V1,
-        "team=vision", "lr=3e-4", "--remove", "old",
+        "team=vision", "lr=3e-4", "--remove=old",
     ]
 
 
 def test_exp_tag_remove_only_repeats_the_flag():
     cmd, err = build_command("exp_tag", "my_app", {"verstr": V1, "remove": ["a", "b"]})
     assert err is None
-    assert cmd == ["vmn-exp", "experiment", "tag", "my_app", V1, "--remove", "a", "--remove", "b"]
+    assert cmd == ["vmn-exp", "experiment", "tag", "my_app", V1, "--remove=a", "--remove=b"]
 
 
 def test_exp_tag_needs_something_to_do():

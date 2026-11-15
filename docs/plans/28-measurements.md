@@ -1,5 +1,7 @@
 # Plan 28: measurements (2026-10-28)
 
+Status: **done** (2026-10-28). The measurements behind plans 26 and 28.
+
 Numbers for appendix A row 6 (GC pauses on 3.15.2t) and the B0 follow-up
 "measure over HTTP on free-threaded Python". One laptop (Apple silicon, 16
 cores: 12 performance + 4 efficiency). The first session shared it with other

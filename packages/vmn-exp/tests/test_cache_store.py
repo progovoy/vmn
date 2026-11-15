@@ -1,19 +1,25 @@
 """CacheStore protocol: load/save, generations, load_since deltas, kv cache."""
 import pytest
 
+from fakes.clock import FakeClock
 from vmn_exp.core import index_store
 from vmn_exp.core.index_store import CacheStore, IndexStore, SqliteStore
 
 APP = "app"
 
 
+@pytest.fixture
+def clock():
+    return FakeClock()
+
+
 @pytest.fixture(params=["sqlite", "postgres"])
-def cache_store(request, tmp_path):
+def cache_store(request, tmp_path, clock):
     if request.param == "sqlite":
-        return SqliteStore(str(tmp_path / "idx.sqlite"))
+        return SqliteStore(str(tmp_path / "idx.sqlite"), clock=clock)
     from vmn_exp.ui.cache_pg import PostgresStore
 
-    return PostgresStore(request.getfixturevalue("pg_dsn"))
+    return PostgresStore(request.getfixturevalue("pg_dsn"), clock=clock)
 
 
 def _rec(verstr, **extra):
@@ -92,13 +98,11 @@ def test_readded_key_is_changed_not_removed(cache_store):
     assert changed["a"]["verstr"] == "2" and removed == set()
 
 
-def test_tombstones_trimmed_and_stale_follower_gets_full_load(cache_store, monkeypatch):
-    now = [1000.0]
-    monkeypatch.setattr(index_store, "_now", lambda: now[0])
+def test_tombstones_trimmed_and_stale_follower_gets_full_load(cache_store, clock):
     cache_store.save(APP, {"a": _rec("1"), "b": _rec("2")}, set())
     old_gen = cache_store.generation(APP)
     cache_store.save(APP, {}, {"a"})
-    now[0] += index_store.TOMBSTONE_TTL_SEC + 1
+    clock.advance(index_store.TOMBSTONE_TTL_SEC + 1)
     cache_store.save(APP, {"c": _rec("3")}, set())  # trims the old tombstone
     recent_gen = cache_store.generation(APP)
     changed, removed, new_gen = cache_store.load_since(APP, old_gen)

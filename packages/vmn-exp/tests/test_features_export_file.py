@@ -22,6 +22,7 @@ from vmn_exp.core.fold import fold_features, fold_log
 from vmn_exp.sdk import create as sdk_create
 from vmn_exp.sdk import start_run
 from vmn_exp.snapshot import open_storage
+from vmn_exp.core.real_io import RealClock
 
 
 def test_export_writes_the_runs_features_to_a_file_of_their_own(app_layout, capfd, tmp_path):
@@ -112,14 +113,14 @@ def test_start_run_reads_the_exports_features_before_taking_the_shared_dir_lock(
             finally:
                 held.pop()
 
-    def read(tree_dir):
+    def read(tree_dir, *env_host):
         reads.append(bool(held))
-        return real_read(tree_dir)
+        return real_read(tree_dir, *env_host)
 
     monkeypatch.setattr(sdk_create, "get_repo_lock", lock)
     monkeypatch.setattr(from_snapshot, "export_features", read)
     monkeypatch.setattr(sdk_create, "export_features", read, raising=False)
-    storage = open_storage(root=str(tmp_path / "pod-store"), area="runs")
+    storage = open_storage(root=str(tmp_path / "pod-store"), area="runs", clock=RealClock(), env=os.environ)
 
     with start_run(app_layout.app_name, storage=storage, system_metrics=False,
                    capture_env=False) as run:

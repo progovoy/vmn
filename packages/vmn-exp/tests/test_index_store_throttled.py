@@ -6,6 +6,7 @@ next refresh re-list the whole store — more of the requests the store was
 refusing, a second later, every time ("The background refresh has not
 completed ... SlowDown")."""
 import logging
+from datetime import datetime, timezone
 
 import pytest
 from botocore.exceptions import ClientError
@@ -39,7 +40,8 @@ def throttled(monkeypatch):
 
 def _statuses(index):
     snapshot = index.refresh().snapshot()
-    return {r["verstr"]: snapshot.status_of(r["verstr"]) for r in snapshot.rows}
+    now = datetime.now(timezone.utc)
+    return {r["verstr"]: snapshot.status_of(r["verstr"], now) for r in snapshot.rows}
 
 
 def test_a_throttled_new_record_is_set_aside_and_read_later(s3, tmp_path, throttled, monkeypatch):

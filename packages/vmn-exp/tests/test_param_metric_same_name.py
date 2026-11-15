@@ -12,6 +12,7 @@ from vmn_exp.core.metric_stream import MetricWriter
 from vmn_exp.core.metric_time import us_to_iso
 from vmn_exp.snapshot import LocalSnapshotStorage
 from vmn_exp.ui.readers import diffs as diff_reader
+import time
 
 META = {"verstr": "0.0.1-dev.aaa.bbb", "timestamp": "2026-01-01T00:00:00Z"}
 T0_US = 1_700_000_000_000_001
@@ -100,7 +101,7 @@ def test_the_snapshot_compare_keeps_it_a_metric_too(tmp_path):
 def test_a_streamed_metric_keeps_its_place_from_a_later_param(tmp_path):
     storage, v = LocalSnapshotStorage(str(tmp_path), area="runs"), META["verstr"]
     storage.save("app", v, META, {})
-    stream = MetricWriter(storage, "app", v, "a")
+    stream = MetricWriter(storage, "app", v, "a", clock=time.time)
     stream.add("acc", 0.9, ts_us=T0_US)
     stream.add("acc", 0.8, ts_us=T0_US + 1000)
     stream.flush()

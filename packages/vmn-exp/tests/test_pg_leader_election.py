@@ -39,7 +39,7 @@ class Replica:
         self.storage = CountingStorage(st)
         self.election = AdvisoryElection(dsn)
         self.index = ElectedIndex(self.storage, APP, PostgresStore(dsn), self.election)
-        self.refresher = Refresher(interval_sec=TICK)
+        self.refresher = Refresher(interval_sec=TICK, clock=time.monotonic)
 
     def rows(self):
         return [r["verstr"] for r in self.refresher.snapshot(self.index).rows]

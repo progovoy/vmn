@@ -75,15 +75,17 @@ class RegistryLinks:
         return read_uses(self.storage, name).get(n, [])
 
 
-def app_indexes(storage):
+def app_indexes(storage, clock):
     """``index_for(app)`` over *storage*'s status-annotated index rows,
-    each app's index built once."""
+    each app's index built once; *clock* (a
+    :class:`~vmn_exp.core.ports.Clock`): the indexes' and the statuses'."""
     indexes = {}
 
     def index_for(app):
         if app not in indexes:
-            rows, states, observed = experiment_index.indexed_status_rows(storage, app)
-            indexes[app] = LineageIndex(annotate_rows(rows, states, observed))
+            rows, states, observed = experiment_index.indexed_status_rows(
+                storage, app, clock=clock)
+            indexes[app] = LineageIndex(annotate_rows(rows, states, observed, now=clock.now()))
         return indexes[app]
 
     return index_for
@@ -107,7 +109,7 @@ def run_lineage(
     return found
 
 
-def version_lineage(storage, name, n, index_for=None, status_of=None, registry=None):
+def version_lineage(storage, name, n, index_for, status_of=None, registry=None):
     """``{"model", "version", "kind", "status", "producer", "consumers"}`` of
     version *n* of *name* — deleted versions too — the registry read through
     *registry* (:class:`RegistryLinks` of *storage* by default). *producer*
@@ -117,7 +119,6 @@ def version_lineage(storage, name, n, index_for=None, status_of=None, registry=N
     meta = registry.version(name, n)
     if meta is None:
         raise KeyError(f"Version {n} of {name!r} does not exist")
-    index_for = index_for or app_indexes(storage)
     producer = run_of(meta)
     return {
         "model": name,

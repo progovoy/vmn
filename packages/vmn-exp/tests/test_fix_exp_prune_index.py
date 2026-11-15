@@ -8,6 +8,7 @@ import yaml
 from vmn_exp.cli import prune as prune_mod
 from vmn_exp.storage.local import LocalSnapshotStorage
 from version_stamp.core.logging import init_stamp_logger
+from vmn_exp.core.real_io import RealClock
 
 APP = "app"
 
@@ -54,7 +55,7 @@ def test_prune_selects_through_the_index(st, monkeypatch, capfd):
                         lambda app: calls.append("list_snapshots") or [])
     monkeypatch.setattr(prune_mod, "load_run_state",
                         lambda *a: calls.append("load_run_state"))
-    assert prune_mod.experiment_prune(None, {}, st, _args(), APP) == 0
+    assert prune_mod.experiment_prune(None, {}, st, _args(), APP, clock=RealClock()) == 0
     assert calls == []
     out = capfd.readouterr().out
     # r0 has a kept child (r5), so only r1..r3 go.

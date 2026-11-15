@@ -8,6 +8,8 @@ paying for it, so without one (an embedded ``create_app``) the route is a
 ``MAX_STREAMS`` open streams it is a 503 (the client polls too)."""
 from fastapi.responses import JSONResponse, StreamingResponse
 from starlette.concurrency import run_in_threadpool
+from vmn_exp.core.status import MIN_STALE_SEC
+from vmn_exp.ui.api_errors import error_body
 from vmn_exp.ui.auth.authz import require
 from vmn_exp.ui.auth.principal import VIEWER
 
@@ -35,10 +37,13 @@ class EventStreamResponse(StreamingResponse):
             self._release()
 
 
-def register(app, prefix, reader_for, background, segment):
+def register(app, prefix, reader_for, background, segment, clock, sleep, now,
+             stale_sec=MIN_STALE_SEC):
     """Add the route; *reader_for(ws_name, app_tag)* → a blocking callable
     answering the app's current snapshot (raising 4xx for a bad workspace
-    or app); *background*: whether a background refresher serves them."""
+    or app); *background*: whether a background refresher serves them; a
+    stream ticks on *clock* (monotonic) with the async *sleep*, judging live
+    runs at *now()* on *stale_sec*."""
     slots = live_events.StreamSlots(live_events.MAX_STREAMS)
     app.state.event_slots = slots
 
@@ -46,13 +51,17 @@ def register(app, prefix, reader_for, background, segment):
              dependencies=[require(VIEWER)])
     async def app_events(ws_name: str, app_tag: str, scope: str = None):
         if not background:
-            return JSONResponse({"detail": "Live events need the background refresher",
-                                 "reason": NO_LIVE_EVENTS}, status_code=404)
+            return JSONResponse(error_body("Live events need the background refresher",
+                                           NO_LIVE_EVENTS, reason=NO_LIVE_EVENTS),
+                                status_code=404)
         if scope is not None:
             segment(scope, "scope")
         read = await run_in_threadpool(reader_for, ws_name, app_tag)
         if not slots.acquire():
-            return JSONResponse({"detail": "Too many live streams", "reason": TOO_MANY_STREAMS},
+            return JSONResponse(error_body("Too many live streams", TOO_MANY_STREAMS,
+                                           reason=TOO_MANY_STREAMS),
                                 status_code=503, headers={"Retry-After": "30"})
-        stream = live_events.event_stream(lambda: run_in_threadpool(read), scope)
+        stream = live_events.event_stream(lambda: run_in_threadpool(read), scope,
+                                          clock=clock, sleep=sleep, status_now=now,
+                                          min_stale_sec=stale_sec)
         return EventStreamResponse(stream, slots.release)

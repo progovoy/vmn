@@ -9,14 +9,13 @@ from vmn_exp.core.status import parse_iso
 from vmn_exp.core.tree import annotate_rows, children_by_parent
 from vmn_exp.ui.failure_signature import signature
 
-from vmn_exp.core import status as status_mod
-
 STATES = {"running": "running", "created": "waiting", "succeeded": "succeeded",
           "failed": "failed", "stuck": "stuck"}
 
 
-def annotated(snapshot):
-    return annotate_rows(snapshot.rows, snapshot.run_states, snapshot.run_state_observed_at)
+def annotated(snapshot, now=None):
+    return annotate_rows(snapshot.rows, snapshot.run_states, snapshot.run_state_observed_at,
+                         now=now)
 
 
 def subtree(verstr, children_of, pruned=()):
@@ -139,7 +138,7 @@ def settled_of(row, by_verstr):
     return "never_started" if row["status"] == "created" else "lost"
 
 
-def rollup(rows, verstr, schema):
+def rollup(rows, verstr, schema, now):
     by_verstr = {row["verstr"]: row for row in rows}
     members = members_of(rows, verstr)
     counts = {state: 0 for state in STATES.values()}
@@ -151,7 +150,7 @@ def rollup(rows, verstr, schema):
         else:
             counts[STATES[row["status"]]] += 1
     done = counts["succeeded"] + counts["failed"] + settled["lost"]
-    now_minute = int(status_mod._now().timestamp() // 60)
+    now_minute = int(now.timestamp() // 60)
     recent = sum(1 for row in members if row["status"] in ("succeeded", "failed")
                  and row.get("finished_at")
                  and now_minute - 10 < parse_iso(row["finished_at"]).timestamp() // 60 <= now_minute)

@@ -167,7 +167,7 @@ def _delete(conn, picked):
         pairs = [(app, key) for key in keys]
         conn.executemany("DELETE FROM exp_index WHERE app = ? AND key = ?", pairs)
         conn.executemany("DELETE FROM exp_index_state WHERE app = ? AND key = ?", pairs)
-        write_lean(conn, app, None, {}, keys, {}, {}, renumber=False)
+        write_lean(conn, app, None, {}, keys, {}, {}, renumber=False, now=None)  # no run state
         file_records(conn, app, {}, keys)
 
 

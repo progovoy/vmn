@@ -10,6 +10,7 @@ from test_sweep_sdk_trials import _sdk_sweep
 
 fastapi = pytest.importorskip("fastapi")
 from fastapi.testclient import TestClient  # noqa: E402
+from vmn_exp.core.real_io import real_io  # noqa: E402
 
 API = "/api/v1/workspaces/main/apps"
 
@@ -37,7 +38,7 @@ def _client(app_layout):
 
     manager = WorkspaceManager(os.path.join(app_layout.base_dir, "ui_data"))
     manager.attach_path("main", app_layout.repo_path)
-    return TestClient(create_app(manager))
+    return TestClient(create_app(manager, io=real_io()))
 
 
 def _url(app_layout, verstr):
@@ -58,7 +59,7 @@ def test_sweep_endpoint_serves_the_attributed_trials(app_layout, swept, capsys):
     assert first["status"] == "succeeded"
     assert first["params"] == {"x": 3}
     assert first["value"] == pytest.approx(3.25)
-    assert first["metric_source"] != first["verstr"]  # the nested SDK run
+    assert first["metric_source"] == first["verstr"]  # adopted: the trial itself
     assert first["stopped_early"] is False
 
     # The same answer as the CLI's status.

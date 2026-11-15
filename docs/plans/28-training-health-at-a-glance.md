@@ -27,7 +27,7 @@
 > (= `packages/vmn-exp-sdk/src/vmn_exp/core/`), `sdk/`
 > (= `packages/vmn-exp-sdk/src/vmn_exp/sdk/`) or `docs/`.
 
-Status: **built** (2026-10-28), except T2c (deferred). Every item of §7 is on master;
+Status: **done** (2026-10-28), except T2c (deferred). Every item of §7 is on master;
 appendix A is closed (row 6 explained, and B0 measured at full scale, in
 docs/plans/28-measurements.md).
 

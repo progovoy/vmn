@@ -29,7 +29,7 @@ class FakeJournal:
 
 
 def _refresher(**kw):
-    return Refresher(interval_sec=0.02, idle_sec=0.2, **kw)
+    return Refresher(interval_sec=0.02, idle_sec=0.2, clock=time.monotonic, **kw)
 
 
 @pytest.fixture

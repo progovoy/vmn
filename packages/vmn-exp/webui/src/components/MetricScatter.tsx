@@ -84,6 +84,7 @@ function MetricScatter({
   const themeVersion = useThemeVersion();
   const options = useMemo(
     // Rebuilt when the colours change, not each new array of them.
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- keyed on colorsKey
     () => scatterOptions(colors, { height: HEIGHT, theme: chartTheme(), dense }), [colorsKey, dense, themeVersion],
   );
   const data = useMemo(() => scatterData(groups), [groups]);

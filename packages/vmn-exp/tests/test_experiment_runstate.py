@@ -1,4 +1,5 @@
 """`vmn exp run` publishes live run state; status is derived from it."""
+from datetime import datetime, timezone
 import os
 import subprocess
 import time
@@ -43,7 +44,7 @@ def test_successful_run_finishes_with_exit_code_and_duration(app_layout, capfd):
     assert state["host"]
     assert state["command"][-1] == "print('ok')"
     assert state["heartbeat_interval_sec"] == st.DEFAULT_HEARTBEAT_INTERVAL_SEC
-    assert st.derive_status(state) == st.SUCCEEDED
+    assert st.derive_status(state, now=datetime.now(timezone.utc)) == st.SUCCEEDED
 
 
 def test_failing_run_derives_failed(app_layout, capfd):
@@ -56,7 +57,7 @@ def test_failing_run_derives_failed(app_layout, capfd):
     state = _run_state(app_layout, verstr)
     assert state["state"] == "finished"
     assert state["exit_code"] == 4
-    assert st.derive_status(state) == st.FAILED
+    assert st.derive_status(state, now=datetime.now(timezone.utc)) == st.FAILED
 
 
 def test_in_flight_run_is_running_with_advancing_heartbeat(app_layout, capfd):
@@ -66,10 +67,11 @@ def test_in_flight_run_is_running_with_advancing_heartbeat(app_layout, capfd):
     script = (
         "import os, time, yaml\n"
         "from vmn_exp.snapshot import open_storage\n"
+        "from vmn_exp.core.real_io import RealClock\n"
         "from vmn_exp.cli.experiment import load_run_state\n"
         "time.sleep(2.5)\n"
         "storage = open_storage("
-        "root=os.environ['VMN_WORKING_DIR'] + '/.vmn/store', area='runs')\n"
+        "root=os.environ['VMN_WORKING_DIR'] + '/.vmn/store', area='runs', clock=RealClock(), env=os.environ)\n"
         "state = load_run_state(storage, os.environ['VMN_APP_NAME'],"
         " os.environ['VMN_EXPERIMENT_ID'])\n"
         "open('probe.yml', 'w').write(yaml.dump(state))\n"
@@ -95,7 +97,7 @@ def test_in_flight_run_is_running_with_advancing_heartbeat(app_layout, capfd):
     assert live["exit_code"] is None
     assert live["heartbeat_interval_sec"] == 1
     assert live["heartbeat"] > live["started_at"], "heartbeat never refreshed"
-    assert st.derive_status(live) == st.RUNNING
+    assert st.derive_status(live, now=datetime.now(timezone.utc)) == st.RUNNING
 
     assert _run_state(app_layout, verstr)["state"] == "finished"
 
@@ -154,14 +156,16 @@ def test_sigkilled_runner_leaves_running_state_that_goes_stuck(app_layout):
     state = load_run_state(storage, app_layout.app_name, verstr)
     assert state["state"] == "running"
     assert state["exit_code"] is None
-    assert st.derive_status(state) == st.RUNNING
+    assert st.derive_status(state, now=datetime.now(timezone.utc)) == st.RUNNING
 
     # Fixture setup: age the heartbeat past the staleness window.
     state["heartbeat"] = "2020-01-01T00:00:00Z"
     storage.save_file(
         app_layout.app_name, verstr, RUN_STATE_FILE, yaml.dump(state, sort_keys=False)
     )
-    assert st.derive_status(load_run_state(storage, app_layout.app_name, verstr)) == (
+    assert st.derive_status(
+        load_run_state(storage, app_layout.app_name, verstr), now=datetime.now(timezone.utc)
+    ) == (
         st.STUCK
     )
 
@@ -174,7 +178,7 @@ def test_created_experiment_has_no_run_state(app_layout, capfd):
     verstr = extract_dev_verstr(capfd.readouterr().out)
 
     assert _run_state(app_layout, verstr) is None
-    assert st.derive_status(None) == st.CREATED
+    assert st.derive_status(None, now=datetime.now(timezone.utc)) == st.CREATED
 
 
 def test_load_run_state_tolerates_corrupt_file(app_layout, capfd):

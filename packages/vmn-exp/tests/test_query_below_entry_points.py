@@ -10,9 +10,11 @@ import os
 import pytest
 import yaml
 from exp_helpers import _bootstrap, _exp, _storage
+from fakes.clock import FakeClock
 from similar_seed import seed, verstr
 
 from vmn_exp.core.status import RUN_STATE_FILE
+from vmn_exp.core.real_io import real_io
 
 TOP = "depth = 0 and "
 QUERIES = {
@@ -28,6 +30,10 @@ TOP_QUERIES = {"running_below > 0": [1, 9], "stuck_below > 0": [12],
 def _ago(seconds):
     now = datetime.datetime.now(datetime.timezone.utc)
     return (now - datetime.timedelta(seconds=seconds)).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def _now_clock():
+    return FakeClock(start=datetime.datetime.now(datetime.timezone.utc))
 
 
 def _beating(storage, app, v, age_sec=0):
@@ -89,7 +95,8 @@ def test_the_snapshot_listing_fills_the_below_counts(app_layout):
 
     app, storage = _seed(app_layout)
     for query, numbers in QUERIES.items():
-        rows = [r for r in snapshot_listing(storage, app, query)[0] if not r.get("archived")]
+        rows = [r for r in snapshot_listing(storage, app, query, clock=_now_clock())[0]
+                if not r.get("archived")]
         assert sorted(r["verstr"] for r in rows) == _expected(numbers), query
 
 
@@ -119,7 +126,7 @@ def test_the_board_top_q_and_the_cli_keep_the_same_outer_runs(app_layout, capfd)
     app, _ = _seed(app_layout)
     manager = WorkspaceManager(os.path.join(app_layout.base_dir, "ui_data"))
     manager.attach_path("main", app_layout.repo_path)
-    client = TestClient(create_app(manager))
+    client = TestClient(create_app(manager, io=real_io()))
     url = f"/api/v1/workspaces/main/apps/{app}/experiments"
     for query, numbers in TOP_QUERIES.items():
         body = client.get(url, params={"top": 1, "top_q": query, "limit": 50})
@@ -138,7 +145,7 @@ def test_the_board_q_and_the_cli_keep_the_same_runs(app_layout, capfd):
     app, _ = _seed(app_layout)
     manager = WorkspaceManager(os.path.join(app_layout.base_dir, "ui_data"))
     manager.attach_path("main", app_layout.repo_path)
-    client = TestClient(create_app(manager))
+    client = TestClient(create_app(manager, io=real_io()))
     url = f"/api/v1/workspaces/main/apps/{app}/experiments"
     for query, numbers in QUERIES.items():
         body = client.get(url, params={"q": query, "limit": 50})

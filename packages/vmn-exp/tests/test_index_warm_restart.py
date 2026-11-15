@@ -7,6 +7,7 @@ are read and the storage listing revalidates them in the background
 (stale-while-revalidate); :meth:`refresh_if_stale` still refreshes first.
 """
 import threading
+from datetime import datetime, timezone
 
 from vmn_exp.core.index import ExperimentIndex
 from vmn_exp.core.status import derive_status
@@ -98,9 +99,10 @@ def test_the_background_refresh_picks_up_what_changed_while_down(tmp_path):
     assert fresh.generation > stale.generation
     assert _losses(fresh)[new] == 7.0
     assert _losses(fresh)[verstrs[0]] == 0.5
-    assert derive_status(fresh.run_states[verstrs[1]]) == "succeeded"
+    now = datetime.now(timezone.utc)
+    assert derive_status(fresh.run_states[verstrs[1]], now) == "succeeded"
     # A run the server last saw running, unheard of since: stuck by now.
-    assert derive_status(fresh.run_states[verstrs[2]]) == "stuck"
+    assert derive_status(fresh.run_states[verstrs[2]], now) == "stuck"
 
 
 def test_refresh_if_stale_still_refreshes_before_answering(tmp_path):

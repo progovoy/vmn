@@ -3,16 +3,15 @@ from the same walk of the filtered rows as the vocabulary, skips them under
 a scope (a subtree has no top-level run), and is served by an ETag known
 before anything is computed."""
 import pytest
+from fakes.clock import FakeClock
 from leaderboard_fleet import T0, Fleet
 from vmn_exp.ui.leaderboard_cache import LeaderboardCache
 
-from vmn_exp.core import status as status_mod
 from vmn_exp.ui import leaderboard_answers, leaderboard_cache
 
 
 @pytest.fixture
-def board(monkeypatch):
-    monkeypatch.setattr(status_mod, "_now", lambda now=None: now or T0)
+def board():
     fleet = Fleet(5)
     jobs = fleet.seed_jobs(3, 10, T0, live=4)
     singles = [fleet.append(state=fleet.ended(T0)) for _ in range(6)]
@@ -34,9 +33,9 @@ def _counting_tails(monkeypatch):
 def test_filtered_facets_walk_the_filtered_rows_once(board, monkeypatch):
     fleet, jobs, _ = board
     snap = fleet.snapshot()
-    want = dict(LeaderboardCache().facets(snap, status="running"),
-                **LeaderboardCache().top_counts(snap, status="running"))
-    cache = LeaderboardCache()
+    want = dict(LeaderboardCache(now=FakeClock(T0).now).facets(snap, status="running"),
+                **LeaderboardCache(now=FakeClock(T0).now).top_counts(snap, status="running"))
+    cache = LeaderboardCache(now=FakeClock(T0).now)
     cache.page(snap, {}, limit=1)
     walks = _counting_tails(monkeypatch)
 
@@ -54,14 +53,14 @@ def test_scoped_facets_count_no_top_level_runs(board, monkeypatch):
         raise AssertionError("top counts walked under a scope")
 
     monkeypatch.setattr(leaderboard_answers, "top_counts", boom)
-    got = LeaderboardCache().facets_payload(snap, scope=jobs[0])
+    got = LeaderboardCache(now=FakeClock(T0).now).facets_payload(snap, scope=jobs[0])
 
     assert (got["jobs"], got["singles"]) == (0, 0) and got["total"] == 10
 
 
 def test_unfiltered_facets_carry_the_app_top_counts(board):
     fleet, jobs, singles = board
-    got = LeaderboardCache().facets_payload(fleet.snapshot())
+    got = LeaderboardCache(now=FakeClock(T0).now).facets_payload(fleet.snapshot())
     assert (got["jobs"], got["singles"]) == (len(jobs), len(singles))
 
 

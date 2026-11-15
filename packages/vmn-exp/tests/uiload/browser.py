@@ -105,9 +105,19 @@ class BrowserChecks:
         self.page.goto(url, wait_until="commit")
         return t0
 
-    def _wait_total(self):
-        """The filtered total the leaderboard subtitle shows, once loaded."""
-        self.page.wait_for_function(js.PAGE_TOTAL_SHOWN)
+    def _status_total(self, status):
+        """The total the leaderboard subtitle shows for ?status=*status*, once
+        it shows that board read's answer: for a frame or two the page can
+        still show the count of the filter opened before."""
+        lists = urlparse(self.api_url).path + "/experiments"
+
+        def is_answer(resp):
+            url = urlparse(resp.url)
+            return url.path == lists and parse_qs(url.query).get("status") == [status]
+
+        with self.page.expect_response(is_answer) as info:
+            self._open_board(status=status)
+        self.page.wait_for_function(js.PAGE_TOTAL_IS, arg=info.value.json()["total"])
         return self.page.evaluate(js.PAGE_TOTAL)
 
     def _api_rows(self, **params):
@@ -189,8 +199,7 @@ class BrowserChecks:
             visible[status] = visible.get(status, 0) + 1
         totals = {}
         for status in STATUSES:
-            self._open_board(status=status)
-            totals[status] = self._wait_total()
+            totals[status] = self._status_total(status)
         return {"visible": visible, "totals": totals}
 
     def idle_memory_growth(self, duration_sec, interval_sec=1.0):

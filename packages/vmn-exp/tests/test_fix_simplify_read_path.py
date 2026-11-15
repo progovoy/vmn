@@ -1,5 +1,6 @@
 """One read path for the ui: shared sort/tree helpers in core, one leaderboard
 pipeline, cached detail reads, streamed S3 artifacts, validated query params."""
+from datetime import datetime, timezone
 import os
 
 import pytest
@@ -14,6 +15,7 @@ from vmn_exp.core.log import sort_by_metric
 from vmn_exp.core.tree import subtree_status
 from vmn_exp.storage.areas import local_store_root
 from vmn_exp.storage.store_marker import new_marker
+from vmn_exp.core.real_io import RealClock, real_io
 
 APP = "app"
 BASE = f"/api/v1/workspaces/ws/apps/{APP}"
@@ -74,7 +76,7 @@ def test_subtree_status_reads_each_subtree_run_once_and_knows_its_depth():
         reads.append(verstr)
         return states.get(verstr)
 
-    state, tree = subtree_status("outer", parent_of, read)
+    state, tree = subtree_status("outer", parent_of, read, now=datetime.now(timezone.utc))
 
     assert state == states["outer"]
     assert sorted(reads) == ["a", "b", "outer"]
@@ -90,7 +92,7 @@ def test_subtree_status_reads_each_subtree_run_once_and_knows_its_depth():
 def _storage(tmp_path):
     root = tmp_path / "repo"
     (root / ".git").mkdir(parents=True, exist_ok=True)
-    return str(root), open_storage(root=local_store_root(str(root)), area="runs")
+    return str(root), open_storage(root=local_store_root(str(root)), area="runs", clock=RealClock(), env=os.environ)
 
 
 def _runs(storage, n, loss=0.1):
@@ -138,7 +140,8 @@ def test_one_leaderboard_pipeline_filters_orders_and_pages():
     from vmn_exp.ui.readers.experiments import leaderboard
 
     rows = [_row(0, 0.3), _row(1, 0.1), _row(2, 0.2)]
-    page = leaderboard(rows, {}, {}, sort="loss", order="asc", offset=1, limit=1)
+    page = leaderboard(rows, {}, {}, sort="loss", order="asc", offset=1, limit=1,
+                       now=RealClock().now())
 
     assert page["total"] == 3
     assert [r["metrics"]["loss"] for r in page["rows"]] == [0.2]
@@ -155,7 +158,7 @@ def _client(tmp_path, use_index=True):
 
     manager = WorkspaceManager(str(tmp_path / "data"))
     manager.attach_path("ws", root)
-    return TestClient(create_app(manager, use_index=use_index)), storage
+    return TestClient(create_app(manager, io=real_io(), use_index=use_index)), storage
 
 
 @pytest.mark.parametrize("use_index", [True, False])
@@ -247,12 +250,12 @@ def test_one_s3_storage_per_workspace(s3_ws, monkeypatch):
     built = []
     real = server_mod.workspace_storage
 
-    def counted(ws):
+    def counted(ws, clock, env):
         built.append(ws.store)
-        return real(ws)
+        return real(ws, clock, env)
 
     monkeypatch.setattr(server_mod, "workspace_storage", counted)
-    client = TestClient(server_mod.create_app(s3_ws))
+    client = TestClient(server_mod.create_app(s3_ws, io=real_io()))
     for _ in range(3):
         assert client.get(f"{BASE}/experiments?limit=5").status_code == 200
     client.get("/api/v1/workspaces/ws/apps")
@@ -275,7 +278,7 @@ def test_s3_artifacts_stream_without_a_disk_cache(s3_ws, tmp_path):
     cache = os.path.join(tempfile.gettempdir(), "vmn-artifact-cache")
     before = set(os.listdir(cache)) if os.path.isdir(cache) else set()
 
-    got = TestClient(create_app(s3_ws)).get(f"{BASE}/experiments/{verstr}/artifacts/model.bin")
+    got = TestClient(create_app(s3_ws, io=real_io())).get(f"{BASE}/experiments/{verstr}/artifacts/model.bin")
 
     after = set(os.listdir(cache)) if os.path.isdir(cache) else set()
     assert got.status_code == 200 and got.content == b"w" * 70_000

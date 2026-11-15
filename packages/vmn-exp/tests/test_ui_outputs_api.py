@@ -10,6 +10,7 @@ import yaml
 
 fastapi = pytest.importorskip("fastapi")
 from fastapi.testclient import TestClient  # noqa: E402
+from vmn_exp.core.real_io import real_io  # noqa: E402
 
 API = "/api/v1/workspaces/main/apps"
 SHA = "f" * 64
@@ -51,7 +52,7 @@ def client(request, app_layout):
     manager = WorkspaceManager(os.path.join(app_layout.base_dir, "ui_data"))
     manager.attach_path("main", app_layout.repo_path)
     _seed(app_layout)
-    return TestClient(create_app(manager, use_index=request.param))
+    return TestClient(create_app(manager, io=real_io(), use_index=request.param))
 
 
 def _url(app_layout, tail=""):

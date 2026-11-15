@@ -1,6 +1,6 @@
 # 13 — Reports and comments
 
-Status: **design, not started**. Builds on [11-central-server.md](11-central-server.md)
+Status: **done** (designed 2026-10-02, built from 2026-10-02; confirmed in code 2026-11-11). Builds on [11-central-server.md](11-central-server.md)
 (invariants I1–I8, the change journal, roles). This plan replaces §7.3 there.
 
 Paths are under `packages/`; `W` = `vmn-exp/webui/src`, `U` = `vmn-exp/src/vmn_exp/ui`,

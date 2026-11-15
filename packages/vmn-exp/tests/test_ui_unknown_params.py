@@ -1,11 +1,13 @@
 """An API request with a query parameter its route does not accept answers 400
 naming it (with a "did you mean" when one is close) instead of ignoring it;
 the web page and unknown API paths are not affected."""
+import os
+
 import pytest
 
 pytest.importorskip("fastapi")
 from fastapi.testclient import TestClient  # noqa: E402
-
+from vmn_exp.core.real_io import RealClock, real_io
 from vmn_exp.storage.areas import RUNS  # noqa: E402
 from vmn_exp.storage.open import open_storage  # noqa: E402
 
@@ -20,10 +22,10 @@ def client(tmp_path):
 
     uri = f"file://{tmp_path}/store"
     v = "0.0.1-dev.0000abcd.0"
-    open_storage(uri, area=RUNS).save("my_app", v, {"verstr": v}, {})
+    open_storage(uri, area=RUNS, clock=RealClock(), env=os.environ).save("my_app", v, {"verstr": v}, {})
     manager = WorkspaceManager(str(tmp_path / "data"))
     manager.add_store("ws", uri)
-    return TestClient(create_app(manager, background_refresh=False))
+    return TestClient(create_app(manager, io=real_io(), background_refresh=False))
 
 
 def test_an_unknown_param_is_refused_with_a_suggestion(client):

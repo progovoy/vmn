@@ -3,7 +3,8 @@
 import time
 
 from vmn_exp.ui.bulk_actions import BulkSpec
-from vmn_exp.ui.jobs import JobRunner
+from vmn_exp.ui.jobs import JobRunner, start_daemon
+from vmn_exp.core.real_io import RealProcesses, RealRandom
 
 
 def _wait(runner, job_id):
@@ -17,7 +18,7 @@ def _wait(runner, job_id):
 
 
 def test_a_bulk_job_resolves_at_start_and_acts_in_batches():
-    runner, batches = JobRunner(), []
+    runner, batches = JobRunner(processes=RealProcesses(), random=RealRandom(), start_thread=start_daemon), []
     resolved = []
     job, err = runner.submit_bulk(
         "ws", ["exp_archive", "my_app"],
@@ -38,7 +39,7 @@ def test_a_failed_batch_fails_the_job_with_the_progress_so_far():
             raise RuntimeError("boom")
         return "ok"
 
-    runner = JobRunner()
+    runner = JobRunner(processes=RealProcesses(), random=RealRandom(), start_thread=start_daemon)
     job, _ = runner.submit_bulk("ws", ["x"], lambda: [f"v{i}" for i in range(1200)], act)
     job = _wait(runner, job["id"])
     assert job["status"] == "failed" and "boom" in job["log"]
@@ -51,6 +52,6 @@ def test_git_commands_archive_a_batch_at_once_and_tag_run_by_run():
         ["vmn-exp", "experiment", "archive", "root/svc", "a", "b"]]
     tag, _ = BulkSpec.build("exp_tag", "my_app", {"scope": "j", "set": {"k": "v"}, "remove": ["o"]})
     assert tag.commands(["a", "b"]) == [
-        ["vmn-exp", "experiment", "tag", "my_app", "a", "k=v", "--remove", "o"],
-        ["vmn-exp", "experiment", "tag", "my_app", "b", "k=v", "--remove", "o"],
+        ["vmn-exp", "experiment", "tag", "my_app", "a", "k=v", "--remove=o"],
+        ["vmn-exp", "experiment", "tag", "my_app", "b", "k=v", "--remove=o"],
     ]

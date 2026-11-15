@@ -190,10 +190,16 @@ def _score_metric(call):
     best = getattr(call.instance, "best_score_", None)
     if best is not None:
         metrics["best_cv_score"] = best
+    metrics.update(_training_score(call))
+    return metrics
+
+
+def _training_score(call):
+    """``estimator.score(X[, y])`` on the training data, when wanted."""
     score = getattr(call.instance, "score", None)
     if callable(score) and call.args and _wants_training_score(call.args[0]):
-        metrics["score"] = score(*call.args[:2])
-    return metrics
+        return {"score": score(*call.args[:2])}
+    return {}
 
 
 def _wants_training_score(X):

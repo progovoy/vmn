@@ -19,6 +19,7 @@ from vmn_exp.core.writer import (
     merge_env_into_params,
 )
 from vmn_exp.sdk import start_run
+from vmn_exp.core.real_io import RealClock, real_io
 
 BUCKET = "ml-exps"
 ENV_KEYS = (
@@ -45,7 +46,7 @@ def test_env_fills_unset_storage_params(monkeypatch):
     monkeypatch.setenv("VMN_EXPERIMENT_ENDPOINT_URL", "http://minio:9000")
     params = {"backend": "local", "bucket": None, "prefix": None}
 
-    merge_env_into_params(params)
+    merge_env_into_params(params, os.environ)
 
     assert params["bucket"] == BUCKET
     assert params["prefix"] == "team-a"
@@ -56,7 +57,7 @@ def test_explicit_flags_beat_the_env(monkeypatch):
     monkeypatch.setenv("VMN_EXPERIMENT_BUCKET", BUCKET)
     params = {"bucket": "from-flag", "prefix": "custom"}
 
-    merge_env_into_params(params)
+    merge_env_into_params(params, os.environ)
 
     assert params == {"bucket": "from-flag", "prefix": "custom"}
 
@@ -66,7 +67,7 @@ def test_env_beats_conf_yml(monkeypatch):
     vcs = SimpleNamespace(experiment={"storage": {"bucket": "from-conf"}})
     params = {"backend": "local", "bucket": None}
 
-    merge_conf_into_params(vcs, params)
+    merge_conf_into_params(vcs, params, os.environ)
 
     assert params["bucket"] == BUCKET
 
@@ -99,7 +100,7 @@ def s3():
 def _bucket_runs():
     return [m["verstr"] for m in open_storage(
         s3_uri(BUCKET, "vmn"),
-        area="runs",
+        area="runs", clock=RealClock(), env=os.environ,
     ).list_snapshots("trainer")]
 
 
@@ -112,7 +113,7 @@ def test_start_run_in_a_pod_records_straight_to_the_bucket(tmp_path, monkeypatch
     assert _bucket_runs() == [run.id]
     log = open_storage(
         s3_uri(BUCKET, "vmn"),
-        area="runs",
+        area="runs", clock=RealClock(), env=os.environ,
     ).load_merged_log("trainer", run.id)
     assert any(e.get("values", {}).get("loss") == 0.25 for e in log)
 
@@ -133,7 +134,7 @@ def test_git_less_cli_create_records_to_the_env_bucket(tmp_path, monkeypatch, s3
 
     _container(tmp_path, monkeypatch)
 
-    err, _ = vmn_exp_run(["exp", "create", "trainer", "--note", "cli pod"])
+    err, _ = vmn_exp_run(["exp", "create", "trainer", "--note", "cli pod"], real_io())
 
     assert err == 0
     assert len(_bucket_runs()) == 1

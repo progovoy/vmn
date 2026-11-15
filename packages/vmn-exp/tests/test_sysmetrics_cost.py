@@ -19,17 +19,11 @@ import pytest
 from vmn_exp.sdk import start_run, sysmetrics
 from exp_helpers import _PY, _bootstrap, _experiment
 
+from fakes.clock import FakeClock
 from test_fix_sysmetrics import _FakeProc, _fake_psutil, _use
+from vmn_exp.core.real_io import RealClock
 
 _MB = 1024 * 1024
-
-
-class _Clock:
-    def __init__(self):
-        self.now = 1000.0
-
-    def __call__(self):
-        return self.now
 
 
 class _CountingProc(_FakeProc):
@@ -43,7 +37,7 @@ class _CountingProc(_FakeProc):
     def children(self, recursive=True):
         self.walks += 1
         if self._clock is not None:
-            self._clock.now += self._walk_cost
+            self._clock.advance(self._walk_cost)
         return super().children(recursive)
 
     def memory_full_info(self):
@@ -58,12 +52,12 @@ def test_a_slow_collector_build_does_not_block_a_tick(monkeypatch):
     release = threading.Event()
     recorded = []
 
-    def _slow_build(pid=None):
+    def _slow_build(pid=None, clock=None):
         release.wait(5)
         return lambda: {"sys_cpu_percent": 1.0}
 
     monkeypatch.setattr(sysmetrics, "build_collector", _slow_build)
-    sampler = sysmetrics.Sampler(recorded.append, True)
+    sampler = sysmetrics.Sampler(recorded.append, True, clock=RealClock())
 
     started = time.monotonic()
     sampler.tick()
@@ -82,15 +76,14 @@ def test_a_slow_collector_build_does_not_block_a_tick(monkeypatch):
 
 
 def test_an_expensive_tree_walk_is_not_repeated_every_tick(monkeypatch):
-    clock = _Clock()
-    monkeypatch.setattr(sysmetrics, "_clock", clock)
+    clock = FakeClock()
     root = _CountingProc(1, rss_mb=100, clock=clock, walk_cost=0.05)
     _use(monkeypatch, psutil=_fake_psutil(root))
-    collector = sysmetrics.build_collector(1)
+    collector = sysmetrics.build_collector(1, clock=clock)
     walks_at_start = root.walks
 
     for _ in range(10):  # a 1s heartbeat for 10s
-        clock.now += 1
+        clock.advance(1)
         collector()
 
     # 0.05s per walk: within the budget a walk is due every 0.05/duty seconds.
@@ -100,14 +93,13 @@ def test_an_expensive_tree_walk_is_not_repeated_every_tick(monkeypatch):
 
 
 def test_a_cheap_tree_walk_still_finds_new_workers_every_tick(monkeypatch):
-    clock = _Clock()
-    monkeypatch.setattr(sysmetrics, "_clock", clock)
+    clock = FakeClock()
     root = _CountingProc(1, rss_mb=100, clock=clock, walk_cost=0.0)
     _use(monkeypatch, psutil=_fake_psutil(root))
-    collector = sysmetrics.build_collector(1)
+    collector = sysmetrics.build_collector(1, clock=clock)
     collector()
 
-    clock.now += 1
+    clock.advance(1)
     root.kids = [_FakeProc(2, rss_mb=7)]
     assert collector()["sys_rss_mb"] == pytest.approx(107)
 
@@ -120,7 +112,7 @@ def test_uss_is_read_every_nth_tick_and_estimated_from_rss_in_between(monkeypatc
     kid = _CountingProc(2, rss_mb=400, uss_mb=10)
     root.kids = [kid]
     _use(monkeypatch, psutil=_fake_psutil(root))
-    collector = sysmetrics.build_collector(1)
+    collector = sysmetrics.build_collector(1, clock=RealClock())
 
     n = sysmetrics.USS_EVERY_N_TICKS
     readings = [collector()["sys_rss_mb"] for _ in range(2 * n + 1)]
@@ -138,19 +130,19 @@ def test_uss_is_read_every_nth_tick_and_estimated_from_rss_in_between(monkeypatc
 def test_an_sdk_run_inside_a_sampling_supervisor_defaults_off(monkeypatch):
     monkeypatch.delenv(sysmetrics.SYSTEM_METRICS_ENV, raising=False)
     monkeypatch.setenv(sysmetrics.SUPERVISOR_SAMPLES_ENV, "1")
-    assert sysmetrics.sdk_enabled(None) is False
-    assert sysmetrics.sdk_enabled(True) is True  # asked for explicitly
+    assert sysmetrics.sdk_enabled(None, os.environ) is False
+    assert sysmetrics.sdk_enabled(True, os.environ) is True  # asked for explicitly
 
     monkeypatch.delenv(sysmetrics.SUPERVISOR_SAMPLES_ENV)
-    assert sysmetrics.sdk_enabled(None) is True
-    assert sysmetrics.sdk_enabled(None, {"system_metrics": False}) is False
+    assert sysmetrics.sdk_enabled(None, os.environ) is True
+    assert sysmetrics.sdk_enabled(None, os.environ, {"system_metrics": False}) is False
 
 
 def test_start_run_under_a_sampling_supervisor_does_not_sample(app_layout, monkeypatch):
     _bootstrap(app_layout)
     built = []
     monkeypatch.setattr(
-        sysmetrics, "build_collector", lambda pid=None: built.append(pid) or dict
+        sysmetrics, "build_collector", lambda pid=None, clock=None: built.append(pid) or dict
     )
     monkeypatch.delenv(sysmetrics.SYSTEM_METRICS_ENV, raising=False)
     monkeypatch.setenv(sysmetrics.SUPERVISOR_SAMPLES_ENV, "1")

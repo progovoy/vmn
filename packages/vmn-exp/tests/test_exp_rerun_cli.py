@@ -1,11 +1,12 @@
 """``vmn-exp rerun``: refusals, warnings, ``--dry-run``, ``--print`` and how
 ``show``/``list`` present a rerun."""
 import json
+import os
 import subprocess
 
 import pytest
 import yaml
-from exp_helpers import _PY, _bootstrap, _exec_script, _exp, _storage
+from exp_helpers import _PY, _SRC_PATH, _bootstrap, _exec_script, _exp, _storage
 from rerun_helpers import (
     code_objects, meta, original_run, rerun, run_names, worktrees,
 )
@@ -47,7 +48,12 @@ def test_created_only_run_errors_no_command(app_layout, capfd):
     assert "after `--`" in _out(capfd)
 
 
-def test_sdk_run_errors_with_hint_and_override_yields_inner_run(app_layout, capfd):
+def test_sdk_run_errors_with_hint_and_override_records_into_the_rerun(
+        app_layout, capfd, monkeypatch):
+    monkeypatch.delenv("VMN_EXP_ADOPT", raising=False)
+    # The rerun child imports this tree's SDK, not an installed one.
+    monkeypatch.setenv("PYTHONPATH", os.pathsep.join(
+        p for p in (_SRC_PATH, os.environ.get("PYTHONPATH")) if p))
     _bootstrap(app_layout)
     body = (
         "from vmn_exp.sdk import start_run\n"
@@ -65,11 +71,11 @@ def test_sdk_run_errors_with_hint_and_override_yields_inner_run(app_layout, capf
     before = run_names(app_layout)
     assert _exp(app_layout.app_name, action="rerun", version=orig,
                 run_cmd=[_PY, "sdk_train.py"]) == 0
-    new = run_names(app_layout) - before
-    assert len(new) == 2
-    (outer,) = [v for v in new if meta(app_layout, v).get("rerun_of") == orig]
-    (inner,) = new - {outer}
-    assert meta(app_layout, inner)["parent"] == outer
+    (new,) = run_names(app_layout) - before
+    assert meta(app_layout, new)["rerun_of"] == orig
+    assert not meta(app_layout, new).get("parent")
+    log = _storage(app_layout).load_merged_log(app_layout.app_name, new)
+    assert any(e.get("values", {}).get("m") == 5 for e in log)
 
 
 def test_imported_run_refused_no_code(app_layout, capfd):

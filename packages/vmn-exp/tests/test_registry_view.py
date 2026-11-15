@@ -11,6 +11,7 @@ from vmn_exp.storage.local import LocalSnapshotStorage
 from vmn_exp.registry.store import ensure_model, register_version
 from vmn_exp.registry.log import set_alias, set_version_status
 from vmn_exp.registry.view import model_state, resolve_ref, registered_runs
+from vmn_exp.core.real_io import real_io
 
 
 # ---------------------------------------------------------------------------
@@ -31,9 +32,9 @@ def _setup_resnet(storage):
     v1 = register_version(storage, "resnet", _run_ref("myapp", "1.0.0"))
     v2 = register_version(storage, "resnet", _run_ref("myapp", "2.0.0"))
     v3 = register_version(storage, "resnet", _run_ref("myapp", "3.0.0"))
-    set_alias(storage, "resnet", "prod", v2)
-    set_alias(storage, "resnet", "staging", v3)
-    set_version_status(storage, "resnet", v1, "deprecated")
+    set_alias(storage, "resnet", "prod", v2, env=real_io().env, host=real_io().host)
+    set_alias(storage, "resnet", "staging", v3, env=real_io().env, host=real_io().host)
+    set_version_status(storage, "resnet", v1, "deprecated", env=real_io().env, host=real_io().host)
     return v1, v2, v3
 
 
@@ -85,9 +86,9 @@ def test_resolve_ref_alias_number_latest_deleted_skipped(tmp_path):
     v2 = register_version(storage, "resnet", _run_ref("myapp", "2.0.0"))
     v3 = register_version(storage, "resnet", _run_ref("myapp", "3.0.0"))
 
-    set_alias(storage, "resnet", "prod", v2)
+    set_alias(storage, "resnet", "prod", v2, env=real_io().env, host=real_io().host)
     # Delete v3 — must remove alias first (no alias points to v3)
-    set_version_status(storage, "resnet", v3, "deleted")
+    set_version_status(storage, "resnet", v3, "deleted", env=real_io().env, host=real_io().host)
 
     # Resolve by alias
     result = resolve_ref(storage, "resnet@prod")
@@ -125,7 +126,7 @@ def test_registered_runs_excludes_deleted_versions(tmp_path):
     ensure_model(storage, "modelA")
     register_version(storage, "modelA", _run_ref("app1", "1.0.0"))
     register_version(storage, "modelA", _run_ref("app1", "2.0.0"))
-    set_version_status(storage, "modelA", 2, "deleted")
+    set_version_status(storage, "modelA", 2, "deleted", env=real_io().env, host=real_io().host)
 
     # modelB: v1 (app2/3.0.0); not deleted
     ensure_model(storage, "modelB")

@@ -1,11 +1,12 @@
 """What the SDK's S3 backend must keep while it is rebuilt on core's
-``version_stamp.store.s3_*`` (plan 37 P5c): its format gate (records of a
+``version_stamp.store.s3_*`` (plan 45 P5c): its format gate (records of a
 newer format are skipped), the format version it writes (2, not core's 1),
 the children flag its listings note, and which classes define its record
 API (R3: a core base must not shadow a format-gated SDK method)."""
 import pytest
 import yaml
 from s3_helpers import BUCKET, PREFIX, mocked_bucket, put_raw, s3_storage
+from writer_args import process_suffix, process_writer
 
 import boto3
 
@@ -70,7 +71,8 @@ def test_a_saved_snapshot_carries_format_version_2(s3):
 
 
 def test_a_created_run_carries_format_version_2(s3):
-    verstr = create_run(s3, APP, CODE, {"timestamp": "2026-01-01T00:00:00Z"}, {})
+    verstr = create_run(s3, APP, CODE, {"timestamp": "2026-01-01T00:00:00Z"}, {},
+                        writer=process_writer(), suffix=process_suffix())
 
     assert _metadata_of(verstr)["format_version"] == 2
 
@@ -113,7 +115,8 @@ def test_a_round_trip_reads_back_metadata_and_patches(s3):
 
 @pytest.mark.parametrize("list_app", ["list_verstrs", "list_record_names", "list_snapshots"])
 def test_a_listing_still_notes_the_children_flag(s3, list_app):
-    create_run(s3, APP, CODE, {"timestamp": "2026-01-01T00:00:00Z"}, {})
+    create_run(s3, APP, CODE, {"timestamp": "2026-01-01T00:00:00Z"}, {},
+               writer=process_writer(), suffix=process_suffix())
     s3.set_children_complete(APP, True)
     children_flag._SEEN.clear()
     fresh = s3_storage()

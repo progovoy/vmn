@@ -8,6 +8,7 @@ import os
 import pytest
 from exp_helpers import _bootstrap, _exp, _storage
 from similar_seed import seed, verstr
+from vmn_exp.core.real_io import real_io
 
 QUERIES = {
     'intent ~ "focal"': [1, 2],
@@ -104,7 +105,7 @@ def test_ui_board_selects_the_same_runs(app_layout):
     app, _ = _seed(app_layout)
     manager = WorkspaceManager(os.path.join(app_layout.base_dir, "ui_data"))
     manager.attach_path("main", app_layout.repo_path)
-    client = TestClient(create_app(manager))
+    client = TestClient(create_app(manager, io=real_io()))
     url = f"/api/v1/workspaces/main/apps/{app}/experiments"
     for query, numbers in QUERIES.items():
         response = client.get(url, params={"q": query})

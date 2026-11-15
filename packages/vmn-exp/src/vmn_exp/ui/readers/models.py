@@ -13,6 +13,7 @@ from vmn_exp.registry.store import (
     load_header, registry_storage,
 )
 from vmn_exp.storage.s3_base import parallel_map
+from vmn_exp.ui.http_params import page_of
 from vmn_exp.ui.registry_snapshot import read_models
 
 
@@ -158,11 +159,14 @@ class ModelListing:
         files = registry_storage(storage).list_files(name)
         return ModelListing({**self._models, name: _ModelRow(storage, name, files)})
 
-    def response(self, kind=None) -> dict:
+    def response(self, kind=None, offset=0, limit=None) -> dict:
         """``{"models": [ModelRow ...]}``, name-ordered, only *kind*
-        (``model``/``dataset``) entries when given."""
+        (``model``/``dataset``) entries when given; with *offset*/*limit*
+        one page of them plus their ``total``."""
         rows = (self._models[name].row for name in sorted(self._models))
-        return {"models": [row for row in rows if row and kind in (None, row["kind"])]}
+        rows = [row for row in rows if row and kind in (None, row["kind"])]
+        page, total = page_of(rows, offset, limit)
+        return {"models": page} if total is None else {"models": page, "total": total}
 
 
 def list_models_response(storage, kind=None) -> dict:

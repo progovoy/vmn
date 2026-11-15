@@ -9,6 +9,7 @@ import vmn_exp.cli.similar as similar_cli
 from exp_helpers import _PROJECT_ROOT
 from vmn_exp.cli.main import vmn_exp_run
 from vmn_exp.core.fold import fold_hypothesis, fold_log
+from vmn_exp.core.real_io import real_io
 from vmn_exp.core.writer import create_log_entry
 from vmn_exp.sdk.reader import similar_runs
 
@@ -46,7 +47,7 @@ def _section(relpath, heading):
 
 
 def test_the_docs_say_the_target_apps_weights_score_every_app_searched():
-    ui = _section("docs/vmn-exp/ui.md", "### Similar runs")
+    ui = _section("docs/vmn-exp/ui-api.md", "### Similar runs")
     sdk = _section("docs/vmn-exp/sdk.md", "### Similar runs")
     cli = _section(EXPERIMENTS, "### `similar`")
     for text in (ui, sdk, cli, _flat(similar_runs.__doc__)):
@@ -79,11 +80,11 @@ def test_the_hint_docs_name_what_warms_its_index_and_not_the_ui():
 
 def _version_help(capsys):
     with pytest.raises(SystemExit) as exc:
-        vmn_exp_run(["similar", "--help"])
+        vmn_exp_run(["similar", "--help"], real_io())
     assert exc.value.code == 0
     out = _flat(capsys.readouterr().out)
     start = out.index("-v VERSION, --version VERSION")
-    return out[start:out.index("--note NOTE", start)]
+    return out[start:out.index("--top TOP", start)]
 
 
 def test_the_similar_docs_call_the_working_tree_default_the_one_exception(capsys):
@@ -113,7 +114,7 @@ def test_the_similar_docs_no_longer_describe_the_in_memory_index():
         assert stale not in cli, stale
     server = _flat(_read("docs/vmn-exp/server.md"))
     assert "scored in Python from each app's index snapshot" not in server
-    ui = _section("docs/vmn-exp/ui.md", "### Similar runs")
+    ui = _section("docs/vmn-exp/ui-api.md", "### Similar runs")
     assert "Scored from the apps' index snapshots" not in ui
 
 

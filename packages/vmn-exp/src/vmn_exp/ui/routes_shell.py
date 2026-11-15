@@ -18,7 +18,6 @@ import json
 
 from fastapi import HTTPException, Request
 
-import vmn_exp.core.status as experiment_status
 from vmn_exp.core.app_settings import DEFAULT_FAILED_PCT_THRESHOLD, failed_pct_threshold_of
 from vmn_exp.ui.api_errors import CodedError
 from vmn_exp.ui.attention import attention_key, attention_payload
@@ -37,7 +36,8 @@ STATUS_BODIES = 256
 
 
 def register(app, prefix, git_workspace, status_snapshot, app_tags, leaderboards,
-             freshness_of, attention_of=None, schema_of=None, views_of=None, ui_of=None):
+             freshness_of, attention_of=None, schema_of=None, views_of=None, ui_of=None, *,
+             processes):
     """Add the routes; *git_workspace(ws_name)* raises the route's 400/404,
     *status_snapshot(ws_name, app_tag)* -> the app's snapshot (raising its
     404 when there is no such app), *app_tags(ws_name)* -> the workspace's
@@ -46,7 +46,7 @@ def register(app, prefix, git_workspace, status_snapshot, app_tags, leaderboards
     *attention_of(ws_name, app_tag)* -> its attention entries,
     *schema_of(ws_name, app_tag, snapshot)* -> the board's metrics schema,
     *views_of(ws_name, app_tag)* -> its team views, *ui_of(ws_name,
-    app_tag)* -> its ``experiment.ui``. Returns
+    app_tag)* -> its ``experiment.ui``; *processes* runs ``git status``. Returns
     ``forget(ws_name)``, which drops a removed workspace's git context."""
     contexts = TTLCache(GIT_TTL_SEC)
     summaries = LRU(STATUS_BODIES)
@@ -80,7 +80,7 @@ def register(app, prefix, git_workspace, status_snapshot, app_tags, leaderboards
         when no part is shown), keyed by their pinned queries (an ``ago()``
         one moves with the minute)."""
         key = leaderboards.etag(snapshot, schema, kind="attention", scope=scope,
-                                entries=attention_key(entries))
+                                entries=attention_key(entries, leaderboards.now()))
         parts = summaries.get(key, lambda: attention_payload(
             leaderboards, snapshot, schema, entries, scope))
         return (dict(payload, attention=parts) if parts else payload), _digest(etag + key)
@@ -88,7 +88,7 @@ def register(app, prefix, git_workspace, status_snapshot, app_tags, leaderboards
     @app.get(f"{prefix}/workspaces/{{ws_name}}/git", dependencies=[require(VIEWER)])
     def workspace_git(ws_name: str):  # sync: git runs in the threadpool
         path = git_workspace(ws_name).path
-        return contexts.get(ws_name, lambda: git_context(path))
+        return contexts.get(ws_name, lambda: git_context(path, processes))
 
     @app.get(
         f"{prefix}/workspaces/{{ws_name}}/apps/{{app_tag}}/experiments-status",
@@ -99,7 +99,7 @@ def register(app, prefix, git_workspace, status_snapshot, app_tags, leaderboards
             raise HTTPException(400, f"Invalid scope '{scope}'")
         entries = attention_of(ws_name, app_tag)
         try:
-            payload, etag = summary(ws_name, app_tag, experiment_status._now(), scope, entries)
+            payload, etag = summary(ws_name, app_tag, leaderboards.now(), scope, entries)
         except UnknownScope as e:
             raise HTTPException(404, str(e))
         views = [] if scope else views_of(ws_name, app_tag)
@@ -113,7 +113,7 @@ def register(app, prefix, git_workspace, status_snapshot, app_tags, leaderboards
 
     @app.get(f"{prefix}/workspaces/{{ws_name}}/apps-status", dependencies=[require(VIEWER)])
     def apps_status(request: Request, ws_name: str):
-        now = experiment_status._now()
+        now = leaderboards.now()
         answers = {}
         for tag in app_tags(ws_name):
             try:

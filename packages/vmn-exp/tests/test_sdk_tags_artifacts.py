@@ -4,6 +4,7 @@
 finished run), ``log_dict``/``log_text``/``log_figure``/``log_artifacts``, and
 ``vmn_exp.sdk.manage.archive_run`` which ``list_runs`` honours.
 """
+import os
 import json
 
 import pytest
@@ -14,7 +15,8 @@ from vmn_exp.snapshot import LocalSnapshotStorage
 from vmn_exp.storage.cached import CachedSnapshotStorage
 from vmn_exp.core.log import experiment_row
 from vmn_exp.sdk import manage, reader, start_run
-from vmn_exp.sdk.run import Run
+from vmn_exp.sdk.run import Run, _real_process_hooks
+from vmn_exp.core.real_io import RealClock, RealHost, RealRandom
 
 APP = "app"
 VERSTR = "0.0.1-dev.aaaaaaa.bbbbbbb"
@@ -29,7 +31,7 @@ def storage(tmp_path):
 
 @pytest.fixture
 def run(storage):
-    run = Run(storage, APP, VERSTR, 60)
+    run = Run(storage, APP, VERSTR, 60, clock=RealClock(), host=RealHost(), random=RealRandom(), env=os.environ, install_hooks=_real_process_hooks())
     run._open()
     yield run
     run.finish()

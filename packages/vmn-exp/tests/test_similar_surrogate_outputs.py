@@ -10,6 +10,7 @@ from exp_helpers import _bootstrap, _exp, _storage
 from similar_fixtures import FakeSnapshot, changed, run
 from similar_seed import TRAIN_STEP, features, seed, verstr
 from vmn_exp.core.similar_search import intent_excerpt, search
+from vmn_exp.core.real_io import RealClock
 
 BAD = "focal \ud800 loss"
 SHOWN = "focal ? loss"
@@ -53,7 +54,7 @@ def test_every_string_of_a_search_item_is_utf8():
               "features": changed(["tr\ud800in.py"], ["tr\ud800in.py::step"]),
               "intent": {"text": "focal loss", "keywords": [BAD]}}
 
-    [item] = search(None, "app", snap, target)
+    [item] = search(None, "app", snap, target, clock=RealClock())
 
     assert _all_utf8(item)
     json.dumps(item, ensure_ascii=False).encode("utf-8")

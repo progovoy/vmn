@@ -1,5 +1,6 @@
 /** The Changes card's pieces: the metric delta (top goal metrics by |Δ|),
- *  the files list and the expandable diff (params: ParamDeltaBlock). */
+ *  the files list, the untracked files beside it and the expandable diff
+ *  (params: ParamDeltaBlock). */
 import { useState } from "react";
 import type { PatchFile } from "../apiRunCode";
 import type { DiffDelta } from "../types";
@@ -68,6 +69,31 @@ export function FilesList({ files }: { files: PatchFile[] }) {
         </li>
       ))}
     </ul>
+  );
+}
+
+/** The untracked files a run captured beside its tracked diff: not in the
+ *  diff, but restore and export bring them back. */
+export function UntrackedList({ files, total, unreadable }: {
+  files: string[]; total?: number; unreadable?: boolean;
+}) {
+  if (unreadable) {
+    return <p className="changes-reason">Untracked files were captured, but their tarball could not be read.</p>;
+  }
+  const more = (total ?? files.length) - files.length;
+  return (
+    <div className="changes-untracked">
+      <ul className="changes-files" aria-label="Untracked files">
+        {files.map((path) => (
+          <li key={path}>
+            <span className="mono path">{path}</span>
+            <span className="tag-chip">untracked</span>
+          </li>
+        ))}
+      </ul>
+      {more > 0 && <p className="changes-reason">+{more} more untracked files</p>}
+      <p className="changes-reason">Untracked files are not in the diff; restore or export brings them back.</p>
+    </div>
   );
 }
 

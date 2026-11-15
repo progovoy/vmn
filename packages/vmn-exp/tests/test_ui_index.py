@@ -13,6 +13,7 @@ from exp_helpers import (
     _stamp_app,
     extract_dev_verstr,
 )
+from vmn_exp.core.real_io import RealClock, real_io
 
 
 def _make_dirty(app_layout, filename, content):
@@ -38,7 +39,7 @@ def _index(app_layout):
     from vmn_exp.ui.index import WorkspaceIndex
 
     db_dir = os.path.join(app_layout.base_dir, "ui_data", "index")
-    return WorkspaceIndex(app_layout.repo_path, db_dir=db_dir)
+    return WorkspaceIndex(app_layout.repo_path, db_dir=db_dir, processes=real_io().processes, clock=RealClock(), env=os.environ)
 
 
 def _rows(idx, app_layout):
@@ -51,7 +52,7 @@ def _clients(app_layout):
 
     manager = WorkspaceManager(os.path.join(app_layout.base_dir, "ui_data"))
     manager.attach_path("main", app_layout.repo_path)
-    return TestClient(create_app(manager)), TestClient(create_app(manager, use_index=False))
+    return TestClient(create_app(manager, io=real_io())), TestClient(create_app(manager, io=real_io(), use_index=False))
 
 
 def test_index_experiments_parity(app_layout, capfd):
@@ -150,7 +151,7 @@ def test_index_versions_cached_through_cache_store_kv(app_layout, capfd, monkeyp
 
     _seed(app_layout, capfd, n=1)
     db_dir = os.path.join(app_layout.base_dir, "ui_data", "index") if persisted else None
-    idx = WorkspaceIndex(app_layout.repo_path, db_dir=db_dir)
+    idx = WorkspaceIndex(app_layout.repo_path, db_dir=db_dir, processes=real_io().processes, clock=RealClock(), env=os.environ)
     puts = []
     real_put = SqliteStore.kv_put
     monkeypatch.setattr(

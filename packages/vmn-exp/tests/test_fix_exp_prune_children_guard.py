@@ -11,6 +11,7 @@ import vmn_exp.core.index as experiment_index
 from vmn_exp.cli import prune as prune_mod
 from vmn_exp.storage.local import LocalSnapshotStorage
 from version_stamp.core.logging import init_stamp_logger
+from vmn_exp.core.real_io import RealClock
 
 APP = "app"
 RUNS = [f"0.0.1-dev.abc1234.r{i}" for i in range(3)]
@@ -70,7 +71,7 @@ def _args(*refs, **kw):
 
 
 def _prune(storage, *refs, **kw):
-    return prune_mod.experiment_prune(None, {}, storage, _args(*refs, **kw), APP)
+    return prune_mod.experiment_prune(None, {}, storage, _args(*refs, **kw), APP, clock=RealClock())
 
 
 def _left(storage):

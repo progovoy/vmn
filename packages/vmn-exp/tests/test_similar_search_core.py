@@ -4,6 +4,7 @@ ran it, when, how it ended and did, what it was for and what it changed —
 candidates narrowed by ``--query`` and without archived runs — plus the
 conf's ``experiment.similar`` section."""
 import pytest
+from fakes.clock import FakeClock
 from similar_fixtures import FakeSnapshot, changed, run, verstrs
 from vmn_exp.core import similar_search
 from vmn_exp.core.query import QueryError
@@ -35,7 +36,7 @@ def test_an_item_says_who_when_how_and_what_of_the_run():
     snap = _snapshot(row, intents={"a": intent}, declared={"val_loss": {"goal": "min"}},
                      run_states={"a": {"exit_code": 0}}, create_notes={"a": "first try"})
 
-    [item] = search(None, "app", snap, TARGET)
+    [item] = search(None, "app", snap, TARGET, clock=FakeClock())
 
     assert set(item) == ITEM_KEYS
     assert (item["app"], item["verstr"], item["name"]) == ("app", "a", "focal")
@@ -50,13 +51,13 @@ def test_an_item_says_who_when_how_and_what_of_the_run():
 
 def test_the_record_note_wins_over_the_create_note_and_a_run_without_state_is_created():
     snap = _snapshot(run("a", note="kept"), create_notes={"a": "first try"})
-    [item] = search(None, "app", snap, TARGET)
+    [item] = search(None, "app", snap, TARGET, clock=FakeClock())
     assert (item["note"], item["status"]) == ("kept", "created")
 
 
 def test_an_item_copies_the_features_it_returns():
     snap = _snapshot(run("a"))
-    [item] = search(None, "app", snap, TARGET)
+    [item] = search(None, "app", snap, TARGET, clock=FakeClock())
     item["features"]["changed"]["symbols"].append("x.py::y")
     assert snap.features_of("a")["changed"]["symbols"] == SYMS
 
@@ -75,32 +76,32 @@ def test_an_intent_excerpt_is_the_first_2048_bytes_on_a_character_boundary():
 def test_a_query_narrows_the_candidates_on_annotated_rows():
     snap = _snapshot(run("a", params={"lr": 0.1}), run("b", params={"lr": 0.001}),
                      run_states={"a": {"exit_code": 0}, "b": {"exit_code": 1}})
-    assert sorted(verstrs(search(None, "app", snap, TARGET))) == ["a", "b"]
-    assert verstrs(search(None, "app", snap, TARGET, query="params.lr > 0.01")) == ["a"]
-    assert verstrs(search(None, "app", snap, TARGET, query='status = "failed"')) == ["b"]
+    assert sorted(verstrs(search(None, "app", snap, TARGET, clock=FakeClock()))) == ["a", "b"]
+    assert verstrs(search(None, "app", snap, TARGET, query="params.lr > 0.01", clock=FakeClock())) == ["a"]
+    assert verstrs(search(None, "app", snap, TARGET, query='status = "failed"', clock=FakeClock())) == ["b"]
 
 
 def test_a_bad_query_raises_query_error():
     with pytest.raises(QueryError):
-        search(None, "app", _snapshot(run("a")), TARGET, query="metrics.loss <")
+        search(None, "app", _snapshot(run("a")), TARGET, query="metrics.loss <", clock=FakeClock())
 
 
 def test_archived_runs_are_left_out_unless_asked_for():
     snap = _snapshot(run("a"), run("b", archived=True))
-    assert verstrs(search(None, "app", snap, TARGET)) == ["a"]
-    assert sorted(verstrs(search(None, "app", snap, TARGET, include_archived=True))) == ["a", "b"]
+    assert verstrs(search(None, "app", snap, TARGET, clock=FakeClock())) == ["a"]
+    assert sorted(verstrs(search(None, "app", snap, TARGET, include_archived=True, clock=FakeClock()))) == ["a", "b"]
 
 
 def test_top_caps_the_items():
     snap = _snapshot(*(run(f"r{i}") for i in range(5)))
-    assert len(search(None, "app", snap, TARGET, top=2)) == 2
+    assert len(search(None, "app", snap, TARGET, top=2, clock=FakeClock())) == 2
 
 
 def test_a_text_target_is_a_pure_text_query():
     snap = _snapshot(run("a"), run("b"), features={},
                      intents={"a": {"text": "label smoothing helps"},
                               "b": {"text": "focal loss for imbalance"}})
-    [item] = search(None, "app", snap, text_target("label smoothing"))
+    [item] = search(None, "app", snap, text_target("label smoothing"), clock=FakeClock())
     assert item["verstr"] == "a" and set(item["signals"]) == {"text"}
 
 
@@ -116,7 +117,7 @@ def test_the_conf_similar_section_tolerates_any_shape():
 def test_invalid_weights_never_break_a_search():
     snap = _snapshot(run("a"))
     for weights in ("bogus", {"symbols": "lots", "nope": 1, "files": -2}, [1, 2]):
-        assert verstrs(search(None, "app", snap, TARGET, weights=weights)) == ["a"]
+        assert verstrs(search(None, "app", snap, TARGET, weights=weights, clock=FakeClock())) == ["a"]
 
 
 def test_conf_schema_is_the_metrics_mapping_or_empty():

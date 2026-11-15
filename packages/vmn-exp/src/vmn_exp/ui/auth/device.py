@@ -5,15 +5,12 @@ The CLI never talks to the IdP: it asks the server to start a device
 authorization, shows the user code, and polls the server. The IdP's
 device_code stays server-side under an opaque handle. On approval the server
 checks the id_token like the browser flow and mints an API token carrying
-the user's roles (group mappings resolved at login).
+the user's groups; its roles follow the server's role mappings per request.
 """
-import secrets
-
-from vmn_exp.ui.auth.oidc import OIDCError
+from vmn_exp.ui.auth.oidc import LOGIN_TOKEN_TTL_SEC, OIDCError
 from vmn_exp.ui.auth.tokens import TokenService
 
 DEVICE_GRANT = "urn:ietf:params:oauth:grant-type:device_code"
-LOGIN_TOKEN_TTL_SEC = 90 * 24 * 3600
 PENDING_ERRORS = ("authorization_pending", "slow_down")
 _KEY = "device:"
 
@@ -29,7 +26,7 @@ class DeviceFlowError(Exception):
 class DeviceFlow:
     def __init__(self, oidc, ttl_sec=LOGIN_TOKEN_TTL_SEC):
         self.oidc = oidc
-        self.tokens = TokenService(oidc.store, clock=oidc.clock)
+        self.tokens = TokenService(oidc.store, clock=oidc.clock, random=oidc.random)
         self.ttl_sec = ttl_sec
 
     def start(self):
@@ -44,7 +41,7 @@ class DeviceFlow:
             raise OIDCError("device authorization failed") from exc
         if "device_code" not in grant:
             raise OIDCError(f"device authorization failed: {grant.get('error')}")
-        handle = secrets.token_urlsafe(32)
+        handle = self.oidc.random.token_urlsafe(32)
         expires_in = int(grant.get("expires_in") or 600)
         self.oidc.store.put("login", _KEY + handle, {"device_code": grant["device_code"]},
                             self.oidc.clock() + expires_in)
@@ -55,6 +52,8 @@ class DeviceFlow:
     def poll(self, handle):
         """``(plaintext token, record, principal)`` once approved, else raises
         :class:`DeviceFlowError`."""
+        if handle is not None and not isinstance(handle, str):
+            raise DeviceFlowError("invalid_request")
         key = _KEY + (handle or "")
         pending = self.oidc.store.get("login", key, now=self.oidc.clock())
         if pending is None:
@@ -70,8 +69,8 @@ class DeviceFlow:
         except OIDCError as exc:
             raise DeviceFlowError("invalid_grant") from exc
         token, record = self.tokens.create(
-            f"vmn-exp login ({principal.name})", principal.roles,
-            owner=principal.id, ttl_sec=self.ttl_sec)
+            f"vmn-exp login ({principal.name})", {}, owner=principal.id,
+            ttl_sec=self.ttl_sec, groups=principal.groups)
         return token, record, principal
 
     def _exchange(self, device_code):

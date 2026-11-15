@@ -2,6 +2,7 @@
 any directory; only a bare `vmn-exp ui` needs the enclosing git checkout."""
 import pytest
 from vmn_exp.cli.main import vmn_exp_run
+from vmn_exp.core.real_io import real_io
 
 
 @pytest.fixture
@@ -10,7 +11,7 @@ def served(monkeypatch, tmp_path):
     calls = []
     import vmn_exp.ui.cli as ui_cli
 
-    monkeypatch.setattr(ui_cli, "handle_ui", lambda args: calls.append(args) or 0)
+    monkeypatch.setattr(ui_cli, "handle_ui", lambda args, io: calls.append(args) or 0)
     outside = tmp_path / "not_a_repo"
     outside.mkdir()
     monkeypatch.chdir(outside)
@@ -25,14 +26,14 @@ def served(monkeypatch, tmp_path):
 ], ids=["repo", "store", "config"])
 def test_an_explicit_source_serves_outside_a_git_checkout(served, source):
     calls, tmp = served
-    code, _ = vmn_exp_run(["ui", "--no-browser", *source(tmp)])
+    code, _ = vmn_exp_run(["ui", "--no-browser", *source(tmp)], real_io())
     assert code == 0
     assert len(calls) == 1
 
 
 def test_a_bare_ui_outside_a_git_checkout_still_asks_for_one(served, capfd):
     calls, _ = served
-    code, _ = vmn_exp_run(["ui", "--no-browser"])
+    code, _ = vmn_exp_run(["ui", "--no-browser"], real_io())
     assert code == 1
     assert calls == []
     out = capfd.readouterr()

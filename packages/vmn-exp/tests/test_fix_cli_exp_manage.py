@@ -111,7 +111,7 @@ def test_archive_of_an_unknown_run_fails(app_layout):
 def test_stray_positionals_are_refused_by_other_actions(app_layout):
     _bootstrap(app_layout)
     _create(app_layout)
-    assert _exp(app_layout.app_name, action="list", extra_args=["extra"]) == 1
+    assert _exp(app_layout.app_name, action="list", extra_args=["extra"]) == 2
 
 
 def test_prune_treats_archived_runs_like_any_finished_run(app_layout):

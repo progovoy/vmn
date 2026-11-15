@@ -30,7 +30,6 @@ import logging
 import os
 import sys
 import threading
-import time
 
 from vmn_exp.core.env import opted_in
 from vmn_exp.sdk.fork_safety import PROCESS_GATE
@@ -75,25 +74,22 @@ TREE_WALK_DUTY = 0.01
 # A child's USS parses its smaps; between reads it is estimated from its RSS.
 USS_EVERY_N_TICKS = 10
 
-# The clock the tree-walk budget reads; a seam for tests.
-_clock = time.monotonic
 
-
-def enabled(explicit, exp_conf=None):
+def enabled(explicit, exp_conf=None, *, env):
     """Whether a run samples system metrics: on unless something opts out.
 
     Precedence: explicit (``False`` from ``--no-system-metrics`` or the SDK
-    kwarg) > ``VMN_SYSTEM_METRICS`` > conf ``experiment.system_metrics`` > True.
+    kwarg) > *env*'s ``VMN_SYSTEM_METRICS`` > conf ``experiment.system_metrics`` > True.
     """
-    return opted_in(explicit, SYSTEM_METRICS_ENV, "system_metrics", exp_conf)
+    return opted_in(explicit, SYSTEM_METRICS_ENV, "system_metrics", exp_conf, env=env)
 
 
-def sdk_enabled(explicit, exp_conf=None):
-    """:func:`enabled`, but off by default under a ``vmn-exp run`` that
-    already samples this process's tree — explicit ``True`` still samples."""
-    if explicit is None and os.environ.get(SUPERVISOR_SAMPLES_ENV):
+def sdk_enabled(explicit, env, exp_conf=None):
+    """:func:`enabled`, but off by default under a ``vmn-exp run`` that already
+    samples this process's tree (*env* says) — explicit ``True`` still samples."""
+    if explicit is None and env.get(SUPERVISOR_SAMPLES_ENV):
         return False
-    return enabled(explicit, exp_conf)
+    return enabled(explicit, exp_conf, env=env)
 
 
 # Optional modules found missing; never looked for again in this process.
@@ -134,8 +130,9 @@ class _ProcessProbe:
     instance's* previous call — a fresh object every tick would read 0.0 forever.
     """
 
-    def __init__(self, root):
+    def __init__(self, root, clock):
         self._root = root
+        self._clock = clock
         self._tracked = {root.pid: root}
         self._walked_at = None
         self._walk_cost = 0.0
@@ -144,8 +141,7 @@ class _ProcessProbe:
         # Prime every process's CPU interval; a first reading is always 0.0.
         for proc in self._tree()[0]:
             self._read_cpu(proc)
-        self._last_mono = time.monotonic()
-        self._last_wall = time.time()
+        self._last_mono, self._last_wall = self._clock.monotonic(), self._clock.now().timestamp()
 
     def pids(self):
         """The pids sampled last tick — the run's process tree."""
@@ -154,21 +150,21 @@ class _ProcessProbe:
     def _walk_due(self):
         if self._walked_at is None:
             return True
-        return _clock() - self._walked_at >= self._walk_cost / TREE_WALK_DUTY
+        return self._clock.monotonic() - self._walked_at >= self._walk_cost / TREE_WALK_DUTY
 
     def _tree(self):
         """This tick's processes (reusing held objects) and the newly seen pids."""
         if not self._walk_due():
             return list(self._tracked.values()), set()
         found = [self._root]
-        started = _clock()
+        started = self._clock.monotonic()
         try:
             found.extend(self._root.children(recursive=True))
         except Exception:
             # The root exited, or we lost the right to look.
             _LOGGER.debug("Could not enumerate child processes", exc_info=True)
             found = list(self._tracked.values())
-        self._walked_at, self._walk_cost = started, _clock() - started
+        self._walked_at, self._walk_cost = started, self._clock.monotonic() - started
 
         new = {p.pid for p in found} - set(self._tracked)
         # Rebuilt rather than pruned, so a finished worker stops being sampled.
@@ -221,11 +217,11 @@ class _ProcessProbe:
         return proc.memory_info().rss * self._uss_ratio[proc.pid]
 
     def __call__(self):
-        wait = MIN_SAMPLE_INTERVAL_SEC - (time.monotonic() - self._last_mono)
+        wait = MIN_SAMPLE_INTERVAL_SEC - (self._clock.monotonic() - self._last_mono)
         if wait > 0:
-            time.sleep(wait)  # only when called right after the probe was built
+            self._clock.sleep(wait)  # only when called right after the probe was built
         procs, new = self._tree()
-        elapsed = time.monotonic() - self._last_mono
+        elapsed = self._clock.monotonic() - self._last_mono
         read_uss = self._ticks % USS_EVERY_N_TICKS == 0
         self._ticks += 1
         cpu = 0.0
@@ -240,30 +236,30 @@ class _ProcessProbe:
                     memory += self._memory(proc, read_uss)
             except Exception:
                 self._forget(proc)  # exited between listing and reading: normal
-        self._last_mono, self._last_wall = time.monotonic(), time.time()
+        self._last_mono, self._last_wall = self._clock.monotonic(), self._clock.now().timestamp()
         return {CPU_PERCENT: round(cpu, 1), RSS_MB: round(memory / _MB, 1)}
 
 
-def _process_probe(pid=None):
+def _process_probe(pid, clock):
     """A probe for *pid*'s tree, or this process's when *pid* is None."""
     psutil = _import_optional("psutil")
     if psutil is None:
         return None
     try:
-        return _ProcessProbe(psutil.Process(pid or os.getpid()))
+        return _ProcessProbe(psutil.Process(pid or os.getpid()), clock)
     except Exception:
         _LOGGER.debug("psutil is installed but unusable here", exc_info=True)
         return None
 
 
-def build_collector(pid=None):
+def build_collector(pid=None, *, clock):
     """A callable returning ``{name: number}``, or None if nothing can be read.
 
     *pid* is the process to measure, together with its children; None means this
     process. Degrades per probe rather than all-or-nothing, so a host with
     psutil and no GPU reports CPU and RSS alone.
     """
-    process = _process_probe(pid)
+    process = _process_probe(pid, clock)
     root = pid or os.getpid()
     pynvml = _import_optional("pynvml")
     tree = process.pids if process is not None else (lambda: {root})
@@ -305,10 +301,12 @@ class Sampler:
             (see :func:`enabled`).
         pid: the process to measure, with its children; None means this process.
         collector: an explicit collector, bypassing :func:`build_collector`.
+        clock: what the probe times and waits on.
     """
 
-    def __init__(self, record, enabled, pid=None, collector=None):
+    def __init__(self, record, enabled, pid=None, collector=None, *, clock):
         self._record = record
+        self._clock = clock
         self._enabled = enabled
         self._pid = pid
         self._collector = collector
@@ -326,7 +324,7 @@ class Sampler:
     def _build(self):
         try:
             # nvmlInit: a fork must not catch the driver state half-built.
-            collector = PROCESS_GATE.wrap(build_collector)(self._pid)
+            collector = PROCESS_GATE.wrap(build_collector)(self._pid, clock=self._clock)
         except Exception:
             _LOGGER.debug("Building the system-metrics collector failed", exc_info=True)
             collector = None
@@ -335,7 +333,7 @@ class Sampler:
             return
         # The probe's first CPU reading needs this long since it was primed;
         # waited here so that a beat never sleeps for it.
-        time.sleep(MIN_SAMPLE_INTERVAL_SEC)
+        self._clock.sleep(MIN_SAMPLE_INTERVAL_SEC)
         self._collector = collector
 
     def tick(self):

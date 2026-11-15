@@ -73,7 +73,7 @@ def test_prefix_cap_and_stats_locks_are_per_process(forked, monkeypatch):
     done = threading.Event()
 
     def use():
-        cap = s3_prefix_cap._cap_of("bkt", "p")
+        cap = s3_prefix_cap._cap_of("bkt", "p", os.environ)
         cap.acquire()
         cap.release()
         s3_prefix_cap.prefix_cap_stats()
@@ -93,10 +93,10 @@ def test_prefix_cap_slots_the_parent_held_are_free_in_the_child(forked, monkeypa
     from vmn_exp.storage import s3_prefix_cap
 
     monkeypatch.setenv(s3_prefix_cap.ENV, "1")
-    held = s3_prefix_cap._cap_of("bkt-held", "p")
+    held = s3_prefix_cap._cap_of("bkt-held", "p", os.environ)
     held.acquire()  # a parent call in flight
     forked()
-    cap = s3_prefix_cap._cap_of("bkt-held", "p")
+    cap = s3_prefix_cap._cap_of("bkt-held", "p", os.environ)
     try:
         assert cap.slots.acquire(timeout=1), "the child waited on the parent's slot"
         cap.slots.release()
@@ -136,7 +136,7 @@ def test_gcs_store_builds_a_fresh_client_in_the_child(monkeypatch, forked):
     import sys
 
     sys.modules["google.cloud.storage"].Client = lambda *a, **k: FakeGCSClient()
-    store = open_store("gs://bkt/team", area="runs")
+    store = open_store("gs://bkt/team", area="runs", env=os.environ)
     clone = store._open_area("models")
     parent = store._s3
     forked()
@@ -160,7 +160,7 @@ def test_azure_store_builds_a_fresh_container_client_in_the_child(monkeypatch, f
 
     install_fake_azure(monkeypatch)
     monkeypatch.setenv("AZURE_STORAGE_CONNECTION_STRING", "UseDevelopmentStorage=true")
-    store = open_store("az://ctr", area="runs")
+    store = open_store("az://ctr", area="runs", env=os.environ)
     parent = store._s3
     forked()
     child = store._s3

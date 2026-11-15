@@ -12,6 +12,7 @@ from vmn_exp.registry.names import HEADER_RECORD, version_record_name
 from vmn_exp.registry.store import registry_storage
 from vmn_exp.storage.areas import REGISTRY
 from vmn_exp.storage.local import LocalSnapshotStorage
+from vmn_exp.core.real_io import real_io
 
 MODELS = "/api/v1/workspaces/st/models"
 READS = ("list_apps", "list_files", "list_record_names", "load_file", "load_logs_by_writer",
@@ -39,7 +40,7 @@ def build_registry(storage, models, versions, aliased=0):
                 "run_ref": {"app": "app", "verstr": f"1.0.{n}"}, "artifact_path": "model.pkl",
             }), {})
         if m < aliased:
-            set_alias(storage, name, "prod", versions)
+            set_alias(storage, name, "prod", versions, env=real_io().env, host=real_io().host)
 
 
 def store_client(tmp_path, background):
@@ -48,7 +49,7 @@ def store_client(tmp_path, background):
 
     manager = WorkspaceManager(str(tmp_path / "data"))
     manager.add_store("st", f"file://{os.path.abspath(tmp_path / 'store')}")
-    app = create_app(manager, background_refresh=background)
+    app = create_app(manager, io=real_io(), background_refresh=background)
     return app, TestClient(app)
 
 

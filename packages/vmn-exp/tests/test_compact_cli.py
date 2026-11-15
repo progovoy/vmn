@@ -11,6 +11,7 @@ from vmn_exp.core.metric_compact import compact_record, record_compacted
 from vmn_exp.core.metric_files import is_indexed_file
 from vmn_exp.core.metric_stream import MetricWriter
 from vmn_exp.core.status import RUN_STATE_FILE
+import time
 
 T0 = 1_767_225_600_000_000
 
@@ -25,7 +26,7 @@ def _run(app_layout, capfd, exit_code=1, steps=4):
     assert _experiment(app_layout.app_name, action="create") == 0
     verstr = extract_dev_verstr(capfd.readouterr().out)
     storage = _storage(app_layout)
-    w = MetricWriter(storage, app_layout.app_name, verstr, "w")
+    w = MetricWriter(storage, app_layout.app_name, verstr, "w", clock=time.time)
     for step in range(1, steps + 1):
         w.add("loss", 1.0 / step, step=step, ts_us=T0 + step)
     w.flush()

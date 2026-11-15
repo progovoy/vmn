@@ -12,7 +12,6 @@ states only through the reader its caller passes in.
 """
 from collections import Counter
 
-import vmn_exp.core.status as experiment_status
 from vmn_exp.core.settle import (
     ENDED,
     LOST,
@@ -25,15 +24,8 @@ from vmn_exp.core.settle import (
     subtree_settled,
 )
 from vmn_exp.core.status import (
-    CREATED,
-    FAILED,
-    RUNNING,
-    STUCK,
-    SUCCEEDED,
-    derive_status,
-    settle_status,
-    status_fields,
-    with_queue_sec,
+    CREATED, FAILED, MIN_STALE_SEC, RUNNING, STUCK, SUCCEEDED, derive_status, settle_status,
+    status_fields, with_queue_sec,
 )
 
 OUTER = "outer"  # has children
@@ -210,19 +202,19 @@ def annotate_tree(rows):
     return _annotate_tree_in_place([dict(r) for r in rows])
 
 
-def annotate_rows(rows, run_states, observed_at=None, now=None):
+def annotate_rows(rows, run_states, observed_at=None, *, now, min_stale_sec=MIN_STALE_SEC):
     """Copies of *rows* with their derived status fields and tree fields.
 
     *run_states* is ``{verstr: raw run state}``, *observed_at* ``{verstr:
-    run_state.yml store write time}``. Time-dependent: never cache the output.
+    run_state.yml store write time}``, *min_stale_sec* the stuck floor.
+    Time-dependent: never cache the output.
     """
     run_states = run_states or {}
     observed_at = observed_at or {}
-    now = experiment_status._now(now)  # one clock reading for every row
     return _annotate_tree_in_place([
         dict(row, **with_queue_sec(row, status_fields(
             run_states.get(row["verstr"]), now=now,
-            observed_at=observed_at.get(row["verstr"]),
+            observed_at=observed_at.get(row["verstr"]), min_stale_sec=min_stale_sec,
         )))
         for row in rows
     ])
@@ -272,8 +264,8 @@ TREE_FIELDS = ("children", "kind", "depth", "settled", "tree_status", "child_cou
 
 
 def subtree_status(
-    verstr, parent_of, read_state, children_of=None, observed_at=None, row_of=None,
-):
+    verstr, parent_of, read_state, children_of=None, observed_at=None, row_of=None, *, now,
+    min_stale_sec=MIN_STALE_SEC):
     """``(run_state, tree_fields)`` for one run, reading its subtree's states only.
 
     *parent_of* is ``{verstr: parent}`` for the app's runs (only ``.get`` is
@@ -288,7 +280,7 @@ def subtree_status(
     *row_of(verstr)*, when given, returns a run's index row (or None): a sweep
     row's ``sweep_planned`` and its trials' tags make an incomplete sweep
     ``created`` (see :func:`sweep_incomplete`) and add ``sweep_planned`` /
-    ``sweep_trials`` to the tree fields.
+    ``sweep_trials`` to the tree fields. Statuses are derived at *now* on *min_stale_sec*.
     """
     if children_of is None:
         children_of = children_by_parent(
@@ -300,7 +292,8 @@ def subtree_status(
     parent = parent_of.get(verstr)
 
     def status_of(v, state):
-        return derive_status(state, observed_at=observed_at(v) if observed_at else None)
+        return derive_status(state, now, observed_at(v) if observed_at else None,
+                             min_stale_sec=min_stale_sec)
 
     statuses = {v: status_of(v, state) for v, state in states.items()}
     chain = ancestors(verstr, parent_of)
@@ -332,7 +325,8 @@ def _sweep_fields(verstr, children, row_of):
     return {"sweep_planned": planned, "sweep_trials": sweep_trial_count(rows)}
 
 
-def run_status(verstr, parent_of, read_state, observed_at=None, children_of=None, row_of=None):
+def run_status(verstr, parent_of, read_state, observed_at=None, children_of=None, row_of=None, *,
+               now, min_stale_sec=MIN_STALE_SEC):
     """One run's status fields plus its tree fields, reading its subtree only.
 
     Arguments as for :func:`subtree_status`; *observed_at(verstr)* weighs the
@@ -340,9 +334,10 @@ def run_status(verstr, parent_of, read_state, observed_at=None, children_of=None
     """
     run_state, tree = subtree_status(
         verstr, parent_of, read_state, children_of=children_of, observed_at=observed_at,
-        row_of=row_of,
+        row_of=row_of, now=now, min_stale_sec=min_stale_sec,
     )
-    status = status_fields(run_state, observed_at=observed_at(verstr) if observed_at else None)
+    status = status_fields(run_state, now, observed_at(verstr) if observed_at else None,
+                           min_stale_sec=min_stale_sec)
     status.update(tree)
     return status
 
@@ -376,7 +371,7 @@ def _child_row_fields(row):
 
 
 def fleet_summary(verstr, children_of, read_state, observed_at=None, expected=None,
-                  read_child_row=None, closed=False):
+                  read_child_row=None, closed=False, *, now, min_stale_sec=MIN_STALE_SEC):
     """Fleet status for an outer run: per-child status counts and progress.
 
     Returns None when *verstr* has no children. *expected* is the declared
@@ -386,7 +381,7 @@ def fleet_summary(verstr, children_of, read_state, observed_at=None, expected=No
     progress), or None. When the outer run is *closed* (see
     :func:`~vmn_exp.core.settle.closes`) its never-started children and
     slots count as ``never_started``, its stuck children as ``lost``,
-    beside ``counts`` (never in it).
+    beside ``counts`` (never in it). *min_stale_sec*: the stuck floor.
     """
     children = children_of.get(verstr, [])
     if not children:
@@ -397,7 +392,7 @@ def fleet_summary(verstr, children_of, read_state, observed_at=None, expected=No
     for child in children:
         state = read_state(child)
         obs = observed_at(child) if observed_at else None
-        status = derive_status(state, observed_at=obs)
+        status = derive_status(state, now=now, observed_at=obs, min_stale_sec=min_stale_sec)
         counted.append(counted_as(status, settled_as(_settle_key(status, state), closed)))
 
         if len(child_details) < FLEET_MAX_CHILDREN_DETAIL:

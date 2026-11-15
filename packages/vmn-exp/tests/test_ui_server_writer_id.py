@@ -2,6 +2,7 @@
 (unless ``VMN_WRITER_ID`` names one), the id the generated edit IAM policy
 allows (``runs/*/*/log/vmn-server*``, plan 11 §6.3)."""
 import argparse
+import dataclasses
 import os
 
 import pytest
@@ -14,6 +15,7 @@ from vmn_exp.storage.open import open_storage  # noqa: E402
 from vmn_exp.ui.cli import server_app  # noqa: E402
 from vmn_exp.ui.jobs_store import build_store_action  # noqa: E402
 from vmn_exp.ui.workspaces import WorkspaceManager  # noqa: E402
+from vmn_exp.core.real_io import RealClock, real_io
 
 APP = "app"
 V = "0.0.1-dev.abc.r1"
@@ -22,15 +24,16 @@ V = "0.0.1-dev.abc.r1"
 def _serve(tmp_path):
     args = argparse.Namespace(host="127.0.0.1", read_only=False, no_index=False,
                               allowed_host=None)
-    server_app(WorkspaceManager(str(tmp_path / "ui")), None, None, args, env={})
+    server_app(WorkspaceManager(str(tmp_path / "ui")), None, None, args, io=dataclasses.replace(
+        real_io(), env={k: v for k, v in os.environ.items() if k == "VMN_WRITER_ID"}))
 
 
 def _rewind(tmp_path):
-    storage = open_storage(f"file://{tmp_path}/store", area=RUNS)
+    storage = open_storage(f"file://{tmp_path}/store", area=RUNS, clock=RealClock(), env=os.environ)
     storage.save(APP, V, {"verstr": V, "timestamp": "2026-01-01T00:00:00Z"}, {})
-    action, err = build_store_action("exp_rewind", APP, {"verstr": V, "step": 0})
+    action, err = build_store_action("exp_rewind", APP, {"verstr": V, "step": 0}, env=real_io().env, host=real_io().host)
     assert err is None
-    action.run(storage, lambda app, verstr: None)
+    action.run(storage, lambda app, verstr: None, RealClock().now())
     return [name for root, _, files in os.walk(tmp_path / "store") for name in files
             if os.path.basename(root) == "log"]
 
@@ -46,4 +49,4 @@ def test_server_edits_use_the_server_writer_id(tmp_path, monkeypatch):
 def test_vmn_writer_id_wins(tmp_path, monkeypatch):
     monkeypatch.setenv("VMN_WRITER_ID", "pod7")
     _serve(tmp_path)
-    assert writer.get_writer_id() == "pod7"
+    assert writer.get_writer_id(real_io().env, real_io().host) == "pod7"

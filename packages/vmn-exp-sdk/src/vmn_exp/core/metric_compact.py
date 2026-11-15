@@ -19,7 +19,7 @@ import time
 from contextlib import nullcontext
 
 from vmn_exp._base import VMN_LOGGER
-from vmn_exp.core.index_metric_reads import relisted
+from vmn_exp.core.metric_object_reads import relisted
 from vmn_exp.core.metric_columns import Columns
 from vmn_exp.core.metric_files import is_indexed_file, last_seq
 from vmn_exp.core.metric_index_file import build_index

@@ -1,4 +1,4 @@
-"""The SDK's store.yml marker is core's (plan 37 P5d): vmn_exp.storage.store_marker
+"""The SDK's store.yml marker is core's (plan 45 P5d): vmn_exp.storage.store_marker
 re-exports version_stamp.store.marker and only wires the real time functions."""
 import pytest
 import yaml

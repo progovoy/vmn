@@ -12,6 +12,7 @@ from vmn_exp.core.storage_resolve import resolve_experiment_storage
 from vmn_exp.core.writer import merge_conf_into_params, merge_env_into_params
 from vmn_exp.storage.open import open_storage
 from vmn_exp.storage.s3 import S3SnapshotStorage
+from vmn_exp.core.real_io import RealClock, real_io
 
 BUCKET = "ml-exps"
 APP = "trainer"
@@ -64,19 +65,19 @@ def _remote(storage):
 
 
 def test_s3_uri_without_a_root_writes_to_its_prefix(s3):
-    storage = open_storage(f"s3://{BUCKET}/team/exps", area="runs")
+    storage = open_storage(f"s3://{BUCKET}/team/exps", area="runs", clock=RealClock(), env=os.environ)
     assert _record(storage)
     assert _keys(s3, "team/exps/runs/trainer/")
 
 
 def test_s3_uri_without_a_prefix_uses_the_vmn_root(s3):
-    storage = open_storage(f"s3://{BUCKET}", area="runs")
+    storage = open_storage(f"s3://{BUCKET}", area="runs", clock=RealClock(), env=os.environ)
     assert _remote(storage).prefix == "vmn/runs"
 
 
 def test_s3_uri_with_a_root_is_cached_locally(s3, tmp_path):
     storage = open_storage(
-        f"s3://{BUCKET}/p", root=str(tmp_path), area="runs"
+        f"s3://{BUCKET}/p", root=str(tmp_path), area="runs", clock=RealClock(), env=os.environ
     )
     assert _record(storage)
     assert isinstance(storage._remote, S3SnapshotStorage)
@@ -86,7 +87,7 @@ def test_s3_uri_with_a_root_is_cached_locally(s3, tmp_path):
 
 def test_endpoint_url_option_reaches_the_s3_client(s3):
     storage = open_storage(
-        f"s3://{BUCKET}/p?endpoint_url=http://localhost:1", area="runs", writer=False
+        f"s3://{BUCKET}/p?endpoint_url=http://localhost:1", area="runs", writer=False, clock=RealClock(), env=os.environ
     )
     assert _remote(storage).endpoint_url == "http://localhost:1"
 
@@ -94,7 +95,7 @@ def test_endpoint_url_option_reaches_the_s3_client(s3):
 def test_file_uri_is_the_local_root(tmp_path):
     other = tmp_path / "repo"
     storage = open_storage(
-        f"file://{tmp_path / 'nfs'}", root=str(other), area="runs"
+        f"file://{tmp_path / 'nfs'}", root=str(other), area="runs", clock=RealClock(), env=os.environ
     )
     assert _record(storage)
     assert (tmp_path / "nfs" / "runs" / APP).is_dir()
@@ -103,27 +104,27 @@ def test_file_uri_is_the_local_root(tmp_path):
 
 def test_no_root_and_no_store_is_an_error():
     with pytest.raises(ValueError):
-        open_storage(None, area="runs")
+        open_storage(None, area="runs", clock=RealClock(), env=os.environ)
 
 
 # -- resolution order -------------------------------------------------------------
 
 
 def test_resolve_takes_a_store_uri(s3):
-    storage = resolve_experiment_storage(store=f"s3://{BUCKET}/r", repo_root=False)
+    storage = resolve_experiment_storage(store=f"s3://{BUCKET}/r", repo_root=False, clock=RealClock(), env=os.environ)
     assert _record(storage)
     assert _keys(s3, "r/")
 
 
 def test_store_env_selects_the_store(s3, monkeypatch):
     monkeypatch.setenv("VMN_EXPERIMENT_STORE", f"s3://{BUCKET}/from-env")
-    assert _record(resolve_experiment_storage(repo_root=False))
+    assert _record(resolve_experiment_storage(repo_root=False, clock=RealClock(), env=os.environ))
     assert _keys(s3, "from-env/")
 
 
 def test_store_beats_the_bucket_shorthand(s3, monkeypatch):
     monkeypatch.setenv("VMN_EXPERIMENT_BUCKET", "some-other-bucket")
-    storage = resolve_experiment_storage(store=f"s3://{BUCKET}/win", repo_root=False)
+    storage = resolve_experiment_storage(store=f"s3://{BUCKET}/win", repo_root=False, clock=RealClock(), env=os.environ)
     assert _remote(storage).bucket == BUCKET
 
 
@@ -131,7 +132,7 @@ def test_env_store_fills_params():
     os.environ["VMN_EXPERIMENT_STORE"] = "gs://b/p"
     try:
         params = {"store": None}
-        merge_env_into_params(params)
+        merge_env_into_params(params, os.environ)
         assert params["store"] == "gs://b/p"
     finally:
         del os.environ["VMN_EXPERIMENT_STORE"]
@@ -140,14 +141,14 @@ def test_env_store_fills_params():
 def test_conf_storage_uri_fills_params():
     vcs = SimpleNamespace(experiment={"storage": {"uri": "az://c/p"}})
     params = {"store": None}
-    merge_conf_into_params(vcs, params)
+    merge_conf_into_params(vcs, params, os.environ)
     assert params["store"] == "az://c/p"
 
 
 def test_store_flag_beats_conf_uri():
     vcs = SimpleNamespace(experiment={"storage": {"uri": "az://c/p"}})
     params = {"store": "gs://flag/p"}
-    merge_conf_into_params(vcs, params)
+    merge_conf_into_params(vcs, params, os.environ)
     assert params["store"] == "gs://flag/p"
 
 
@@ -172,7 +173,7 @@ def test_cli_store_flag_records_to_the_uri(tmp_path, monkeypatch, s3):
     from vmn_exp.cli.main import vmn_exp_run
 
     _container(tmp_path, monkeypatch)
-    err, _ = vmn_exp_run(["exp", "create", APP, "--store", f"s3://{BUCKET}/cli"])
+    err, _ = vmn_exp_run(["exp", "create", APP, "--store", f"s3://{BUCKET}/cli"], real_io())
 
     assert err == 0
     assert _keys(s3, "cli/runs/trainer/")
@@ -182,7 +183,7 @@ def test_cli_file_store_records_to_the_path(tmp_path, monkeypatch):
     from vmn_exp.cli.main import vmn_exp_run
 
     _container(tmp_path, monkeypatch)
-    err, _ = vmn_exp_run(["exp", "create", APP, "--store", f"file://{tmp_path / 'd'}"])
+    err, _ = vmn_exp_run(["exp", "create", APP, "--store", f"file://{tmp_path / 'd'}"], real_io())
 
     assert err == 0
     assert (tmp_path / "d" / "runs" / APP).is_dir()

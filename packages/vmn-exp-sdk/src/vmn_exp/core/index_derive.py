@@ -57,9 +57,9 @@ def decoded_chunk(conn, app, after, size):
     return {key: seq for key, seq, *_ in rows}, records
 
 
-def derive_chunk(conn, app):
-    """Re-derive *app*'s next chunk; how many records it took, 0 once
-    nothing is left (see the module)."""
+def derive_chunk(conn, app, now):
+    """Re-derive *app*'s next chunk, its statuses at *now*; how many records
+    it took, 0 once nothing is left (see the module)."""
     after = pending_after(conn, app)
     if after is None:
         return 0
@@ -73,7 +73,8 @@ def derive_chunk(conn, app):
             fresh = {key: records[key] for key, seq in record_seqs(conn, app, seqs).items()
                      if seq == seqs[key]}
             mine = {key: leans[key] for key in fresh if key in leans}
-            write_lean(conn, app, _generation(conn, app), fresh, (), {}, mine, renumber=False)
+            write_lean(conn, app, _generation(conn, app), fresh, (), {}, mine, renumber=False,
+                       now=now)
             if similar_fts.has_tables(conn):  # the filer refiles them (similar_corpus)
                 similar_fts.mark_refile(conn, app, list(fresh))
             _move_marker(conn, app, max(seqs))
@@ -154,7 +155,7 @@ class Rederive:
         while True:
             if progress is not None:
                 progress(done, total)
-            taken = derive_chunk(conn, app_name)
+            taken = derive_chunk(conn, app_name, self._clock.now())
             if not taken:
                 return True
             done = min(done + taken, total)
