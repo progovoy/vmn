@@ -35,6 +35,8 @@ def _alive(pid):
 def test_a_background_watched_index_uses_a_helper_until_stopped(tmp_path):
     index = ExperimentIndex(_seed(tmp_path), APP, cache_path=str(tmp_path / "idx.sqlite"))
     refresher = Refresher(interval_sec=0.02, idle_sec=60, clock=time.monotonic)
+    refresher.snapshot(index)  # watches the index; a cold one answers at once, empty
+    index.snapshot()  # hold until the helper's first load is published
     snap = refresher.snapshot(index)
     assert len(snap.rows) == 3
     helper = index._io._proc.pid
@@ -66,10 +68,17 @@ def test_the_server_lists_through_the_helper(tmp_path):
     manager.attach_path("ws", str(root))
     app = create_app(manager, io=real_io(), background_refresh=True)
     try:
+        url = f"/api/v1/workspaces/ws/apps/{APP}/experiments?limit=10"
         with TestClient(app) as client:
-            body = client.get(f"/api/v1/workspaces/ws/apps/{APP}/experiments?limit=10").json()
+            client.get(url)  # opens the app's index; its first load runs in the background
+            watched = list(app.state.refresher._watches)
+            for index in watched:
+                # A background-refreshed board answers a cold index at once
+                # (empty while loading): hold until the helper's first load
+                # is published, then read the board it built.
+                index.snapshot()
+            body = client.get(url).json()
         assert [r["verstr"] for r in body["rows"]] == [f"0.0.1-dev.abc.r{i}" for i in range(3)]
-        watched = list(app.state.refresher._watches)
         assert watched and all(index._io is not None for index in watched)
     finally:
         app.state.refresher.stop()
