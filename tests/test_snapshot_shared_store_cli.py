@@ -114,3 +114,39 @@ def test_s3_store_create_and_list(app_layout, capfd, monkeypatch):
     assert any(k.startswith(f"team/snapshots/{app_layout.app_name}/") for k in keys)
     assert any(k.startswith(f"team/code/{app_layout.app_name}/") for k in keys)
     assert not os.path.isdir(_local_snapshots(app_layout))
+
+
+def _listing_snapshots_drops_the_network(client):
+    """Fails the snapshot listing (not the store check) as a dropped connection would."""
+    from botocore.exceptions import EndpointConnectionError
+
+    def fail(params, **kwargs):
+        if "/snapshots/" in params.get("Prefix", ""):
+            raise EndpointConnectionError(endpoint_url="http://s3.test")
+
+    client.meta.events.register("provide-client-params.s3.ListObjectsV2", fail)
+    return client
+
+
+def test_s3_store_failing_after_it_opened_fails_with_a_message(app_layout, capfd, monkeypatch):
+    pytest.importorskip("boto3")
+    moto = pytest.importorskip("moto")
+    from version_stamp.core import real_io
+    from version_stamp.store.s3_client import boto3_client
+
+    for k, v in dict(AWS_ACCESS_KEY_ID="x", AWS_SECRET_ACCESS_KEY="x",
+                     AWS_DEFAULT_REGION="us-east-1").items():
+        monkeypatch.setenv(k, v)
+    _bootstrap(app_layout)
+    _dirty(app_layout, "s3 work")
+    with moto.mock_aws():
+        boto3_client(None).create_bucket(Bucket="team-bucket")
+        _create(app_layout, capfd, "s3://team-bucket/team")
+        monkeypatch.setattr(real_io, "_boto3_client",
+                            lambda url: _listing_snapshots_drops_the_network(boto3_client(url)))
+        ret, out = _run(app_layout, capfd, action="list", store="s3://team-bucket/team")
+
+    assert ret == 1, out
+    assert ("snapshot list failed: s3://team-bucket/team: cannot reach the store: "
+            'EndpointConnectionError: Could not connect to the endpoint URL: "http://s3.test"') in out
+    assert "Traceback" not in out and "vmn_run raised exception" not in out

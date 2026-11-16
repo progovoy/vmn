@@ -13,6 +13,7 @@ from version_stamp.core.utils import (
 from version_stamp.store.code import resolve_code
 from version_stamp.store.names import METADATA_FILE, PATCH_FILES, safe_verstr, unsafe_verstr
 from version_stamp.store.s3_base import LOGGER
+from version_stamp.store.s3_errors import is_missing
 
 
 def _patch_files(store, prefix):
@@ -60,6 +61,21 @@ def read_record(store, prefix):
 
 
 class S3RecordReads:
+    """Reads that tell a missing object from a failed read: only a missing
+    one is None/False; credentials, network and access errors raise."""
+
+    def _get(self, key):
+        return self._get_or_raise(key)
+
+    def _head(self, key):
+        try:
+            self._s3.head_object(Bucket=self.bucket, Key=key)
+        except Exception as e:
+            if is_missing(e):
+                return False
+            raise
+        return True
+
     def exists(self, app_name, verstr):
         try:
             prefix = self._record_prefix(app_name, verstr)

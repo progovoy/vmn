@@ -21,6 +21,11 @@ reference code too (None: no runs are scanned).
    the URI and the error. Other schemes need vmn-exp (:class:`SnapshotStoreError`);
 4. nothing configured: the repo-local stores.
 
+``store_errors(stores, action)``: a context manager turning an S3 client
+error (:func:`version_stamp.store.s3_errors.is_client_error`) raised while
+*action* runs on s3:// *stores* into a :class:`SnapshotStoreError`
+``"snapshot <action> failed: <uri>: cannot reach the store: <error>"``.
+
 ``open_snapshot_stores(vcs, params)``: :func:`open_stores` with the real
 environment, boto3 and clocks of :func:`version_stamp.core.real_io.real_store_io`
 (the ``version_stamp.api`` entry vmn-exp uses).
@@ -29,6 +34,7 @@ environment, boto3 and clocks of :func:`version_stamp.core.real_io.real_store_io
 ``.vmn/store/snapshots/<app-key>/``, code in ``.vmn/store/code/<app-key>/``
 (shared with the runs of ``.vmn/store/runs/<app-key>/``).
 """
+from contextlib import contextmanager
 from dataclasses import dataclass
 
 from version_stamp.core.real_io import real_store_io
@@ -37,6 +43,7 @@ from version_stamp.snapshot.local_store import LocalRecordStore
 from version_stamp.store import marker
 from version_stamp.store.config import resolve_store
 from version_stamp.store.open import UnsupportedScheme, open_record_stores
+from version_stamp.store.s3_errors import is_client_error
 
 NEEDS_EXP = "{scheme}:// snapshot stores need vmn-exp: pip install vmn-exp"
 S3_NEEDS_EXTRA = "s3:// snapshot stores need boto3: pip install 'vmn[s3]'"
@@ -83,6 +90,10 @@ def _record_stores(uri, options, s3_client_factory):
     return SnapshotStores(records=records, code=code, where=uri, runs=runs)
 
 
+def _unreachable(uri, exc):
+    return UNREACHABLE.format(uri=uri, error=f"{type(exc).__name__}: {exc}")
+
+
 def _check_root(records, params, uri, now, monotonic, sleep):
     if params.get("read_only"):
         marker.require_store(records, uri)
@@ -100,8 +111,7 @@ def _check_reachable_root(records, params, uri, now, monotonic, sleep):
     except Exception as exc:
         if not uri.startswith("s3://"):
             raise
-        raise SnapshotStoreError(UNREACHABLE.format(
-            uri=uri, error=f"{type(exc).__name__}: {exc}")) from None
+        raise SnapshotStoreError(_unreachable(uri, exc)) from None
 
 
 def _configured_stores(vcs, params, env, s3_client_factory, now, monotonic, sleep):
@@ -119,6 +129,19 @@ def open_stores(vcs, params, env, s3_client_factory, now, monotonic, sleep):
     stores = _opened_by_plugin(vcs, params) or _configured_stores(
         vcs, params, env, s3_client_factory, now, monotonic, sleep)
     return stores or local_snapshot_stores(vcs.vmn_root_path)
+
+
+@contextmanager
+def store_errors(stores, action):
+    """An S3 client error of snapshot *action* on an s3:// *stores* as a
+    SnapshotStoreError saying the action failed; other errors unchanged."""
+    try:
+        yield
+    except Exception as exc:
+        if not (stores.where.startswith("s3://") and is_client_error(exc)):
+            raise
+        raise SnapshotStoreError(
+            f"snapshot {action} failed: {_unreachable(stores.where, exc)}") from None
 
 
 def open_snapshot_stores(vcs, params):

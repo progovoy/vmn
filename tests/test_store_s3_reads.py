@@ -127,3 +127,40 @@ def test_list_snapshots_raises_on_a_failed_read(store, client):
     client.get_object = refuse
     with pytest.raises(FakeS3Error):
         store.list_snapshots("app")
+
+
+def _refusing(client, op, code="ExpiredToken"):
+    def refuse(**kwargs):
+        raise FakeS3Error(code)
+
+    setattr(client, op, refuse)
+
+
+@pytest.mark.parametrize("filename", ["metadata.yml", "working_tree.patch"])
+def test_load_raises_on_a_failed_read_not_a_missing_record(store, client, filename):
+    """A record whose metadata or patch can't be read is no missing record
+    (``Snapshot not found``) and no record with fewer patches."""
+    store.save("app", "v", meta("v"), {"working_tree": "diff\n"})
+    real_get = client.get_object
+
+    def refuse_one(Bucket, Key, Range=None):
+        if Key.endswith(filename):
+            raise FakeS3Error("ExpiredToken")
+        return real_get(Bucket=Bucket, Key=Key, Range=Range)
+
+    client.get_object = refuse_one
+    with pytest.raises(FakeS3Error):
+        store.load("app", "v")
+
+
+def test_load_file_raises_on_a_failed_read(store, client):
+    store.save("app", "v", meta("v"), {"working_tree": "diff\n"})
+    _refusing(client, "get_object")
+    with pytest.raises(FakeS3Error):
+        store.load_file("app", "v", "working_tree.patch")
+
+
+def test_exists_raises_on_a_failed_head(store, client):
+    _refusing(client, "head_object")
+    with pytest.raises(FakeS3Error):
+        store.exists("app", "v")

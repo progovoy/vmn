@@ -5,7 +5,8 @@ checks the app is stamped, opens the stores (``--store`` / ``--local``, see
 :mod:`version_stamp.snapshot.stores`), resolves ``-v`` refs and dispatches to
 the ``version_stamp.snapshot`` modules (imported lazily). ``show``/``export``/
 ``diff`` default to the latest snapshot; ``note``/``delete``/``restore`` need
-``-v`` or ``--latest``.
+``-v`` or ``--latest``. An S3 client error while an action runs on an s3://
+store (``stores.store_errors``) is a one-line error and exit 1.
 ``list``/``show``/``diff``/``export`` run without the repo lock
 (``constants.READ_ONLY_ACTIONS``). The composition root of the stores:
 it hands ``open_stores`` the real IO of
@@ -150,6 +151,21 @@ def handle_snapshot(vmn_ctx):
     stores = _open_stores(vcs, params)
     if stores is None:
         return 1
+    return _run_action(vcs, params, args, stores, status)
+
+
+def _run_action(vcs, params, args, stores, status):
+    from version_stamp.snapshot.stores import SnapshotStoreError, store_errors
+
+    try:
+        with store_errors(stores, args.action):
+            return _dispatch(vcs, params, args, stores, status)
+    except SnapshotStoreError as exc:
+        VMN_LOGGER.error(str(exc))
+        return 1
+
+
+def _dispatch(vcs, params, args, stores, status):
     if args.action == "create":
         return _create(vcs, args, stores, status)
     if args.action == "list":

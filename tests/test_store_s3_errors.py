@@ -43,3 +43,44 @@ def test_put_condition_per_token():
     assert s3_errors.put_condition(s3_errors.NO_FILE) == {"IfNoneMatch": "*"}
     assert s3_errors.put_condition('"etag"') == {"IfMatch": '"etag"'}
     assert s3_errors.put_condition(None) == {}
+
+
+class EndpointConnectionError(Exception):
+    """Shaped like botocore's transport errors: no ``response``, defined in botocore."""
+
+
+EndpointConnectionError.__module__ = "botocore.exceptions"
+
+
+class ProtocolError(Exception):
+    """A urllib3 error a streamed body's ``read()`` can raise."""
+
+
+ProtocolError.__module__ = "urllib3.exceptions"
+
+
+class SubclassedEndpointError(EndpointConnectionError):
+    pass
+
+
+@pytest.mark.parametrize("exc", [
+    FakeClientError("ExpiredToken"), FakeClientError("AccessDenied"),
+    EndpointConnectionError("no route"), ProtocolError("reset"), SubclassedEndpointError(),
+])
+def test_s3_client_errors(exc):
+    assert s3_errors.is_client_error(exc)
+
+
+@pytest.mark.parametrize("exc", [
+    ValueError("x"), KeyError("k"), AttributeError("a"), OSError("disk full"),
+])
+def test_bugs_and_local_errors_are_not_s3_client_errors(exc):
+    assert not s3_errors.is_client_error(exc)
+
+
+def test_real_botocore_errors_are_s3_client_errors():
+    exceptions = pytest.importorskip("botocore.exceptions")
+    assert s3_errors.is_client_error(exceptions.NoCredentialsError())
+    assert s3_errors.is_client_error(exceptions.EndpointConnectionError(endpoint_url="http://x"))
+    assert s3_errors.is_client_error(
+        exceptions.ClientError({"Error": {"Code": "ExpiredToken"}}, "ListObjectsV2"))
