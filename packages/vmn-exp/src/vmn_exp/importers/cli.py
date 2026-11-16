@@ -26,18 +26,13 @@ _LOG = logging.getLogger(__name__)
 
 
 def _get_storage(args, clock, env):
-    """Resolve experiment storage from args / environment variables."""
-    from vmn_exp.core.storage_resolve import resolve_experiment_storage
+    """Resolve experiment storage from args / environment variables and, in a
+    checkout, the conf.yml of the app imported into."""
+    from vmn_exp.cli.checkout_store import command_storage
 
-    return resolve_experiment_storage(
-        dir=getattr(args, "experiment_dir", None),
-        store=getattr(args, "store", None),
-        bucket=getattr(args, "bucket", None),
-        prefix=getattr(args, "prefix", None),
-        endpoint_url=getattr(args, "endpoint_url", None),
-        clock=clock,
-        env=env,
-    )
+    return command_storage(args, getattr(args, "name", None),
+                           experiment_dir=getattr(args, "experiment_dir", None),
+                           clock=clock, env=env)
 
 
 # ---------------------------------------------------------------------------

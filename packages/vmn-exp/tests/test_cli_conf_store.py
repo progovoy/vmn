@@ -1,8 +1,10 @@
-"""``vmn-exp model`` in a checkout opens the
+"""``vmn-exp model`` and ``vmn-exp import-mlflow`` in a checkout open the
 store the app's conf.yml names (``store:``) when no flag or env var does, as
 ``start_run`` and the other ``vmn-exp`` commands do (plan 45)."""
 import json
 
+from test_cli_exp_import_mlflow import _build_mlruns, _call as _import_mlflow
+from test_cli_exp_import_mlflow import _make_args as _import_args
 from test_cli_model import _make_args as _model_args
 from test_reader_conf_store import _app_with_conf, _drop_local_runs, _no_store_env  # noqa: F401
 from vmn_exp.core.real_io import real_io
@@ -43,3 +45,11 @@ def test_model_register_resolves_a_run_in_the_conf_store(app_layout, tmp_path):
     assert _model_cli(action="register", model_name="clf", version_ref=run.id,
                       app=app_layout.app_name) == 0
 
+
+def test_import_mlflow_writes_to_the_conf_store(app_layout, tmp_path):
+    store = _conf_store(app_layout, tmp_path)
+    mlruns = _build_mlruns(tmp_path)
+
+    args = _import_args(mlruns=mlruns, name=app_layout.app_name, prefix=None)
+    assert _import_mlflow(args) == 0
+    assert len(store.list_verstrs(app_layout.app_name)) == 2

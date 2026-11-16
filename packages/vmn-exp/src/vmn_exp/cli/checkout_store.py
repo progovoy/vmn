@@ -33,15 +33,23 @@ def command_storage(args, app_name, *, experiment_dir, clock, env):
 
 
 def _checkout_vcs(app_name, env):
-    """The vcs of the app whose conf the command reads, or None outside a
-    checkout or with no app to name."""
-    if try_repo_root() is None:
+    """The vcs of the app whose conf the command reads, or None outside a git
+    checkout (a bare ``.vmn`` dir has no vcs) or with no app to name."""
+    root = try_repo_root()
+    if root is None or not _is_git_checkout(root):
         return None
     from vmn_exp.gitmode.checkout import stamped_apps
     from vmn_exp.gitmode.coldstart import build_vcs
 
     app = app_name or env.get(APP_NAME_ENV) or _sole(stamped_apps())
     return build_vcs(app) if app else None
+
+
+def _is_git_checkout(root):
+    from version_stamp.api import VMN_BE_TYPE_GIT, get_client
+
+    _, err = get_client(root, VMN_BE_TYPE_GIT)
+    return err is None
 
 
 def _sole(apps):
