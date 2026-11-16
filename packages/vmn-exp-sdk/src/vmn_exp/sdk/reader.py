@@ -56,7 +56,7 @@ from vmn_exp.sdk import _resolve_app_name, frames
 from vmn_exp.sdk.create import SNAPSHOT_METADATA_ENV, snapshot_app_names
 from vmn_exp.sdk.reader_select import check_loading, select
 from vmn_exp.sdk.run_states import read_run_state, read_run_states
-from vmn_exp.sdk.store_resolve import resolve_storage
+from vmn_exp.sdk.store_resolve import checkout_storage
 
 
 # ---------------------------------------------------------------------------
@@ -74,12 +74,13 @@ def _app_candidates(storage, env):
 def _resolve(app_name, storage):
     """Fill in the app name and storage where :func:`start_run` records.
 
-    Storage defaults to :func:`~vmn_exp.sdk.store_resolve.resolve_storage`
-    (``VMN_EXPERIMENT_DIR`` > the checkout, fronting ``VMN_STORE``, legacy ``VMN_EXPERIMENT_STORE``).
+    Storage defaults to :func:`~vmn_exp.sdk.store_resolve.checkout_storage`
+    (``VMN_EXPERIMENT_DIR`` > the checkout, fronting ``VMN_STORE``, legacy
+    ``VMN_EXPERIMENT_STORE``, then the app's conf ``store``/``experiment.storage``).
     Returns ``(app_name, storage, root_path)``; *root_path* is None when the
     caller supplied both or no checkout is found: there is no conf.yml to read."""
     root_path = None if (app_name and storage) else try_repo_root()
-    storage = storage or resolve_storage(repo_root=root_path or False)
+    storage = storage or checkout_storage(app_name, repo_root=root_path or False)
     env = real_io().env  # reached only from the public readers, SDK entry points
     app_name = _resolve_app_name(app_name, lambda: _app_candidates(storage, env), env)
     return app_name, storage, root_path

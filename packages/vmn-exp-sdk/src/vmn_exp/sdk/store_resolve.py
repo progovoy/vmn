@@ -4,9 +4,12 @@ Its own function, not the core resolver re-exported: the keyword-only
 parameters below are the public contract, and the core resolver stays free to
 change behind it (plan 41 D10).
 """
+from vmn_exp.core.app_conf import read_app_conf
 from vmn_exp.core.real_io import real_io
-from vmn_exp.core.storage_resolve import _get_experiment_storage, resolve_experiment_storage
+from vmn_exp.core.storage_resolve import (
+    _get_experiment_storage, resolve_experiment_storage, try_repo_root)
 from vmn_exp.core.writer import merge_conf_into_params, merge_env_into_params
+from vmn_exp.sdk import APP_NAME_ENV
 
 
 def resolve_storage(*, dir: str | None = None, store: str | None = None,
@@ -18,6 +21,21 @@ def resolve_storage(*, dir: str | None = None, store: str | None = None,
     io = real_io()
     return resolve_experiment_storage(dir=dir, store=store, bucket=bucket, prefix=prefix,
                                       endpoint_url=endpoint_url, repo_root=repo_root,
+                                      clock=io.clock, env=io.env)
+
+
+def checkout_storage(app_name=None, repo_root=None):
+    """The storage a reader of *app_name* (else ``VMN_APP_NAME``) reads: where
+    :func:`start_run` records it. Inside the checkout *repo_root* (auto-detected
+    when None; ``False``: none) the app's conf.yml ``store`` (else the legacy
+    ``experiment.storage``) names the store after the environment; outside one,
+    or with no app named, the environment alone does, as :func:`resolve_storage`.
+    An SDK entry point like it."""
+    io = real_io()
+    root = try_repo_root() if repo_root is None else repo_root
+    app = app_name or io.env.get(APP_NAME_ENV)
+    conf = read_app_conf(app, root) if root and app else None
+    return resolve_experiment_storage(repo_root=root or False, conf=conf,
                                       clock=io.clock, env=io.env)
 
 

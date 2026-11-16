@@ -11,7 +11,7 @@ from types import SimpleNamespace
 import pytest
 from version_stamp.store.config import resolve_store_uri
 
-from vmn_exp.core.storage_resolve import drop_remote_if_offline, store_uri
+from vmn_exp.core.storage_resolve import drop_remote_if_offline, reader_params, store_uri
 from vmn_exp.core.writer import merge_conf_into_params, merge_env_into_params
 from vmn_exp.storage.uri import s3_uri
 
@@ -137,3 +137,21 @@ CASES = [
 @pytest.mark.parametrize("params,env,conf", CASES)
 def test_sdk_resolves_the_store_core_does(params, env, conf):
     assert _sdk_uri(params, conf, env=env) == resolve_store_uri(params, env, conf)
+
+
+def _reader_uri(params, conf, root="/local/root", env=None):
+    """The store an SDK reader in a checkout whose app conf is *conf* reads."""
+    env = env or {}
+    resolved = reader_params(conf=conf, env=env, **params)
+    return store_uri(drop_remote_if_offline(resolved, root, env))
+
+
+@pytest.mark.parametrize("params,env,conf", CASES)
+def test_reader_resolves_the_store_the_writer_does(params, env, conf):
+    assert _reader_uri(params, conf, env=env) == _sdk_uri(params, conf, env=env)
+
+
+def test_reader_outside_a_checkout_reads_the_env_alone():
+    env = {"VMN_EXPERIMENT_STORE": "s3://env/p"}
+    assert _reader_uri({}, {}, env=env) == "s3://env/p"
+    assert _reader_uri({}, {}) is None

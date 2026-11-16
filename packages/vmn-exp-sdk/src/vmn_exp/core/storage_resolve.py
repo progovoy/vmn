@@ -7,15 +7,18 @@ Single source of truth for the resolution order shared by:
 - SDK (vmn_exp.sdk.models._resolve_storage)
 
 The local root (highest wins):
-1. Explicit ``dir`` argument (the --dir flag)
+1. Explicit ``dir`` argument (the --dir flag), else conf
+   ``experiment.storage.experiment_dir``
 2. ``VMN_EXPERIMENT_DIR`` environment variable
 3. ``repo_root`` argument, or auto-detected git/.vmn root from cwd: its
    repo-local store ``<repo>/.vmn/store``
 
 It fronts the remote store, if any, resolved by ``version_stamp.store.config``
 (the table core's ``vmn snapshot`` uses): ``store`` (--store) > ``VMN_STORE`` >
-``VMN_EXPERIMENT_STORE`` > conf ``store.uri`` > conf ``experiment.storage.uri``,
-else the ``bucket``/``prefix``/``endpoint_url`` shorthand for an ``s3://`` URI.
+``VMN_EXPERIMENT_STORE`` > conf ``store.uri`` > conf ``experiment.storage.uri``
+(the conf of the checkout app a writer records to or a reader is handed;
+outside a checkout the environment alone), else the
+``bucket``/``prefix``/``endpoint_url`` shorthand for an ``s3://`` URI.
 Without a local root the store is used directly; a ``file://`` store is the root.
 """
 from __future__ import annotations
@@ -64,17 +67,34 @@ def _store_conf(vcs):
 
 
 def merge_conf_into_params(vcs, params, env):
-    """Fill unset storage params: CLI flags, then *env*, then conf.yml — the
-    store ones through ``version_stamp.store.config`` (conf ``store`` before
-    the legacy ``experiment.storage``), ``experiment_dir``/``writer_id`` from
-    ``experiment.storage``."""
-    _fill_store_params(params, env, _store_conf(vcs))
-    storage_conf = experiment_conf(vcs).get("storage", {}) or {}
+    """Fill unset storage params: CLI flags, then *env*, then *vcs*'s conf.yml
+    (:func:`merge_app_conf_into_params`)."""
+    merge_app_conf_into_params(_store_conf(vcs), params, env)
+
+
+def merge_app_conf_into_params(conf, params, env):
+    """Fill unset storage params: CLI flags, then *env*, then *conf* (an app's
+    ``conf:`` mapping) — the store ones through ``version_stamp.store.config``
+    (conf ``store`` before the legacy ``experiment.storage``),
+    ``experiment_dir``/``writer_id`` from ``experiment.storage``."""
+    _fill_store_params(params, env, conf)
+    storage_conf = (conf.get("experiment") or {}).get("storage") or {}
     for key, conf_key in _STORAGE_CONF_KEYS.items():
         if not params.get(key):
             conf_val = storage_conf.get(conf_key)
             if conf_val:
                 params[key] = conf_val
+
+
+def reader_params(*, conf, env, dir=None, store=None, bucket=None, prefix=None,
+                  endpoint_url=None):
+    """The storage params :func:`resolve_experiment_storage` opens: the flags,
+    then *env*, then *conf* — the order a writer in the same checkout uses.
+    *conf* is ``{}`` outside a checkout, leaving the environment alone."""
+    params = {"experiment_dir": dir, "store": store, "bucket": bucket, "prefix": prefix,
+              "endpoint_url": endpoint_url}
+    merge_app_conf_into_params(conf, params, env)
+    return params
 
 
 def resolve_experiment_storage(
@@ -85,6 +105,7 @@ def resolve_experiment_storage(
     prefix: "str | None" = None,
     endpoint_url: "str | None" = None,
     repo_root: "str | None" = None,
+    conf=None,
     clock,
     env,
 ):
@@ -102,22 +123,22 @@ def resolve_experiment_storage(
         Caller-supplied repo root (skips the auto-detect step).  Pass
         ``False`` to suppress auto-detect entirely (useful in tests or when
         the caller is certain there is no git checkout).
+    conf:
+        The ``conf:`` mapping of the checkout app's conf.yml, read by the
+        caller: its ``store`` (else the legacy ``experiment.storage``) names
+        the store after the environment, as for a writer. None (no checkout,
+        or no app to read) leaves the environment alone.
     clock:
         What a direct-to-bucket store's log buffer times its flushes on.
     env:
-        The environment ``VMN_EXPERIMENT_*`` and ``VMN_EXP_OFFLINE`` are read from.
+        The environment ``VMN_STORE*``, ``VMN_EXPERIMENT_*`` and ``VMN_EXP_OFFLINE`` are read from.
     """
-    root = dir or env.get("VMN_EXPERIMENT_DIR")
+    params = reader_params(conf=conf or {}, env=env, dir=dir, store=store, bucket=bucket,
+                           prefix=prefix, endpoint_url=endpoint_url)
+    root = params.pop("experiment_dir") or env.get("VMN_EXPERIMENT_DIR")
+    params.pop("writer_id", None)
     if not root and repo_root is not False:
         root = _repo_store(repo_root if repo_root is not None else try_repo_root())
-
-    params = {
-        "store": store,
-        "bucket": bucket,
-        "prefix": prefix,
-        "endpoint_url": endpoint_url,
-    }
-    merge_env_into_params(params, env)
     return _open(root, params, clock=clock, env=env)
 
 

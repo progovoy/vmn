@@ -47,8 +47,14 @@ Follow-ups:
   fsyncs). Deferred by the user (2026-11-15).
 - SDK functions that still read `os.environ` directly: `merge_env_into_params`,
   `offline_mode`, `drop_remote_if_offline`, `experiment_dir`.
-- `resolve_experiment_storage` reads the environment only (never conf) in a
-  checkout: decide whether it should read conf `store:` too.
+- ~~`resolve_experiment_storage` reads the environment only (never conf) in a
+  checkout: decide whether it should read conf `store:` too.~~ Done
+  (2026-11-16): yes. It takes the app's `conf:` mapping (`conf=`); the SDK
+  readers and registry functions pass it through `checkout_storage`
+  (`sdk/sdk/store_resolve.py`; the app read, else `VMN_APP_NAME`; app conf
+  only, no branch conf), so in a checkout they resolve the writer's table. Outside a checkout,
+  or with no app named, the environment alone. `vmn-exp model` and
+  `vmn-exp import-mlflow` still pass no conf.
 - The `index_io_process` helper subprocess puts only the SDK `src` on
   `sys.path`.
 - `VMN_EXP_OFFLINE`: a neutral name (open question 1).
