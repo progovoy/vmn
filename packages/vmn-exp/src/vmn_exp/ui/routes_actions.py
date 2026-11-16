@@ -8,7 +8,7 @@ from vmn_exp.ui.auth.authz import can_read_job, require, require_action
 from vmn_exp.ui.auth.principal import VIEWER
 from vmn_exp.ui.bulk_actions import BulkSpec, is_bulk
 from vmn_exp.ui.jobs import build_command
-from vmn_exp.ui.jobs_store import build_store_action
+from vmn_exp.ui.jobs_store import build_store_action, run_refreshing_once
 from vmn_exp.ui.leaderboard_scope import UnknownScope
 from vmn_exp.ui.pending_edits import ship_pending_first
 from vmn_exp.ui.storage_access import EDIT
@@ -63,7 +63,7 @@ def register(app, prefix, ctx, jobs, leaderboards, read_only, io):
             return JSONResponse(spec.preview(verstrs))
         if ws.kind == "store":
             storage, reads = ctx.edit_storage(ws), ctx.exp_storage_for(ws)
-            apply = partial(spec.apply, storage, hint=lambda app, v: ctx.source.touched(ws, app, reads),
+            apply = partial(spec.apply, storage, touched=lambda app: ctx.source.touched(ws, app, reads),
                             now=leaderboards.now(), env=io.env, host=io.host)
 
             def act(batch):
@@ -83,11 +83,11 @@ def register(app, prefix, ctx, jobs, leaderboards, read_only, io):
             raise HTTPException(403, "The server has no edit access to this store")
         storage, reads = ctx.edit_storage(ws), ctx.exp_storage_for(ws)
 
-        def hint(app, verstr):
+        def touched(app):
             ctx.source.touched(ws, app, reads)
 
         job, err = jobs.submit_call(ws.name, store_action.command, lambda: ship_pending_first(
-            storage, lambda: store_action.run(storage, hint, leaderboards.now())))
+            storage, lambda: run_refreshing_once([store_action], storage, touched, leaderboards.now())))
         if err:
             raise HTTPException(409, err)
         return job

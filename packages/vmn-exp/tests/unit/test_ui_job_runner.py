@@ -3,6 +3,8 @@ G5): no real child process, no real thread, no polling."""
 import subprocess
 import sys
 
+import pytest
+
 from fakes.processes import HANG, FakeProcesses
 from fakes.random import FakeRandom
 from vmn_exp.ui.jobs import JobRunner
@@ -77,3 +79,27 @@ def test_finished_jobs_beyond_max_jobs_are_evicted_oldest_first():
     ids = [runner.submit(f"ws{n}", "/repo", STAMP)[0]["id"] for n in range(3)]
     assert runner.get(ids[0]) is None
     assert [runner.get(job_id)["id"] for job_id in ids[1:]] == ids[1:]
+
+
+def test_wait_returns_the_job_once_it_has_finished():
+    runner, _ = _runner({tuple(STAMP): _done(STAMP, 0, "stamped")})
+    submitted, _ = runner.submit("ws", "/repo", STAMP)
+    job = runner.wait(submitted["id"], timeout=0)
+    assert (job["status"], job["log"]) == ("succeeded", "stamped")
+
+
+def test_wait_on_a_job_still_running_times_out_loudly():
+    held = []
+    runner, _ = _runner({tuple(STAMP): _done(STAMP)}, start_thread=lambda target, *args: held.append((target, args)))
+    submitted, _ = runner.submit("ws", "/repo", STAMP)
+    with pytest.raises(TimeoutError):
+        runner.wait(submitted["id"], timeout=0)
+    target, args = held.pop()
+    target(*args)
+    assert runner.wait(submitted["id"], timeout=0)["status"] == "succeeded"
+
+
+def test_wait_returns_an_in_process_job_once_it_has_failed():
+    runner, _ = _runner({})
+    submitted, _ = runner.submit_call("ws", ["note"], lambda: 1 / 0)
+    assert runner.wait(submitted["id"], timeout=0)["status"] == "failed"

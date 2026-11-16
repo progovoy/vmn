@@ -1,20 +1,9 @@
 """A bulk job (plan 23 S4): resolved when it starts, acted on in batches of
 500, its ``progress`` visible through the job."""
-import time
-
+from job_wait import wait_job as _wait
 from vmn_exp.ui.bulk_actions import BulkSpec
 from vmn_exp.ui.jobs import JobRunner, start_daemon
 from vmn_exp.core.real_io import RealProcesses, RealRandom
-
-
-def _wait(runner, job_id):
-    deadline = time.time() + 30
-    while time.time() < deadline:
-        job = runner.get(job_id)
-        if job["status"] != "running":
-            return job
-        time.sleep(0.01)
-    raise AssertionError("job did not finish")
 
 
 def test_a_bulk_job_resolves_at_start_and_acts_in_batches():

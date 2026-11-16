@@ -187,6 +187,23 @@ STORE_ACTIONS = {
 }
 
 
+def run_refreshing_once(actions, storage, touched, now):
+    """Run *actions* on *storage*, their log text; then ``touched(app)`` once
+    for each app whose runs they changed, even when one fails. Refreshing an
+    app's index re-lists the app, so a refresh per run would make a batch of
+    runs quadratic."""
+    apps = {}
+
+    def hint(app_name, verstr):
+        apps[app_name] = None
+
+    try:
+        return "\n".join(action.run(storage, hint, now) for action in actions)
+    finally:
+        for app_name in apps:
+            touched(app_name)
+
+
 def build_store_action(action, app_name, body, env, host):
     """``(StoreAction, None)`` or ``(None, error)`` for a store workspace; its
     writes are the writer's of *env* and *host*."""

@@ -1,19 +1,9 @@
 """The ui job runner: no inherited stdin, bounded runtime, bounded memory."""
 import sys
-import time
 
+from job_wait import wait_job as _wait
 from vmn_exp.ui.jobs import MAX_JOB_LOG_BYTES, JobRunner, start_daemon
 from vmn_exp.core.real_io import RealProcesses, RealRandom
-
-
-def _wait(runner, job_id, timeout=30):
-    deadline = time.time() + timeout
-    while time.time() < deadline:
-        job = runner.get(job_id)
-        if job["status"] != "running":
-            return job
-        time.sleep(0.05)
-    raise AssertionError("job never finished")
 
 
 def _py(code):
@@ -36,7 +26,7 @@ def test_job_stdin_is_not_inherited():
 def test_job_timeout_fails_the_job_and_frees_the_workspace():
     runner = JobRunner(timeout_sec=0.5, processes=RealProcesses(), random=RealRandom(), start_thread=start_daemon)
     job, _ = runner.submit("ws", ".", _py("import time; time.sleep(30)"))
-    done = _wait(runner, job["id"], timeout=15)
+    done = _wait(runner, job["id"])
     assert done["status"] == "failed"
     assert "timed out" in done["log"].lower()
     again, err = runner.submit("ws", ".", _py("print('ok')"))

@@ -10,7 +10,7 @@ batch, in a store (in-process) or a checkout (``vmn-exp`` argv).
 """
 from vmn_exp.ui.attention import pinned
 from vmn_exp.ui.jobs_exp_meta import _tag_args, exp_archive_command, exp_tag_command
-from vmn_exp.ui.jobs_store import build_store_action
+from vmn_exp.ui.jobs_store import build_store_action, run_refreshing_once
 
 BULK_ACTIONS = ("exp_archive", "exp_unarchive", "exp_tag")
 QUERY_KEYS = ("scope", "q", "status")
@@ -94,12 +94,12 @@ class BulkSpec:
             logs.append(output)
         return "".join(logs)
 
-    def apply(self, storage, batch, hint, now, env, host):
+    def apply(self, storage, batch, touched, now, env, host):
         """Act on *batch* in a store, judging runs at *now*, as the writer of
-        *env* and *host*; the log text."""
-        actions = [build_store_action(self.action, self.app_name, body, env, host)
+        *env* and *host*, then ``touched(app)`` once; the log text."""
+        actions = [_built(*build_store_action(self.action, self.app_name, body, env, host))
                    for body in self._bodies(batch)]
-        return "\n".join(_built(action, err).run(storage, hint, now) for action, err in actions)
+        return run_refreshing_once(actions, storage, touched, now)
 
 
 def _built(value, err):
