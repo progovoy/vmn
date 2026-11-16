@@ -17,19 +17,23 @@ from vmn_exp.core.real_io import real_io  # noqa: E402
 
 APP = "app"
 BASE = f"/api/v1/workspaces/ws/apps/{APP}"
+HOLD_SEC = 30
 
 
 @pytest.fixture
 def held(tmp_path, monkeypatch):
-    """A ui over a store of 3 runs whose record names are held back."""
+    """A ui over a store of 3 runs whose record names are held back until
+    the test releases them (or HOLD_SEC passes: what a request waiting for
+    the listing would cost before the test fails, instead of hanging)."""
     monkeypatch.setenv("AWS_ACCESS_KEY_ID", "x")
     monkeypatch.setenv("AWS_SECRET_ACCESS_KEY", "x")
     monkeypatch.setenv("AWS_DEFAULT_REGION", "us-east-1")
-    release = threading.Event()
+    release, listed = threading.Event(), threading.Event()
     real = S3SnapshotStorage.record_name_pages
 
     def held_pages(self, app_name):
-        release.wait(20)
+        release.wait(HOLD_SEC)
+        listed.set()
         yield from real(self, app_name)
 
     with moto.mock_aws():
@@ -45,23 +49,17 @@ def held(tmp_path, monkeypatch):
         manager = WorkspaceManager(str(tmp_path / "data"))
         manager.add_store("ws", "s3://vmn-bucket/st")
         app = create_app(manager, io=real_io(), background_refresh=True)
-        yield TestClient(app), release
+        yield TestClient(app), release, listed
         release.set()
         app.state.refresher.stop()
 
 
-def _timed(client, path, **params):
-    started = time.monotonic()
-    body = client.get(path, params=params).json()
-    return time.monotonic() - started, body
-
-
 def test_a_cold_index_answers_at_once_while_its_store_is_listed(held):
-    client, release = held
-    status_sec, status = _timed(client, f"{BASE}/experiments-status")
-    board_sec, board = _timed(client, f"{BASE}/experiments", offset=0, limit=50)
+    client, release, listed = held
+    status = client.get(f"{BASE}/experiments-status").json()
+    board = client.get(f"{BASE}/experiments", params={"offset": 0, "limit": 50}).json()
 
-    assert status_sec < 1.0 and board_sec < 1.0
+    assert not listed.is_set(), "a request waited for the store's listing"
     assert status["indexing"] == {"loaded": 0, "total": None}
     assert status["freshness"]["phase"] in ("full_listing", "loading_new")
     assert not status["freshness"]["refresh_failing"]
