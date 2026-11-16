@@ -34,7 +34,6 @@ KNOWN_OVERSIZED = {
     'vmn_exp.ui.cli': 347,
     'vmn_exp.ui.experiment_source': 368,
     'vmn_exp.ui.job_aggregate': 348,
-    'vmn_exp.ui.jobs': 311,
     'vmn_exp.ui.leaderboard_cache': 666,
     'vmn_exp.ui.leaderboard_groups': 305,
     'vmn_exp.ui.leaderboard_live': 312,
