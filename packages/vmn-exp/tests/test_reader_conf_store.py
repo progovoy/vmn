@@ -102,3 +102,23 @@ def test_env_beats_the_conf_store_for_readers(app_layout, tmp_path, monkeypatch)
 
     rows = list_runs(app_layout.app_name, use_index=False)
     assert [r["verstr"] for r in rows] == [in_env_store]
+
+
+def test_a_non_zero_rank_reads_artifacts_from_the_store_rank_zero_does(app_layout, tmp_path,
+                                                                       monkeypatch):
+    _app_with_conf(app_layout, {"store": {"uri": (tmp_path / "shared").as_uri()}})
+    weights = tmp_path / "model.pkl"
+    weights.write_bytes(b"weights")
+    with start_run(app_layout.app_name, name="train") as producer:
+        producer.log_artifact(str(weights))
+    _drop_local_runs(app_layout)
+
+    with start_run(app_layout.app_name) as rank_zero:
+        zero_path = rank_zero.use_artifact(producer.id, "artifacts/model.pkl")
+    monkeypatch.setenv("RANK", "1")
+    with start_run(app_layout.app_name) as rank_one:
+        one_path = rank_one.use_artifact(producer.id, "artifacts/model.pkl")
+
+    assert rank_one.rank == 1
+    with open(zero_path, "rb") as f0, open(one_path, "rb") as f1:
+        assert f0.read() == f1.read() == b"weights"

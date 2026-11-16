@@ -52,9 +52,13 @@ Follow-ups:
   (2026-11-16): yes. It takes the app's `conf:` mapping (`conf=`); the SDK
   readers and registry functions pass it through `checkout_storage`
   (`sdk/sdk/store_resolve.py`; the app read, else `VMN_APP_NAME`; app conf
-  only, no branch conf), so in a checkout they resolve the writer's table. Outside a checkout,
-  or with no app named, the environment alone. `vmn-exp model` and
-  `vmn-exp import-mlflow` still pass no conf.
+  only, no branch conf), so in a checkout they resolve the writer's table.
+  Outside a checkout, or with no app named, the environment alone. A non-zero
+  rank's `NoOpRun.use_artifact` reads `start_run`'s `storage=`, else
+  `checkout_storage`, as rank 0 does. `vmn-exp model` and
+  `vmn-exp import-mlflow` resolve through the vcs core loads
+  (`exp/cli/checkout_store.py`: `--app`/the imported app, else `VMN_APP_NAME`,
+  else the sole stamped app), as the other `vmn-exp` commands.
 - The `index_io_process` helper subprocess puts only the SDK `src` on
   `sys.path`.
 - `VMN_EXP_OFFLINE`: a neutral name (open question 1).

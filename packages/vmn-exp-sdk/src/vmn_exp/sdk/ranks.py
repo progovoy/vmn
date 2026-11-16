@@ -56,10 +56,11 @@ class NoOpRun:
     name = None
     start_step = None
 
-    def __init__(self, app_name=None, disabled=False, rank=None):
+    def __init__(self, app_name=None, disabled=False, rank=None, storage=None):
         self.app_name = app_name
         self.disabled = disabled
         self.rank = rank
+        self._storage = storage  # start_run's storage=, read as rank 0 reads it
         self.pid = os.getpid()
         # Counted like a real run's, so `run.step` in user code works anywhere.
         self._steps = StepCounter()
@@ -109,12 +110,15 @@ class NoOpRun:
         return None
 
     def use_artifact(self, ref, path, name=None, app_name=None):
-        """The artifact's local path, as rank 0 gets it — nothing is recorded."""
+        """The artifact's local path, as rank 0 gets it — nothing is recorded:
+        from ``start_run``'s ``storage=``, else where rank 0 records (in a
+        checkout, the app's conf ``store:`` after the environment)."""
         from vmn_exp.sdk.run_artifacts import fetch_artifact
-        from vmn_exp.sdk.store_resolve import resolve_storage
+        from vmn_exp.sdk.store_resolve import checkout_storage
 
-        storage = resolve_storage()
-        return fetch_artifact(storage, app_name or self.app_name, ref, path)[2]
+        app_name = app_name or self.app_name
+        storage = self._storage or checkout_storage(app_name)
+        return fetch_artifact(storage, app_name, ref, path)[2]
 
     def use_model(self, ref, *, storage=None):
         """The version's metadata, as rank 0 gets it — no use is recorded."""
