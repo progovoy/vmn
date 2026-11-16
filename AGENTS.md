@@ -76,6 +76,7 @@ Tests require Docker. There are two suites: core vmn in `tests/` (runs with
 ```sh
 ./tests/run_pytest.sh                        # core suite (= --suite core)
 ./packages/vmn-exp/tests/run_pytest.sh       # exp suite (= tests/run_pytest.sh --suite exp)
+./packages/vmn-exp/tests/run_pytest.sh --pass serial  # only the serial timing benchmarks (--pass both|parallel|serial, default both)
 ```
 
 Run a specific test:
