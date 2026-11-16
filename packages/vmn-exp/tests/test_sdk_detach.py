@@ -68,8 +68,12 @@ def _run_threads(threads_before):
 
 def test_detach_writes_nothing_even_after_the_heartbeat_interval(run):
     run.log_note("queued, never written")
+    # The live run heartbeats every 50ms (a temp file renamed over
+    # .run_state.yml): hold its threads so the snapshot sees a still store.
+    run.pause_background()
     before = _store_files(run)
     run.detach()
+    run.resume_background()  # only the detach may keep them from writing now
     time.sleep(1.5)  # many heartbeats and > the 1s log flush interval
     assert _store_files(run) == before
 
