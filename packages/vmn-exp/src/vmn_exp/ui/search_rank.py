@@ -7,6 +7,8 @@ then verstr prefixes, name prefixes, then a hit in any field (reported as
 the first such field in :data:`~vmn_exp.ui.search_index.FIELDS` order).
 Archived runs are left out unless asked for.
 """
+import hashlib
+import json
 import re
 from itertools import islice
 
@@ -82,3 +84,12 @@ def results(snapshot, hits, now, min_stale_sec=MIN_STALE_SEC):
             "match": field,
         })
     return out
+
+
+def answer_etag(answer):
+    """The search route's ETag: a digest of its *answer*, so it moves exactly
+    when the answer does (a run joining or leaving the matches, renamed, or a
+    matched run's status changing), never with an index refresh or the clock
+    alone."""
+    raw = json.dumps(answer, sort_keys=True, default=str)
+    return hashlib.blake2b(raw.encode(), digest_size=16).hexdigest()

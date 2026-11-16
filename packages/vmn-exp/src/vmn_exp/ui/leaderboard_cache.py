@@ -498,8 +498,7 @@ class LeaderboardCache(SetAnswers):
 
     def search(self, snapshot, text, limit, archived=False):
         """``{"results"}``: ⌘K "go to run" over every run (plan 23 S8)."""
-        index = self._search.get(snapshot)
-        hits = index.ranked(text, limit, archived)
+        hits = self._search.ranked(snapshot, text, limit, archived)
         return {"results": results(snapshot, hits, self.now(), self.min_stale_sec)}
 
     def warm(self, snapshot):
@@ -511,13 +510,6 @@ class LeaderboardCache(SetAnswers):
     def warm_search(self, snapshot):
         """Build or move *snapshot*'s search index now."""
         self._search.get(snapshot)
-
-    def search_etag(self, snapshot, **params):
-        """:meth:`search`'s ETag: the snapshot's token and the time bucket
-        (statuses age), without building the leaderboard's base."""
-        token = self._base_tokens.per_snapshot(snapshot, lambda: next(self._tokens))
-        raw = json.dumps([_NONCE, token, self._bucket(), sorted(params.items())], default=str)
-        return hashlib.blake2b(raw.encode(), digest_size=16).hexdigest()
 
     def page(
         self, snapshot, schema, sort=None, last=None, offset=0, limit=None,

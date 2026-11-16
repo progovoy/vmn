@@ -31,6 +31,8 @@ FIELDS = ("name", "verstr", "note", "tags", "params", "command", "branch", "auth
           "error_summary", "intent")
 FIELD_AT = {field: i for i, field in enumerate(FIELDS)}
 CHUNK = 1024
+# ⌘K searches' ranked hits kept, per snapshot and arguments.
+HITS_KEPT = 64
 SEP = "\x01"
 _JOIN = "\x00"
 _CONTROL = {c: 0 for c in range(1, 32)}
@@ -253,6 +255,7 @@ class SearchIndexes:
         self._size = size
         self._indexes = {}  # app -> LRU of its snapshots' indexes
         self._latest = {}  # app -> SearchIndex
+        self._hits = LRU(HITS_KEPT, name="search hits")
         self._lock = TracedLock("search indexes")
 
     def get(self, snapshot):
@@ -264,6 +267,13 @@ class SearchIndexes:
             if indexes is None:
                 indexes = self._indexes[snapshot.app_name] = LRU(self._size, name="search index")
         return indexes.per_snapshot(snapshot, lambda: self._moved(snapshot))
+
+    def ranked(self, snapshot, text, limit, archived=False):
+        """*snapshot*'s index's :meth:`SearchIndex.ranked`, kept per snapshot
+        and arguments: a repeat (and its 304) never scans the index again."""
+        return self._hits.per_snapshot(
+            schema_less(snapshot), lambda: self.get(snapshot).ranked(text, limit, archived),
+            key=(text, limit, archived))
 
     def _moved(self, snapshot):
         with self._lock:

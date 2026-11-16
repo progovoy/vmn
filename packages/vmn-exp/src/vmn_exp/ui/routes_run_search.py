@@ -6,14 +6,16 @@ run" over every run of an app (plan 23 S8), answered from the search index
 ``{"results": [{verstr, idx, name, status, root, root_name, match}]}``:
 ``root`` is the run's top-level ancestor (its job), ``match`` the field that
 matched (``idx`` for ``@N``). At most *limit* (clamped to 1..50) results;
-archived runs only with ``archived=1``. The ETag (index generation, time
-bucket and parameters) is known before any search, so a repeat is a ``304``.
+archived runs only with ``archived=1``. The ETag is a digest of the answer
+(its ranked hits are kept per index generation and parameters, so a repeat
+never scans again): a repeat is a ``304`` until the answer itself changes.
 """
 from fastapi import Request
 from vmn_exp.ui.auth.authz import require
 from vmn_exp.ui.auth.principal import VIEWER
 from vmn_exp.ui.indexing import indexed_response
 from vmn_exp.ui.memo import LRU
+from vmn_exp.ui.search_rank import answer_etag
 
 DEFAULT_LIMIT = 20
 MAX_LIMIT = 50
@@ -31,6 +33,5 @@ def register(app, api_prefix, snapshot_of, cache):
                     limit: int = DEFAULT_LIMIT, archived: bool = False):
         snapshot = snapshot_of(ws_name, app_tag)
         params = dict(text=text, limit=max(1, min(limit, MAX_LIMIT)), archived=archived)
-        etag = cache.search_etag(snapshot, **params)
-        return indexed_response(
-            request, etag, snapshot, lambda: cache.search(snapshot, **params), bodies)
+        answer = cache.search(snapshot, **params)
+        return indexed_response(request, answer_etag(answer), snapshot, lambda: answer, bodies)
