@@ -11,6 +11,7 @@ from types import SimpleNamespace
 
 import pytest
 
+from job_wait import HANG_SEC, wait_job
 from vmn_exp.cli.manage import experiment_manage
 from vmn_exp.cli.rewind import experiment_rewind
 from vmn_exp.core.writer import append_to_log, create_log_entry, flush_log
@@ -237,8 +238,9 @@ def test_a_bulk_job_of_many_quick_batches_is_not_timed_out_as_a_whole():
     assert done["progress"] == {"done": 3 * MAX_ARCHIVE_BATCH, "total": 3 * MAX_ARCHIVE_BATCH}
 
 
-def _submit_when_free(runner, workspace, call, timeout=30):
-    deadline = time.time() + timeout
+def _submit_when_free(runner, workspace, call):
+    # The slot has no signal of its own; the bound only fails a real hang.
+    deadline = time.time() + HANG_SEC
     while time.time() < deadline:
         job, err = runner.submit_call(workspace, ["note"], call)
         if err is None:
@@ -247,11 +249,4 @@ def _submit_when_free(runner, workspace, call, timeout=30):
     raise AssertionError("the workspace slot was never released")
 
 
-def _wait(runner, job_id, timeout=30):
-    deadline = time.time() + timeout
-    while time.time() < deadline:
-        job = runner.get(job_id)
-        if job["status"] != "running":
-            return job
-        time.sleep(0.05)
-    raise AssertionError("job did not finish")
+_wait = wait_job

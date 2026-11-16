@@ -2,12 +2,12 @@
 ``exp_archive``/``exp_unarchive``/``exp_tag``, ``dry_run`` previews, and
 batched, idempotent jobs with progress."""
 import os
-import time
 
 import pytest
 
 pytest.importorskip("fastapi")
 from fastapi.testclient import TestClient
+from job_wait import wait_job_http
 from vmn_exp.storage.areas import RUNS
 from vmn_exp.storage.open import open_storage
 from vmn_exp.core.real_io import RealClock, real_io
@@ -46,14 +46,7 @@ def _client(tmp_path, **kw):
     return TestClient(create_app(_manager(tmp_path, **kw), io=real_io()))
 
 
-def _wait(client, job_id, timeout=60):
-    deadline = time.time() + timeout
-    while time.time() < deadline:
-        job = client.get(f"/api/v1/jobs/{job_id}").json()
-        if job["status"] != "running":
-            return job
-        time.sleep(0.05)
-    raise AssertionError("job did not finish")
+_wait = wait_job_http
 
 
 def _act(client, action, body):

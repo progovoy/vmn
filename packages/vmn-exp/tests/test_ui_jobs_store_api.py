@@ -1,12 +1,12 @@
 """Store-workspace actions over HTTP: gated on the probed ``edit`` capability."""
 import os
 import threading
-import time
 
 import pytest
 
 pytest.importorskip("fastapi")
 from fastapi.testclient import TestClient  # noqa: E402
+from job_wait import wait_job_http  # noqa: E402
 
 from vmn_exp.storage.areas import RUNS  # noqa: E402
 from vmn_exp.storage.open import open_storage  # noqa: E402
@@ -31,14 +31,7 @@ def _setup(tmp_path, capabilities=None):
     return TestClient(create_app(manager, io=real_io())), manager
 
 
-def _wait(client, job_id, timeout=30):
-    deadline = time.time() + timeout
-    while time.time() < deadline:
-        job = client.get(f"/api/v1/jobs/{job_id}").json()
-        if job["status"] != "running":
-            return job
-        time.sleep(0.05)
-    raise AssertionError("job did not finish")
+_wait = wait_job_http
 
 
 def test_tag_on_a_store_workspace_is_visible_at_once(tmp_path):

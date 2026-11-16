@@ -1,6 +1,5 @@
 import os
 import subprocess
-import time
 
 import pytest
 
@@ -15,6 +14,7 @@ from exp_helpers import (
     _storage,
     extract_dev_verstr,
 )
+from job_wait import wait_job_http
 from vmn_exp.core.real_io import real_io
 
 
@@ -29,16 +29,6 @@ def _client(app_layout, read_only=False, extra=None):
     return TestClient(create_app(manager, io=real_io(), read_only=read_only))
 
 
-def _wait_job(client, job_url, timeout=60):
-    deadline = time.time() + timeout
-    while time.time() < deadline:
-        job = client.get(job_url).json()
-        if job["status"] in ("succeeded", "failed"):
-            return job
-        time.sleep(0.2)
-    raise AssertionError("job did not finish")
-
-
 def test_ui_stamp_action(app_layout, capfd):
     _run_vmn_init()
     _init_app(app_layout.app_name)
@@ -51,7 +41,7 @@ def test_ui_stamp_action(app_layout, capfd):
         json={"release_mode": "minor"},
     )
     assert r.status_code == 202
-    job = _wait_job(client, f"/api/v1/jobs/{r.json()['id']}")
+    job = wait_job_http(client, r.json()["id"])
     assert job["status"] == "succeeded", job.get("log")
     assert job["exit_code"] == 0
 
@@ -72,7 +62,7 @@ def test_ui_stamp_dry_run(app_layout, capfd):
         f"/api/v1/workspaces/main/apps/{app_layout.app_name}/actions/stamp",
         json={"release_mode": "patch", "dry_run": True},
     )
-    job = _wait_job(client, f"/api/v1/jobs/{r.json()['id']}")
+    job = wait_job_http(client, r.json()["id"])
     assert job["status"] == "succeeded"
 
     # Dry run must not create a new version.
@@ -105,7 +95,7 @@ def test_ui_restore_action_with_safety_net(app_layout, capfd):
         json={"verstr": v_a},
     )
     assert r.status_code == 202
-    job = _wait_job(client, f"/api/v1/jobs/{r.json()['id']}")
+    job = wait_job_http(client, r.json()["id"])
     assert job["status"] == "succeeded", job.get("log")
 
     with open(p) as f:
@@ -247,7 +237,7 @@ def test_ui_exp_add_action(app_layout, capfd):
         json={"verstr": verstr, "metrics": {"loss": 0.2, "acc": 0.9}},
     )
     assert r.status_code == 202
-    job = _wait_job(client, f"/api/v1/jobs/{r.json()['id']}")
+    job = wait_job_http(client, r.json()["id"])
     assert job["status"] == "succeeded", job.get("log")
 
     detail = client.get(
@@ -274,7 +264,7 @@ def test_ui_exp_create_action(app_layout, capfd):
         json={"note": "from the ui", "metrics": {"loss": 0.42}},
     )
     assert r.status_code == 202
-    job = _wait_job(client, f"/api/v1/jobs/{r.json()['id']}")
+    job = wait_job_http(client, r.json()["id"])
     assert job["status"] == "succeeded", job.get("log")
 
     rows = client.get(
@@ -317,7 +307,7 @@ def test_ui_goto_action_without_version(app_layout, capfd):
         json={},
     )
     assert r.status_code == 202
-    job = _wait_job(client, f"/api/v1/jobs/{r.json()['id']}")
+    job = wait_job_http(client, r.json()["id"])
     assert job["status"] == "succeeded", job.get("log")
     assert "tip of the branch" in job["log"]
 
@@ -349,7 +339,7 @@ def test_ui_workspace_isolation_on_stamp(app_layout, capfd):
         f"/api/v1/workspaces/main/apps/{app_layout.app_name}/actions/stamp",
         json={"release_mode": "minor"},
     )
-    _wait_job(client, f"/api/v1/jobs/{r.json()['id']}")
+    wait_job_http(client, r.json()["id"])
 
     # main advanced; second (not fetched) still sees only the shared 0.0.1.
     main_v = client.get(

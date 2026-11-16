@@ -149,6 +149,13 @@ class Job:
         # Who may read it (plan 42 E6); never in the payload.
         self.workspace = None
         self.org_id = SINGLE_TENANT_ORG
+        # Set once the job no longer reads running.
+        self.finished = threading.Event()
+
+    def finish(self, exit_code, status, log):
+        # The status last: a reader seeing it finished sees its log too.
+        self.log, self.exit_code, self.status = log, exit_code, status
+        self.finished.set()
 
     def to_dict(self):
         job = {
@@ -186,6 +193,14 @@ class JobRunner:
         with self._lock:
             job = self._jobs.get(job_id)
             return job.to_dict() if job else None
+
+    def wait(self, job_id, timeout):
+        """*job_id*'s job once it has finished; TimeoutError past *timeout* seconds."""
+        with self._lock:
+            job = self._jobs[job_id]
+        if not job.finished.wait(timeout):
+            raise TimeoutError(f"Job {job_id} still running after {timeout}s")
+        return job.to_dict()
 
     def get_scoped(self, job_id):
         """``(job_dict, workspace, org_id)`` of *job_id*, or ``None``."""
@@ -274,19 +289,16 @@ class JobRunner:
 
     def _call(self, workspace_name, job, call):
         try:
-            job.log = _tail(str(call() or ""))
-            job.exit_code, job.status = 0, "succeeded"
+            job.finish(0, "succeeded", _tail(str(call() or "")))
         except CallTimedOut as e:
             # The store is not safe for two actions at once: the slot stays
             # taken until the late call really returns.
             with self._lock:
                 self._waiting_workspaces.add(workspace_name)
-            job.log = f"{self._timed_out()}: {e}"
-            job.exit_code, job.status = -1, "failed"
+            job.finish(-1, "failed", f"{self._timed_out()}: {e}")
             e.returned.wait()
         except Exception as e:
-            job.log = _tail(str(e))
-            job.exit_code, job.status = 1, "failed"
+            job.finish(1, "failed", _tail(str(e)))
         finally:
             with self._lock:
                 self._waiting_workspaces.discard(workspace_name)
@@ -294,18 +306,13 @@ class JobRunner:
 
     def _run(self, workspace_name, job):
         try:
-            job.exit_code, output = self.run_command(job.command, job.cwd)
-            job.log = _tail(output)
-            job.status = "succeeded" if job.exit_code == 0 else "failed"
+            exit_code, output = self.run_command(job.command, job.cwd)
+            job.finish(exit_code, "succeeded" if exit_code == 0 else "failed", _tail(output))
         except subprocess.TimeoutExpired as e:
             output = _as_text(e.stdout) + _as_text(e.stderr)
-            job.log = _tail(output + f"\n{self._timed_out()}")
-            job.exit_code = -1
-            job.status = "failed"
+            job.finish(-1, "failed", _tail(output + f"\n{self._timed_out()}"))
         except Exception as e:  # pragma: no cover - defensive
-            job.log = str(e)
-            job.exit_code = -1
-            job.status = "failed"
+            job.finish(-1, "failed", str(e))
         finally:
             with self._lock:
                 self._active_workspaces.discard(workspace_name)
