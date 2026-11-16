@@ -9,7 +9,8 @@ Storage resolution order (same as ``vmn-exp``):
   1. ``--dir`` flag
   2. ``VMN_EXPERIMENT_DIR`` environment variable
   3. repo root auto-detected from cwd (fixes visibility of SDK-registered models)
-  4. ``--store``/``--bucket`` / ``VMN_STORE*``, then the legacy ``VMN_EXPERIMENT_*`` → remote
+  4. ``--store``/``--bucket`` / ``VMN_STORE*``, then the legacy ``VMN_EXPERIMENT_*``,
+     then (in a checkout) the app's conf ``store``/``experiment.storage`` → remote
 
 Boundary: this module is EXPERIMENTS side; may only reach stamping via
 ``version_stamp.api``.
@@ -19,7 +20,7 @@ from __future__ import annotations
 import json
 import logging
 
-from vmn_exp.core.storage_resolve import resolve_experiment_storage
+from vmn_exp.cli.checkout_store import command_storage
 from vmn_exp.registry.log import remove_alias as _remove_alias, set_alias as _set_alias
 from vmn_exp.registry.datasets import copied_fields, reference_fields, register_dataset_version
 from vmn_exp.registry.log import read_uses, set_version_status
@@ -38,15 +39,11 @@ _LOG = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 def _get_storage(args, clock, env):
-    """Build experiment storage for registry operations from args / env."""
-    return resolve_experiment_storage(
-        dir=getattr(args, "dir", None),
-        store=getattr(args, "store", None),
-        bucket=getattr(args, "bucket", None),
-        prefix=getattr(args, "prefix", None),
-        endpoint_url=getattr(args, "endpoint_url", None),
-        clock=clock, env=env,
-    )
+    """Build experiment storage for registry operations from args / env and,
+    in a checkout, the conf.yml of ``--app`` (else ``VMN_APP_NAME``, else the
+    sole app)."""
+    return command_storage(args, getattr(args, "app", None),
+                           experiment_dir=getattr(args, "dir", None), clock=clock, env=env)
 
 
 # ---------------------------------------------------------------------------
