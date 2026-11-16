@@ -1,4 +1,32 @@
 #!/bin/bash
+
+# report_<suffix>_serial.html must fit NAME_MAX (255 bytes). A -k expression
+# too long for that keeps its readable head and gets a hash of the whole
+# expression, so two long expressions never share a report.
+REPORT_NAME_MAX=255
+REPORT_NAME_WRAP='report__serial.html'
+html_report_suffix()
+{
+	local LC_ALL=C  # one byte per character, and A-Z means ASCII only
+	local suite=$1 specific_test=$2
+	local expr=${specific_test}
+	if [ "${specific_test}" = 'none' ]; then
+		expr='all'
+	fi
+	local suffix=${suite}_${expr//[^A-Za-z0-9_.-]/_}
+	local max=$(( REPORT_NAME_MAX - ${#REPORT_NAME_WRAP} ))
+	if [ ${#suffix} -le ${max} ]; then
+		echo "${suffix}"
+		return
+	fi
+	local hash
+	hash=$(printf '%s' "${specific_test}" | cksum | cut -d' ' -f1)
+	echo "${suffix:0:$(( max - ${#hash} - 1 ))}_${hash}"
+}
+
+# Sourced (by its tests): define the functions only.
+return 0 2>/dev/null
+
 CUR_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 set -o pipefail
@@ -11,6 +39,7 @@ cat << EOF
            [--specific_test <test_name>]
            [--skip_test <test_name>]
            [--module_name <module_name> (the default is the suite's tests directory)]
+           [--pass both|parallel|serial (the default is both; serial = only the timing benchmarks)]
            [--ci_coverage] (turns on pytest coverage for codecov, pytest-coverage should be installed)
            [-h or --help for this usage message]
     Suites: core = vmn alone (tests/, vmn's source root only);
@@ -30,7 +59,7 @@ specific_test='none'
 skip_test='none'
 suite='core'
 module_name=''
-html_report_suffix='all'
+run_pass='both'
 
 while [ "$1" != "" ]; do
     case $1 in
@@ -43,9 +72,11 @@ while [ "$1" != "" ]; do
         --module_name )    shift
                            module_name=$1
                            ;;
+        --pass )           shift
+                           run_pass=$1
+                           ;;
         --specific_test )   shift
                            specific_test=$1
-			   html_report_suffix=${specific_test}
                            ;;
         --skip_test     )  shift
                            skip_test=$1
@@ -83,6 +114,12 @@ case ${suite} in
 esac
 module_name=${module_name:-${SUITE_DIR}}
 
+case ${run_pass} in
+    both | parallel | serial ) ;;
+    * ) usage
+        exit 1
+esac
+
 COLOR=''
 if [ ${color} = 'yes' ]; then
 	COLOR='--color=yes'
@@ -104,7 +141,7 @@ K_ARGS=()
 if [ -n "${K_EXPR}" ]; then
 	K_ARGS=(-k "${K_EXPR}")
 fi
-html_report_suffix=${suite}_${html_report_suffix//[^A-Za-z0-9_.-]/_}
+html_report_suffix=$(html_report_suffix "${suite}" "${specific_test}")
 
 CHECKOUT_KEY=$(printf '%s' "${REPO_ROOT}" | cksum | cut -d' ' -f1)
 LOG_PATH=${base_log_dir%/}/tests_output_${suite}_$(basename "${REPO_ROOT}")_${CHECKOUT_KEY}.log
@@ -145,13 +182,21 @@ serial_cmd='${PYTHON} -m coverage run -a -m pytest -m serial --html=report_${htm
 WORKERS=${VMN_TEST_WORKERS:-29}
 NO_TESTS=5
 
-echo "${cmd}"
-eval "${cmd}"
-RET_CODE=$?
+# A pass left out by --pass counts as empty, so the other one decides.
+: > "${LOG_PATH}"  # the serial pass appends; a serial-only run starts a fresh log
+RET_CODE=${NO_TESTS}
+if [ ${run_pass} != 'serial' ]; then
+	echo "${cmd}"
+	eval "${cmd}"
+	RET_CODE=$?
+fi
 
-echo "${serial_cmd}"
-eval "${serial_cmd}"
-SERIAL_RET_CODE=$?
+SERIAL_RET_CODE=${NO_TESTS}
+if [ ${run_pass} != 'parallel' ]; then
+	echo "${serial_cmd}"
+	eval "${serial_cmd}"
+	SERIAL_RET_CODE=$?
+fi
 
 if [ ${RET_CODE} -eq ${NO_TESTS} ] && [ ${SERIAL_RET_CODE} -ne ${NO_TESTS} ]; then
 	RET_CODE=0

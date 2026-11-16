@@ -135,6 +135,7 @@ load tests.
 source ./venv/bin/activate
 ./tests/run_pytest.sh                        # core suite (= --suite core)
 ./packages/vmn-exp/tests/run_pytest.sh       # exp suite (= tests/run_pytest.sh --suite exp)
+./packages/vmn-exp/tests/run_pytest.sh --pass serial  # only the serial timing benchmarks (--pass both|parallel|serial, default both)
 ./tests/run_pytest.sh --suite exp-unit       # packages/vmn-exp/tests/unit: fakes only, no Docker, no real sleep or subprocess
 make _test_ui                                # web client vitest suite (CI stage tests_webui; needs npm)
 make _lint_ui                                # web client ESLint, hooks rules (same stage)
