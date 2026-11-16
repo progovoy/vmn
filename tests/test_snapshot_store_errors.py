@@ -35,12 +35,14 @@ class EndpointConnectionError(Exception):
 
 EndpointConnectionError.__module__ = "botocore.exceptions"
 
-CONNECTION = (EndpointConnectionError,
-              'EndpointConnectionError: Could not connect to the endpoint URL: "http://s3:9000/b"')
+# No response came back: the store was not reached.
+CONNECTION = (EndpointConnectionError, "cannot reach the store: EndpointConnectionError: "
+              'Could not connect to the endpoint URL: "http://s3:9000/b"')
+# S3 answered with an error: the store was reached and refused.
 EXPIRED = (lambda: FakeS3Error("ExpiredToken", "The provided token has expired."),
-           "FakeS3Error: ExpiredToken: The provided token has expired.")
+           "the store refused the request: ExpiredToken: The provided token has expired.")
 ERRORS = pytest.mark.parametrize("make_error, message", [EXPIRED, CONNECTION],
-                                 ids=["credentials", "connection"])
+                                 ids=["refused", "unreachable"])
 
 
 class FailingS3Client(FakeS3Client):
@@ -75,7 +77,7 @@ def _fails(stores, action, run, message):
     with pytest.raises(SnapshotStoreError) as exc:
         with store_errors(stores, action):
             run()
-    assert str(exc.value) == f"snapshot {action} failed: {URI}: cannot reach the store: {message}"
+    assert str(exc.value) == f"snapshot {action} failed: {URI}: {message}"
 
 
 @ERRORS
@@ -127,7 +129,7 @@ def test_delete_with_a_key_s3_refuses():
                "Message": "Access Denied"}
     client.delete_objects = lambda Bucket, Delete: {"Errors": [refused]}
     _fails(stores, "delete", lambda: stores.records.delete("app", "0.0.1-dev.1"),
-           f"S3DeleteRefused: S3 refused to delete 1 objects: {refused}")
+           f"the store refused the request: AccessDenied: S3 refused to delete 1 objects: {refused}")
 
 
 def test_a_bug_on_an_s3_store_passes_through():

@@ -44,6 +44,17 @@ def is_client_error(exc):
     return any(cls.__module__.startswith(CLIENT_ERROR_MODULES) for cls in type(exc).__mro__)
 
 
+def refusal(exc):
+    """``(code, message)`` when S3 answered *exc* with an error (it was
+    reached and refused); None when no response came back."""
+    if isinstance(exc, S3DeleteRefused):
+        return exc.errors[0].get("Code"), str(exc)
+    code = error_code(exc)
+    if code is None:
+        return None
+    return code, exc.response["Error"].get("Message") or str(exc)
+
+
 def put_condition(etag):
     """The ``put_object`` precondition of a write on version token *etag*
     (:data:`NO_FILE`: only create; none: unconditional)."""

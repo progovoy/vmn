@@ -6,7 +6,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from s3_fakes import FakeS3Client
+from s3_fakes import FakeS3Client, FakeS3Error
 from version_stamp.cli import plugin_api
 from version_stamp.snapshot import opener as snapshot_opener
 from version_stamp.snapshot.stores import SnapshotStoreError, SnapshotStores, open_stores
@@ -173,3 +173,19 @@ def test_an_unreachable_s3_store_is_a_store_error(tmp_path, error, message, read
     with pytest.raises(SnapshotStoreError) as exc:
         _open(_vcs(tmp_path), {"store": "s3://b/p", "read_only": read_only}, factory=factory)
     assert str(exc.value) == f"s3://b/p: cannot reach the store: {message}"
+
+
+@pytest.mark.parametrize("read_only", [False, True])
+@pytest.mark.parametrize("code, text", [
+    ("AccessDenied", "Access Denied"),
+    ("InvalidAccessKeyId", "The AWS Access Key Id you provided does not exist in our records."),
+    ("ExpiredToken", "The provided token has expired."),
+])
+def test_a_store_that_refuses_the_request_says_so(tmp_path, code, text, read_only):
+    error = FakeS3Error(code)
+    error.response["Error"]["Message"] = text
+    factory = FakeFactory()
+    factory.client = UnreachableS3Client(error)
+    with pytest.raises(SnapshotStoreError) as exc:
+        _open(_vcs(tmp_path), {"store": "s3://b/p", "read_only": read_only}, factory=factory)
+    assert str(exc.value) == f"s3://b/p: the store refused the request: {code}: {text}"

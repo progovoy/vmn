@@ -78,6 +78,29 @@ def test_bugs_and_local_errors_are_not_s3_client_errors(exc):
     assert not s3_errors.is_client_error(exc)
 
 
+def test_the_refusal_of_an_error_response_is_its_code_and_message():
+    exc = FakeClientError("AccessDenied", "ignored")
+    exc.response["Error"]["Message"] = "Access Denied"
+    assert s3_errors.refusal(exc) == ("AccessDenied", "Access Denied")
+
+
+def test_an_error_response_without_a_message_refuses_with_the_error_text():
+    assert s3_errors.refusal(FakeClientError("SignatureDoesNotMatch", "bad sig")) == (
+        "SignatureDoesNotMatch", "bad sig")
+
+
+def test_the_refusal_of_a_refused_delete_keeps_its_keys_and_codes():
+    entry = {"Key": "p/k", "Code": "AccessDenied", "Message": "Access Denied"}
+    assert s3_errors.refusal(s3_errors.S3DeleteRefused([entry])) == (
+        "AccessDenied", f"S3 refused to delete 1 objects: {entry}")
+
+
+@pytest.mark.parametrize("exc", [EndpointConnectionError("no route"), ProtocolError("reset"),
+                                 ValueError("x")])
+def test_no_response_is_no_refusal(exc):
+    assert s3_errors.refusal(exc) is None
+
+
 def test_real_botocore_errors_are_s3_client_errors():
     exceptions = pytest.importorskip("botocore.exceptions")
     assert s3_errors.is_client_error(exceptions.NoCredentialsError())

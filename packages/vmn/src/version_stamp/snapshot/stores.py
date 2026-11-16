@@ -16,15 +16,17 @@ reference code too (None: no runs are scanned).
    (``store``, ``experiment.storage``): ``s3://`` (*s3_client_factory*) or a
    directory (``file://``). A writer creates the root's ``store.yml``
    (*now*/*monotonic*/*sleep*); a reader (``params["read_only"]``) refuses a
-   root holding no store. An s3:// store that can't be reached while its root
-   is checked (credentials, network) is a :class:`SnapshotStoreError` naming
-   the URI and the error. Other schemes need vmn-exp (:class:`SnapshotStoreError`);
+   root holding no store. An s3:// store that can't be reached or refuses
+   while its root is checked (credentials, network) is a
+   :class:`SnapshotStoreError` naming the URI and the error. Other schemes need vmn-exp (:class:`SnapshotStoreError`);
 4. nothing configured: the repo-local stores.
 
 ``store_errors(stores, action)``: a context manager turning an S3 client
 error (:func:`version_stamp.store.s3_errors.is_client_error`) raised while
 *action* runs on s3:// *stores* into a :class:`SnapshotStoreError`
-``"snapshot <action> failed: <uri>: cannot reach the store: <error>"``.
+``"snapshot <action> failed: <uri>: ..."``. The ``...`` (at open time too):
+``the store refused the request: <code>: <message>`` when S3 answered with an
+error, ``cannot reach the store: <error>`` when no response came back.
 
 ``open_snapshot_stores(vcs, params)``: :func:`open_stores` with the real
 environment, boto3 and clocks of :func:`version_stamp.core.real_io.real_store_io`
@@ -43,11 +45,12 @@ from version_stamp.snapshot.local_store import LocalRecordStore
 from version_stamp.store import marker
 from version_stamp.store.config import resolve_store
 from version_stamp.store.open import UnsupportedScheme, open_record_stores
-from version_stamp.store.s3_errors import is_client_error
+from version_stamp.store.s3_errors import is_client_error, refusal
 
 NEEDS_EXP = "{scheme}:// snapshot stores need vmn-exp: pip install vmn-exp"
 S3_NEEDS_EXTRA = "s3:// snapshot stores need boto3: pip install 'vmn[s3]'"
 UNREACHABLE = "{uri}: cannot reach the store: {error}"
+REFUSED = "{uri}: the store refused the request: {code}: {message}"
 
 
 class SnapshotStoreError(RuntimeError):
@@ -90,7 +93,12 @@ def _record_stores(uri, options, s3_client_factory):
     return SnapshotStores(records=records, code=code, where=uri, runs=runs)
 
 
-def _unreachable(uri, exc):
+def _failure(uri, exc):
+    """What went wrong with *uri*: S3 refused (an error response) or was not
+    reached (no response: network, timeouts, no credentials)."""
+    refused = refusal(exc)
+    if refused:
+        return REFUSED.format(uri=uri, code=refused[0], message=refused[1])
     return UNREACHABLE.format(uri=uri, error=f"{type(exc).__name__}: {exc}")
 
 
@@ -111,7 +119,7 @@ def _check_reachable_root(records, params, uri, now, monotonic, sleep):
     except Exception as exc:
         if not uri.startswith("s3://"):
             raise
-        raise SnapshotStoreError(_unreachable(uri, exc)) from None
+        raise SnapshotStoreError(_failure(uri, exc)) from None
 
 
 def _configured_stores(vcs, params, env, s3_client_factory, now, monotonic, sleep):
@@ -141,7 +149,7 @@ def store_errors(stores, action):
         if not (stores.where.startswith("s3://") and is_client_error(exc)):
             raise
         raise SnapshotStoreError(
-            f"snapshot {action} failed: {_unreachable(stores.where, exc)}") from None
+            f"snapshot {action} failed: {_failure(stores.where, exc)}") from None
 
 
 def open_snapshot_stores(vcs, params):
