@@ -13,6 +13,15 @@ TAKEN_CODES = ("412", "PreconditionFailed", "409", "ConditionalRequestConflict")
 CLIENT_ERROR_MODULES = ("botocore.", "urllib3.")
 
 
+class S3DeleteRefused(RuntimeError):
+    """S3 refused keys of a ``delete_objects`` batch; *errors* its ``Errors``
+    entries (``Key``, ``Code``, ``Message``)."""
+
+    def __init__(self, errors):
+        super().__init__(f"S3 refused to delete {len(errors)} objects: {errors[0]}")
+        self.errors = errors
+
+
 def error_code(exc):
     return ((getattr(exc, "response", None) or {}).get("Error") or {}).get("Code")
 
@@ -30,7 +39,7 @@ def is_taken(exc):
 def is_client_error(exc):
     """Whether the S3 client raised *exc* (an error response, credentials,
     network), not a bug or a local error."""
-    if error_code(exc) is not None:
+    if error_code(exc) is not None or isinstance(exc, S3DeleteRefused):
         return True
     return any(cls.__module__.startswith(CLIENT_ERROR_MODULES) for cls in type(exc).__mro__)
 

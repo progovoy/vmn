@@ -17,7 +17,7 @@ from version_stamp.store.names import (
     apply_metadata_updates,
     safe_dep_name,
 )
-from version_stamp.store.s3_errors import is_taken
+from version_stamp.store.s3_errors import S3DeleteRefused, is_taken
 
 CLAIM_FILE = ".claim"
 # The record format core writes (vmn-exp-sdk's S3 store writes its own).
@@ -97,7 +97,7 @@ class S3RecordWrites:
         )
         errors = resp.get("Errors") or []
         if errors:
-            raise RuntimeError(f"S3 refused to delete {len(errors)} objects: {errors[0]}")
+            raise S3DeleteRefused(errors)
 
     def update_note(self, app_name, verstr, note):
         return self.update_metadata(app_name, verstr, {"note": note})

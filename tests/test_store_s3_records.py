@@ -114,6 +114,23 @@ def test_delete_batches_keys(store, client, monkeypatch):
     assert client.keys(BUCKET) == []
 
 
+REFUSED = {"Key": f"{PREFIX}/app/v/working_tree.patch", "Code": "AccessDenied",
+           "Message": "Access Denied"}
+
+
+def test_a_refused_batch_delete_is_an_s3_client_error_with_the_same_message(store, client):
+    """A key S3 refuses in a ``delete_objects`` batch: still a RuntimeError
+    naming the keys and codes (SDK callers), classified as an S3 failure."""
+    from version_stamp.store.s3_errors import is_client_error
+
+    store.save("app", "v", meta("v"), {"working_tree": "diff\n"})
+    client.delete_objects = lambda Bucket, Delete: {"Errors": [REFUSED]}
+    with pytest.raises(RuntimeError) as exc:
+        store.delete("app", "v")
+    assert str(exc.value) == f"S3 refused to delete 1 objects: {REFUSED}"
+    assert is_client_error(exc.value)
+
+
 def test_update_metadata_merges_and_drops_fields(store, client):
     store.save("app", "v", meta("v", note="old", tag="x"), {})
     assert store.update_metadata("app", "v", {"note": "new", "tag": None})

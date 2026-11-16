@@ -120,6 +120,16 @@ def test_create_failing_mid_save(make_error, message, nth):
     _fails(stores, "create", save, message)
 
 
+def test_delete_with_a_key_s3_refuses():
+    client = FailingS3Client()
+    stores = _seeded(client)
+    refused = {"Key": "p/snapshots/app/0.0.1-dev.1/working_tree.patch", "Code": "AccessDenied",
+               "Message": "Access Denied"}
+    client.delete_objects = lambda Bucket, Delete: {"Errors": [refused]}
+    _fails(stores, "delete", lambda: stores.records.delete("app", "0.0.1-dev.1"),
+           f"S3DeleteRefused: S3 refused to delete 1 objects: {refused}")
+
+
 def test_a_bug_on_an_s3_store_passes_through():
     stores = _stores(FailingS3Client())
     with pytest.raises(KeyError):
