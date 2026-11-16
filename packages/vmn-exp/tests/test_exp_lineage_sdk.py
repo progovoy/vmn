@@ -96,6 +96,19 @@ def test_a_non_zero_rank_gets_the_file_and_records_nothing(store, tmp_path):
     assert len(store.list_verstrs(APP)) == before
 
 
+def test_a_non_zero_rank_reads_the_storage_start_run_was_given(store, tmp_path, monkeypatch):
+    other = LocalSnapshotStorage(str(tmp_path / "other"), area="runs")
+    path, _ = _file(tmp_path, "model.pkl", b"weights")
+    with start_run(APP, name="train", storage=other) as producer:
+        producer.log_artifact(path)
+    monkeypatch.setenv("RANK", "1")
+
+    with start_run(APP, storage=other) as rank_one:
+        local = rank_one.use_artifact(producer.id, "artifacts/model.pkl")
+    with open(local, "rb") as f:
+        assert f.read() == b"weights"
+
+
 def test_get_lineage_upstream_downstream_and_models(store, tmp_path):
     producer, _ = _producer(tmp_path)
     producer.register_model("clf", artifact_path="artifacts/model.pkl", alias="prod")

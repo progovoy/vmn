@@ -240,7 +240,7 @@ def start_run(
     if is_disabled(mode, io.env):
         return NoOpRun(app_name, disabled=True)
     if not all_ranks and is_secondary_rank(io.env):
-        return NoOpRun(app_name, rank=process_rank(io.env))
+        return NoOpRun(app_name, rank=process_rank(io.env), storage=storage)
     # The reused CLI helpers log through VMN_LOGGER, which raises until something
     # initializes it — and a library must not call init_stamp_logger.
     ensure_logger()

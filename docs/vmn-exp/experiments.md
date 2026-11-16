@@ -1849,6 +1849,14 @@ runs record locally and sync to the store; without a local root they go
 straight to the store. [`VMN_EXP_OFFLINE`](#offline-recording-and-push) drops
 the remote.
 
+The SDK readers (`list_runs`, `get_run` and the other
+[readers](sdk.md#reading-runs-back), the model/dataset registry functions)
+resolve through the same table, so they read where `start_run()` records.
+Inside a checkout the conf is that of the app they read (`app_name`, else
+`VMN_APP_NAME`; the registry functions, which take no app, use
+`VMN_APP_NAME`), its app conf only (no branch conf). Outside a checkout, or
+with no app named, the environment alone names the store.
+
 The next `vmn stamp` migrates an app's conf: it moves `uri`/`bucket`/`prefix`/
 `endpoint_url` from `experiment.storage` to a top-level `store`, leaving
 `writer_id` and `experiment_dir` (vmn-exp's own settings) under

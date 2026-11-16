@@ -209,7 +209,8 @@ Where it records:
 - Neither (and no `storage=`): `ValueError`.
 
 Readers honour the same variables, so `list_runs()` in the job finds its own
-runs (see [Reading runs back](#reading-runs-back)).
+runs; in a checkout they also read the app's conf.yml `store:` as
+`start_run()` does (see [Reading runs back](#reading-runs-back)).
 
 Without `VMN_SNAPSHOT_METADATA`, a run records the git checkout it starts in.
 `start_run()` (also with `run_id=`), `create_run()` and `create_runs()` in a
@@ -1120,9 +1121,16 @@ best = get_run("my_app", ref="latest")
 
 Without `storage=` readers read where `start_run()` records:
 `VMN_EXPERIMENT_DIR`, else the checkout found from the cwd (or
-`$VMN_WORKING_DIR`), fronting `VMN_EXPERIMENT_STORE`/the bucket shorthand —
-`vmn_exp.sdk.resolve_storage()`, which also takes
-`dir=`/`store=` explicitly. No checkout is needed. `app_name=None` resolves like
+`$VMN_WORKING_DIR`), fronting the store [the writer resolves](experiments.md#storage-local-s3-gcs-azure-plugins):
+`VMN_STORE` (legacy `VMN_EXPERIMENT_STORE`)/the bucket shorthand, then, inside
+a checkout, conf `store:` (legacy `experiment.storage`) of the app read
+(`app_name`, else `VMN_APP_NAME`; its app conf, no branch conf). Outside a
+checkout, or with no app named, the environment alone names the store, and
+git is never imported. The registry functions (`get_model_version`,
+`list_models`, ...) resolve the same way with `VMN_APP_NAME` as the app.
+`vmn_exp.sdk.resolve_storage()` resolves from the environment and the checkout's
+local store only (no conf); it also takes `dir=`/`store=` explicitly. No
+checkout is needed. `app_name=None` resolves like
 `start_run()`: `VMN_APP_NAME`, then the app of `VMN_SNAPSHOT_METADATA`, then
 the sole app with runs in that storage. The conf.yml metrics schema applies
 only when a checkout is found and `app_name`/`storage` are not both given.
