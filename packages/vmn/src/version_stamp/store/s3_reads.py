@@ -19,7 +19,7 @@ from version_stamp.store.s3_errors import is_missing
 def _patch_files(store, prefix):
     patches = {}
     for key, filename, binary in PATCH_FILES:
-        data = store._get(f"{prefix}/{filename}")
+        data = store._get_or_raise(f"{prefix}/{filename}")
         if data:
             patches[key] = data if binary else data.decode("utf-8")
     return patches
@@ -28,18 +28,16 @@ def _patch_files(store, prefix):
 def _dep_patches(store, prefix):
     base = f"{prefix}/deps/"
     found = {}
-    try:
-        for dep_prefix in store._common_prefixes(base):
-            patches = _patch_files(store, dep_prefix.rstrip("/"))
-            if patches:
-                found[dep_prefix[len(base):].rstrip("/")] = patches
-    except Exception:
-        LOGGER.debug("Failed to list S3 dep patches", exc_info=True)
+    for dep_prefix in store._common_prefixes(base):
+        patches = _patch_files(store, dep_prefix.rstrip("/"))
+        if patches:
+            found[dep_prefix[len(base):].rstrip("/")] = patches
     return found
 
 
 def read_patches(store, prefix):
-    """The patches of the record at key *prefix*, its deps' included."""
+    """The patches of the record at key *prefix*, its deps' included. Only a
+    missing patch object is left out; a failed read or listing raises."""
     patches = _patch_files(store, prefix)
     deps = _dep_patches(store, prefix)
     if deps:

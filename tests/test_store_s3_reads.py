@@ -160,6 +160,22 @@ def test_load_file_raises_on_a_failed_read(store, client):
         store.load_file("app", "v", "working_tree.patch")
 
 
+@pytest.mark.parametrize("op", ["get_object", "list_objects_v2"])
+def test_load_raises_on_a_failed_dep_read(store, client, op):
+    """A dep patch that can't be read or listed is no record without dep patches."""
+    store.save("app", "v", meta("v"), PATCHES)
+    real = getattr(client, op)
+
+    def refuse_deps(**kwargs):
+        if "/deps/" in (kwargs.get("Key") or kwargs.get("Prefix") or ""):
+            raise FakeS3Error("ExpiredToken")
+        return real(**kwargs)
+
+    setattr(client, op, refuse_deps)
+    with pytest.raises(FakeS3Error):
+        store.load("app", "v")
+
+
 def test_exists_raises_on_a_failed_head(store, client):
     _refusing(client, "head_object")
     with pytest.raises(FakeS3Error):
