@@ -239,10 +239,21 @@ def test_a_stamp_snapshot_beside_the_root_is_no_v1_record(tmp_path, clock, key):
 def test_publish_locked_waits_via_the_injected_sleep(tmp_path, clock):
     path = str(tmp_path / "store.yml")
     os.mkdir(str(tmp_path / ".store.yml.lock"))  # another creator holds it
-    marker._publish_locked(path, str(tmp_path / "tmp"), clock, clock.sleep)
+    with pytest.raises(StoreLayoutError, match="stale"):
+        marker._publish_locked(path, str(tmp_path / "tmp"), clock, clock.sleep)
     assert clock.now - NOW >= 30.0
     assert clock.sleeps and set(clock.sleeps) == {0.01}
     assert not os.path.exists(path)
+
+
+def test_publish_locked_names_a_stale_lock_it_waited_out(tmp_path, clock):
+    path, lock = str(tmp_path / "store.yml"), str(tmp_path / ".store.yml.lock")
+    os.mkdir(lock)  # a creator that died holding it
+    with pytest.raises(StoreLayoutError) as exc:
+        marker._publish_locked(path, str(tmp_path / "tmp"), clock, clock.sleep)
+    assert str(exc.value) == (
+        f"{tmp_path} has no store.yml after waiting 30s on {lock}: if no vmn "
+        "writer is running, it is stale from a crashed one: remove it and retry")
 
 
 def test_publish_locked_returns_once_the_winner_publishes(tmp_path, clock):
@@ -300,8 +311,9 @@ class FakeTime:
 def test_publish_locked_waits_on_monotonic_time_across_wall_clock_jumps(tmp_path, wall_jump):
     time = FakeTime(wall_jump)
     os.mkdir(str(tmp_path / ".store.yml.lock"))
-    marker._publish_locked(str(tmp_path / "store.yml"), str(tmp_path / "tmp"),
-                           monotonic=time.monotonic, sleep=time.sleep, wait_sec=30.0)
+    with pytest.raises(StoreLayoutError):
+        marker._publish_locked(str(tmp_path / "store.yml"), str(tmp_path / "tmp"),
+                               monotonic=time.monotonic, sleep=time.sleep, wait_sec=30.0)
     assert sum(time.sleeps) == pytest.approx(30.0, abs=0.011)
 
 

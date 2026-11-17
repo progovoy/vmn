@@ -20,6 +20,10 @@ _VERSTR_START = re.compile(VMN_VERSTR_REGEX)
 _POLL_SEC = 0.01
 
 
+class StoreLayoutError(ValueError):
+    pass
+
+
 def is_record_name(name):
     """Whether *name* (record form: ``_plus_`` for ``+``) names a vmn verstr:
     it starts with ``VMN_VERSTR_REGEX`` (``X.Y.Z[.hotfix][-prerelease.rcn]``)
@@ -34,7 +38,8 @@ def _publish_locked(path, tmp, monotonic, sleep, wait_sec=30.0):
     """Publish *tmp* as *path* unless it exists — for filesystems without hard
     links. An exclusive ``mkdir`` elects the one creator, which publishes with
     an atomic rename, so no reader ever sees a partial marker; a loser waits
-    (``sleep``, up to *wait_sec* of ``monotonic`` time) for the winner's marker."""
+    (``sleep``, up to *wait_sec* of ``monotonic`` time) for the winner's marker
+    and, if none appears, refuses naming the lock a dead creator may have left."""
     lock = os.path.join(os.path.dirname(path), f".{os.path.basename(path)}.lock")
     try:
         os.mkdir(lock)
@@ -42,6 +47,11 @@ def _publish_locked(path, tmp, monotonic, sleep, wait_sec=30.0):
         deadline = monotonic() + wait_sec
         while not os.path.exists(path) and monotonic() < deadline:
             sleep(_POLL_SEC)
+        if not os.path.exists(path):
+            raise StoreLayoutError(
+                f"{os.path.dirname(path)} has no {MARKER} after waiting {wait_sec:g}s "
+                f"on {lock}: if no vmn writer is running, it is stale from a crashed "
+                "one: remove it and retry")
         return
     try:
         if not os.path.exists(path):
