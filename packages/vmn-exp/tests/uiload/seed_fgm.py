@@ -101,7 +101,7 @@ def seed(root, profile, app=fgm_records.APP, workers=None, now=None, progress=Fa
     store = local_store_root(root)
     os.makedirs(os.path.join(store, "runs", app))
     _write(os.path.join(store, ".gitignore"), "*\n")
-    _write(os.path.join(store, MARKER), yaml.safe_dump(new_marker()))
+    _write(os.path.join(store, MARKER), yaml.safe_dump(new_marker(RealClock())))
     write_settings(open_storage(root=store, area="runs", clock=RealClock(), env=os.environ), app, _yaml(SETTINGS), actor=WRITER, env=real_io().env, host=real_io().host)
     workers = max(1, workers or os.cpu_count() or 1)
     parts = max(1, -(-workers * 2 // profile.launches))

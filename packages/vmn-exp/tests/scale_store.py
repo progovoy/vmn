@@ -40,6 +40,7 @@ from vmn_exp.core.features import FEATURES_VERSION
 from vmn_exp.core.metric_columns import Columns
 from vmn_exp.core.metric_files import indexed_name
 from vmn_exp.core.metric_index_file import build_index
+from vmn_exp.core.real_io import RealClock
 from vmn_exp.storage.store_marker import MARKER, new_marker
 
 VERSION = 1  # bump when the generated content changes: cached stores are keyed by it
@@ -168,7 +169,7 @@ def _store_root(root):
 def _write_marker(store):
     os.makedirs(os.path.join(store, "runs", APP))
     _write(os.path.join(store, ".gitignore"), "*\n")
-    _write(os.path.join(store, MARKER), yaml.safe_dump(new_marker()))
+    _write(os.path.join(store, MARKER), yaml.safe_dump(new_marker(RealClock())))
 
 
 def generate(root, n, workers=None, progress=False, now=None):

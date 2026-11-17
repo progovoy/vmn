@@ -34,6 +34,7 @@ from vmn_exp.core.metric_files import indexed_name, stream_name
 from vmn_exp.core.metric_index_file import build_index
 from vmn_exp.core.logfiles import log_object_name
 from vmn_exp.core.step_metric import create_define_metric_entry
+from vmn_exp.core.real_io import RealClock
 from vmn_exp.storage.store_marker import MARKER, new_marker
 
 APP = "fastglobalmacro"
@@ -178,7 +179,7 @@ def write_shard(task):
 
 
 def _write_marker(data, now):
-    marker = dict(new_marker(), created_at=iso(now)[:19] + "Z")
+    marker = dict(new_marker(RealClock()), created_at=iso(now)[:19] + "Z")
     path = os.path.join(data, MARKER)
     with open(path, "w") as f:
         yaml.safe_dump(marker, f, sort_keys=False)

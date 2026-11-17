@@ -26,7 +26,7 @@ def open_storage(store=None, root=None, area=SNAPSHOTS, buffer_logs=False, write
     reader has no use for it.
 
     *clock* (a :class:`~vmn_exp.core.ports.Clock`) stamps the change journal
-    and times a log buffer's flush interval. *env* (the host's environment)
+    and a new ``store.yml``, and times a log buffer's flush interval. *env* (the host's environment)
     is what the backends resolve their per-host dirs (index cache, log
     buffers) and credentials from.
 
@@ -38,9 +38,9 @@ def open_storage(store=None, root=None, area=SNAPSHOTS, buffer_logs=False, write
     """
     raw = open_store(store, area=area, env=env) if store else None
     if writer and raw is not None:
-        check_store(raw, writer)
+        check_store(raw, writer, clock)
     if writer and root and (raw is None or raw.is_remote()):
-        check_store(LocalSnapshotStorage(root, area, env=env), writer)
+        check_store(LocalSnapshotStorage(root, area, env=env), writer, clock)
     journal_clock = wall_seconds(clock)
     remote = journaled(raw, clock=journal_clock) if raw is not None else None
     if remote is not None and not remote.is_remote():
