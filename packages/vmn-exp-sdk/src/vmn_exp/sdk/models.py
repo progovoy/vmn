@@ -41,13 +41,13 @@ def check_model_name(name):
         )
 
 
-def _resolve_storage(storage=None):
-    """Resolve experiment storage from env or the current checkout (its
-    ``VMN_APP_NAME`` app's conf store), where :func:`start_run` records."""
+def _resolve_storage(storage=None, app_name=None):
+    """Resolve experiment storage from env or the current checkout (*app_name*'s,
+    else ``VMN_APP_NAME``'s, conf store), where :func:`start_run` records."""
     if storage is not None:
         return storage
     from vmn_exp.sdk.store_resolve import checkout_storage
-    return checkout_storage()
+    return checkout_storage(app_name)
 
 
 def _run_to_ref(run, app_name):
@@ -125,7 +125,7 @@ def register_model(
     """
     check_model_name(name)
     resolved_app, verstr, run_storage = _run_to_ref(run, app_name)
-    storage = _resolve_storage(storage or run_storage)
+    storage = _resolve_storage(storage or run_storage, resolved_app)
 
     run_ref = {"app": resolved_app, "verstr": verstr}
     ensure_model(storage, name)

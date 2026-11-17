@@ -82,6 +82,13 @@ def test_reader_without_an_app_name_reads_vmn_app_names_conf_store(app_layout, t
     assert [r["verstr"] for r in list_runs(use_index=False)] == [verstr]
 
 
+def test_reader_naming_no_app_reads_the_sole_stamped_apps_conf_store(app_layout, tmp_path):
+    _app_with_conf(app_layout, {"store": {"uri": (tmp_path / "shared").as_uri()}})
+    verstr = _record_one_run(app_layout)
+
+    assert [r["verstr"] for r in list_runs(use_index=False)] == [verstr]
+
+
 def test_model_readers_find_a_model_registered_in_the_conf_store(app_layout, tmp_path,
                                                                  monkeypatch):
     _app_with_conf(app_layout, {"store": {"uri": (tmp_path / "shared").as_uri()}})
