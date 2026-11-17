@@ -18,6 +18,7 @@ from types import SimpleNamespace
 import boto3
 import pytest
 from moto import mock_aws
+from vmn_exp.cli.checkout_store import CwdCheckout
 from vmn_exp.core.real_io import RealClock, real_io
 
 BUCKET = "vmn-test-bucket"
@@ -104,7 +105,7 @@ def test_in_repo_default_sdk_model_visible_to_vmn_model_list(tmp_path, monkeypat
     )
     buf = io.StringIO()
     with contextlib.redirect_stdout(buf):
-        rc = model_run_without_repo(args, real_io())
+        rc = model_run_without_repo(args, real_io(), CwdCheckout())
 
     assert rc == 0, f"model list failed: {buf.getvalue()}"
     import json as _json
@@ -233,7 +234,7 @@ def test_import_mlflow_in_repo_visible_to_exp_storage(tmp_path, monkeypatch):
         endpoint_url=None,
         backend="local",
     )
-    rc = import_mlflow_run_without_repo(args, real_io())
+    rc = import_mlflow_run_without_repo(args, real_io(), CwdCheckout())
     assert rc == 0
 
     # The run should now be in the repo's experiment storage.

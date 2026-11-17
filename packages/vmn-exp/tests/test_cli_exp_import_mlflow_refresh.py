@@ -14,6 +14,7 @@ from pathlib import Path
 import boto3
 import pytest
 from moto import mock_aws
+from vmn_exp.cli.checkout_store import CwdCheckout
 from vmn_exp.core.real_io import RealClock, real_io
 
 sys.path.insert(0, str(Path(__file__).parent))
@@ -50,7 +51,7 @@ def _args(mlruns, **overrides):
 
 def _call(args):
     from vmn_exp.importers.cli import import_mlflow_run_without_repo
-    return import_mlflow_run_without_repo(args, real_io())
+    return import_mlflow_run_without_repo(args, real_io(), CwdCheckout())
 
 
 def _mlruns(tmp_path, tags_a=None, tags_b=None):

@@ -1,6 +1,7 @@
 """``vmn-exp model`` writes through the Console port (plan 44 G16)."""
 from types import SimpleNamespace
 
+from fake_checkout import FakeCheckout
 from fakes.clock import FakeClock
 from fakes.console import FakeConsole
 from fakes.env import FakeEnv
@@ -24,7 +25,7 @@ def _model(tmp_path, action, **kw):
     io = IO(clock=FakeClock(), env=FakeEnv(), processes=None, random=None, host=None, console=console)
     args = SimpleNamespace(action=action, dir=str(tmp_path), store=None, bucket=None,
                            prefix=None, endpoint_url=None, kind=None, json=False, **kw)
-    return model_run_without_repo(args, io), console
+    return model_run_without_repo(args, io, FakeCheckout(root=None)), console
 
 
 def test_model_list_lines(tmp_path, capsys):

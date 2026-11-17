@@ -25,14 +25,14 @@ _LOG = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 
-def _get_storage(args, clock, env):
+def _get_storage(args, clock, env, checkout):
     """Resolve experiment storage from args / environment variables and, in a
     checkout, the conf.yml of the app imported into."""
     from vmn_exp.cli.checkout_store import command_storage
 
     return command_storage(args, getattr(args, "name", None),
                            experiment_dir=getattr(args, "experiment_dir", None),
-                           clock=clock, env=env)
+                           clock=clock, env=env, checkout=checkout)
 
 
 # ---------------------------------------------------------------------------
@@ -100,7 +100,7 @@ def _import_one(
 # ---------------------------------------------------------------------------
 
 
-def import_mlflow_run_without_repo(args, io) -> int | None:
+def import_mlflow_run_without_repo(args, io, checkout) -> int | None:
     """Handler for ``vmn-exp import-mlflow``.
 
     Called via ``run_without_repo`` so the repo lock is never acquired.
@@ -149,7 +149,7 @@ def import_mlflow_run_without_repo(args, io) -> int | None:
         return 0
 
     try:
-        storage = _get_storage(args, io.clock, io.env)
+        storage = _get_storage(args, io.clock, io.env, checkout)
     except (OSError, ValueError) as e:
         print(f"error: cannot open the experiment store: {e}")
         return 1
