@@ -12,16 +12,16 @@ from vmn_exp.core.storage_resolve import (
 APP_NAME_ENV = "VMN_APP_NAME"
 
 
-def command_storage(args, app_name, *, experiment_dir, clock, env):
+def command_storage(args, app_name, *, experiment_dir, clock, env, checkout):
     """The storage *args*' store flags and *experiment_dir* (the command's
-    local-root flag) name, conf.yml filling the gaps inside a checkout:
-    the conf of *app_name*, else ``VMN_APP_NAME``, else the checkout's sole
-    stamped app (with none to name, the flags and *env* alone)."""
+    local-root flag) name, conf.yml filling the gaps inside *checkout*'s git
+    checkout: the conf of *app_name*, else ``VMN_APP_NAME``, else the
+    checkout's sole stamped app (with none to name, the flags and *env* alone)."""
     flags = SimpleNamespace(
         store=getattr(args, "store", None), bucket=getattr(args, "bucket", None),
         prefix=getattr(args, "prefix", None), endpoint_url=getattr(args, "endpoint_url", None),
         experiment_dir=experiment_dir)
-    vcs = _checkout_vcs(app_name, env)
+    vcs = _checkout_vcs(app_name, env, checkout)
     if vcs is None:
         return resolve_experiment_storage(
             dir=flags.experiment_dir, store=flags.store, bucket=flags.bucket,
@@ -32,25 +32,38 @@ def command_storage(args, app_name, *, experiment_dir, clock, env):
     return _get_experiment_storage(vcs, params, clock=clock, env=env)
 
 
-def _checkout_vcs(app_name, env):
+def _checkout_vcs(app_name, env, checkout):
     """The vcs of the app whose conf the command reads, or None outside a git
     checkout (a bare ``.vmn`` dir has no vcs) or with no app to name."""
-    root = try_repo_root()
-    if root is None or not _is_git_checkout(root):
+    if checkout.git_root() is None:
         return None
-    from vmn_exp.gitmode.checkout import stamped_apps
-    from vmn_exp.gitmode.coldstart import build_vcs
-
-    app = app_name or env.get(APP_NAME_ENV) or _sole(stamped_apps())
-    return build_vcs(app) if app else None
-
-
-def _is_git_checkout(root):
-    from version_stamp.api import VMN_BE_TYPE_GIT, get_client
-
-    _, err = get_client(root, VMN_BE_TYPE_GIT)
-    return err is None
+    app = app_name or env.get(APP_NAME_ENV) or _sole(checkout.stamped_apps())
+    return checkout.vcs(app) if app else None
 
 
 def _sole(apps):
     return apps[0] if len(apps) == 1 else None
+
+
+class CwdCheckout:
+    """The real *checkout* of :func:`command_storage`: the git checkout above
+    the working directory, read through core vmn. Entry points build it."""
+
+    def git_root(self):
+        """The checkout's root, or None outside one (a bare ``.vmn`` dir too)."""
+        from version_stamp.api import VMN_BE_TYPE_GIT, get_client
+
+        root = try_repo_root()
+        if root is None or get_client(root, VMN_BE_TYPE_GIT)[1] is not None:
+            return None
+        return root
+
+    def stamped_apps(self):
+        from vmn_exp.gitmode.checkout import stamped_apps
+
+        return stamped_apps()
+
+    def vcs(self, app):
+        from vmn_exp.gitmode.coldstart import build_vcs
+
+        return build_vcs(app)

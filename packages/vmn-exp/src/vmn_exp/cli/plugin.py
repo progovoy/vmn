@@ -110,8 +110,9 @@ def _exp_run_without_repo(args):
 
     # import-mlflow is always git-free — intercept before from_snapshot check
     if is_experiment and action == "import-mlflow":
+        from vmn_exp.cli.checkout_store import CwdCheckout
         from vmn_exp.importers.cli import import_mlflow_run_without_repo
-        return import_mlflow_run_without_repo(args, real_io())
+        return import_mlflow_run_without_repo(args, real_io(), CwdCheckout())
 
     io = real_io()
     if not is_experiment or not (from_snapshot_metadata(args, io.env)
@@ -229,6 +230,7 @@ def register_dev_version() -> None:
 def register_all() -> None:
     """Every command `vmn-exp` serves. Idempotent."""
     from vmn_exp.cli.experiment import READ_ONLY_ACTIONS as EXP_READ_ONLY_ACTIONS
+    from vmn_exp.cli.checkout_store import CwdCheckout
     from vmn_exp.cli.model_cmd import add_model_parser, model_run_without_repo
 
     register_dev_version()
@@ -262,10 +264,10 @@ def register_all() -> None:
     _register(CommandSpec(
         names=("model",),
         add_parser=add_model_parser,
-        handle=lambda ctx: model_run_without_repo(ctx.args, real_io()),
+        handle=lambda ctx: model_run_without_repo(ctx.args, real_io(), CwdCheckout()),
         access="local",
         read_only_actions=frozenset({"list", "show", "resolve"}),
-        run_without_repo=lambda args: model_run_without_repo(args, real_io()),
+        run_without_repo=lambda args: model_run_without_repo(args, real_io(), CwdCheckout()),
     ))
     _register_reports()
 

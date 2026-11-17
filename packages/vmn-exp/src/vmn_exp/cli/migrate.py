@@ -39,7 +39,7 @@ def _parser():
 
 def run_migrate(argv, io):
     args = _parser().parse_args(argv)
-    opts = dict(dry_run=args.dry_run, skip_live=args.skip_live)
+    opts = dict(dry_run=args.dry_run, skip_live=args.skip_live, clock=io.clock)
     if args.dir:
         return migrate_local(args.dir, "", **opts)
     if not args.store:
@@ -56,11 +56,11 @@ def run_migrate(argv, io):
     return migrate_objects(raw._s3, raw.bucket, uri.path, **opts)
 
 
-def migrate_local(base, root, dry_run=False, skip_live=False, gitignore=False):
+def migrate_local(base, root, dry_run=False, skip_live=False, gitignore=False, *, clock):
     """Migrate the v1 records below ``<base>/.vmn`` to the v2 root ``<base>/<root>``."""
     tree = LocalTree(base)
     records, containers = local_records(tree, _V1_LOCAL, skip=root or None)
-    code = _migrate(tree, root, records, dry_run, skip_live)
+    code = _migrate(tree, root, records, dry_run, skip_live, clock)
     if code or dry_run:
         return code
     for container in sorted(containers, reverse=True):
@@ -70,7 +70,7 @@ def migrate_local(base, root, dry_run=False, skip_live=False, gitignore=False):
     return 0
 
 
-def migrate_objects(client, bucket, path, dry_run=False, skip_live=False):
+def migrate_objects(client, bucket, path, dry_run=False, skip_live=False, *, clock):
     """Migrate a v1 object store: under *path*, else the v1 default prefixes."""
     tree = ObjectTree(client, bucket)
     if path:
@@ -78,7 +78,7 @@ def migrate_objects(client, bucket, path, dry_run=False, skip_live=False):
     else:
         records = [r for prefix, area in _V1_PREFIXES
                    for r in object_records(tree, prefix, area)]
-    return _migrate(tree, path or areas.DEFAULT_ROOT, records, dry_run, skip_live)
+    return _migrate(tree, path or areas.DEFAULT_ROOT, records, dry_run, skip_live, clock)
 
 
 def _key(root, name):
@@ -95,7 +95,7 @@ def _is_live(tree, record):
             and ended_status(state) is None)
 
 
-def _migrate(tree, root, records, dry_run, skip_live):
+def _migrate(tree, root, records, dry_run, skip_live, clock):
     for record in records:
         classify(record, tree.read(f"{record.src}/{METADATA}"))
     live = [r for r in records if _is_live(tree, r)]
@@ -109,18 +109,18 @@ def _migrate(tree, root, records, dry_run, skip_live):
         for r in todo:
             print(f"{r.src} -> {v2_prefix(root, r)}")
         return 0
-    _write_marker(tree, root, migrating=True)
+    _write_marker(tree, root, clock, migrating=True)
     for record in todo:
         migrate_record(tree, root, record)
-    _write_marker(tree, root, migrating=False)
+    _write_marker(tree, root, clock, migrating=False)
     forget_checked()
     print(f"migrated {len(todo)} records, skipped {len(live)} live runs")
     return 0
 
 
-def _write_marker(tree, root, migrating):
+def _write_marker(tree, root, clock, migrating):
     text = tree.read(_key(root, MARKER))
-    marker = (yaml.safe_load(text) if text else None) or new_marker()
+    marker = (yaml.safe_load(text) if text else None) or new_marker(clock)
     marker["layout"] = LAYOUT
     if migrating:
         marker["migrating"] = True

@@ -38,12 +38,12 @@ _LOG = logging.getLogger(__name__)
 # Storage helpers
 # ---------------------------------------------------------------------------
 
-def _get_storage(args, clock, env):
+def _get_storage(args, clock, env, checkout):
     """Build experiment storage for registry operations from args / env and,
     in a checkout, the conf.yml of ``--app`` (else ``VMN_APP_NAME``, else the
     sole app)."""
-    return command_storage(args, getattr(args, "app", None),
-                           experiment_dir=getattr(args, "dir", None), clock=clock, env=env)
+    return command_storage(args, getattr(args, "app", None), experiment_dir=getattr(args, "dir", None),
+                           clock=clock, env=env, checkout=checkout)
 
 
 # ---------------------------------------------------------------------------
@@ -266,13 +266,13 @@ def _warn_consumers(storage, model_name, version):
 # Entry point
 # ---------------------------------------------------------------------------
 
-def model_run_without_repo(args, io):
+def model_run_without_repo(args, io, checkout):
     """Handle all ``vmn-exp model`` actions without a git repo.
 
     Returns an int exit code (0 = ok, 1 = error).  Always returns an int
     (never None) because every model action is repo-free.
     """
-    storage = _get_storage(args, io.clock, io.env)
+    storage = _get_storage(args, io.clock, io.env, checkout)
 
     dispatch = {  # the actions that write, as the writer of io's env and host
         "register": lambda *a: _cmd_register(*a, env=io.env, host=io.host),

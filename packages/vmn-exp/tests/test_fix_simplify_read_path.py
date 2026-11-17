@@ -236,7 +236,7 @@ def s3_ws(tmp_path):
         s3.create_bucket(Bucket="vmn-bucket")
         # An empty prefix is "no vmn store" (404) since plan 14 §2.3: mark it.
         s3.put_object(Bucket="vmn-bucket", Key="exps/store.yml",
-                      Body=yaml.safe_dump(new_marker()).encode())
+                      Body=yaml.safe_dump(new_marker(RealClock())).encode())
         from vmn_exp.ui.workspaces import WorkspaceManager
 
         manager = WorkspaceManager(str(tmp_path / "data"))

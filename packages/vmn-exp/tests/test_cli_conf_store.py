@@ -7,6 +7,7 @@ from test_cli_exp_import_mlflow import _build_mlruns, _call as _import_mlflow
 from test_cli_exp_import_mlflow import _make_args as _import_args
 from test_cli_model import _make_args as _model_args
 from test_reader_conf_store import _app_with_conf, _drop_local_runs, _no_store_env  # noqa: F401
+from vmn_exp.cli.checkout_store import CwdCheckout
 from vmn_exp.core.real_io import real_io
 from vmn_exp.sdk import start_run
 from vmn_exp.sdk.models import register_model
@@ -22,7 +23,7 @@ def _conf_store(app_layout, tmp_path):
 def _model_cli(**kwargs):
     from vmn_exp.cli.model_cmd import model_run_without_repo
 
-    return model_run_without_repo(_model_args(prefix=None, **kwargs), real_io())
+    return model_run_without_repo(_model_args(prefix=None, **kwargs), real_io(), CwdCheckout())
 
 
 def test_model_list_sees_a_model_registered_in_the_conf_store(app_layout, tmp_path, capsys):

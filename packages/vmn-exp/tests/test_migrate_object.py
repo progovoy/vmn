@@ -91,10 +91,10 @@ def test_s3_live_runs_stop_unless_skip_live(s3):
 def test_gcs_and_azure_stores_migrate(kind):
     raw = ObjectRaw(_client(kind), "bkt")
     _write(raw, "team")
-    assert migrate_objects(raw.client, "bkt", "team") == 0
+    assert migrate_objects(raw.client, "bkt", "team", clock=RealClock()) == 0
     assert raw.keys() == {f"team/{k}" for k in expected_v2_keys(v1_records())} | {
         "team/store.yml"}
-    assert migrate_objects(raw.client, "bkt", "team") == 0
+    assert migrate_objects(raw.client, "bkt", "team", clock=RealClock()) == 0
 
 
 def test_s3_shared_prefix_keeps_snapshots_with_code_verstr(s3):

@@ -1,10 +1,11 @@
 """The SDK's store.yml marker is core's (plan 45 P5d): vmn_exp.storage.store_marker
-re-exports version_stamp.store.marker and only wires the real time functions."""
+re-exports version_stamp.store.marker and adapts the Clock its callers hand it."""
 import pytest
 import yaml
 
 from version_stamp.store import marker as core
 from version_stamp.store import marker_roots as core_roots
+from fakes.clock import FakeClock
 from vmn_exp.storage import store_marker as sdk
 
 SHARED = ("MARKER", "LAYOUT", "LocalRoot", "ObjectRoot", "root_of", "require_store",
@@ -29,12 +30,12 @@ class _Backend:
         self.root, self.area = root, "runs"
 
 
-def test_check_store_keeps_its_old_signature(tmp_path):
+def test_check_store_takes_a_clock(tmp_path):
     root = tmp_path / "store"
     sdk.forget_checked()
     try:
-        sdk.check_store(_Backend(str(root)), writer=True)
-        sdk.check_store(_Backend(str(root)), True)
+        sdk.check_store(_Backend(str(root)), writer=True, clock=FakeClock())
+        sdk.check_store(_Backend(str(root)), True, FakeClock())
     finally:
         sdk.forget_checked()
     marker = yaml.safe_load((root / "store.yml").read_text())
@@ -48,12 +49,12 @@ def test_check_store_errors_are_cores(tmp_path):
     sdk.forget_checked()
     try:
         with pytest.raises(core.StoreLayoutError, match="has store layout 3"):
-            sdk.check_store(_Backend(str(root)), writer=False)
+            sdk.check_store(_Backend(str(root)), writer=False, clock=FakeClock())
     finally:
         sdk.forget_checked()
 
 
-def test_new_marker_keeps_its_old_signature():
-    marker = sdk.new_marker()
+def test_new_marker_takes_a_clock():
+    marker = sdk.new_marker(FakeClock())
     assert marker["layout"] == 2
     assert marker["created_at"].endswith("Z")
