@@ -84,6 +84,26 @@ def test_an_action_changing_nothing_refreshes_nothing():
     assert touched == []
 
 
+class _RecordingStorage:
+    """Any call on it is recorded, never performed."""
+
+    def __init__(self):
+        self.calls = []
+
+    def __getattr__(self, name):
+        return lambda *args, **kwargs: self.calls.append(name)
+
+
+def test_a_bulk_batch_with_one_invalid_run_acts_on_none():
+    storage, touched = _RecordingStorage(), []
+    spec, err = BulkSpec.build("exp_tag", APP, {"set": {"k": "v"}})
+    assert err is None
+    with pytest.raises(RuntimeError):
+        spec.apply(storage, [RUNS[0], "-not-a-verstr", RUNS[1]], touched=touched.append,
+                   now=FakeClock().now(), env=FakeEnv(), host=FakeHost())
+    assert storage.calls == [] and touched == []
+
+
 def test_a_bulk_batch_refreshes_the_app_once():
     storage, touched = FakeStorage(), []
     spec = BulkSpec("exp_archive", APP, {"q": 'branch = "a"'})
