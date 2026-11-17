@@ -300,23 +300,35 @@ def branch_conf_legacy_path(app_dir_path, branch, root=False):
     )
 
 
+_BRANCH_CONF_LAYOUTS = (
+    ("canonical", branch_conf_canonical_path),
+    ("flat", branch_conf_flat_path),
+    ("legacy", branch_conf_legacy_path),
+)
+
+
+def branch_conf_candidates(app_dir_path, branch, root=False):
+    """The conf files vmn loads for *branch*, in precedence order (canonical >
+    flat > legacy > the default (root_)conf.yml): the first that exists wins.
+    Pure: touches no filesystem."""
+    layouts = _BRANCH_CONF_LAYOUTS if branch else ()
+    return [path_fn(app_dir_path, branch, root=root) for _, path_fn in layouts] + [
+        os.path.join(app_dir_path, _conf_basename(root))
+    ]
+
+
 def resolve_branch_conf_path(app_dir_path, branch, root=False):
     """Resolve a branch-specific conf file, supporting all layouts.
 
     Precedence: canonical > flat > legacy. Falls back to the default
     (root_)conf.yml with convention None when no branch conf exists.
     """
-    if branch:
-        for convention, path_fn in (
-            ("canonical", branch_conf_canonical_path),
-            ("flat", branch_conf_flat_path),
-            ("legacy", branch_conf_legacy_path),
-        ):
-            path = path_fn(app_dir_path, branch, root=root)
-            if os.path.isfile(path):
-                return path, convention
+    candidates = branch_conf_candidates(app_dir_path, branch, root=root)
+    for (convention, _), path in zip(_BRANCH_CONF_LAYOUTS, candidates[:-1]):
+        if os.path.isfile(path):
+            return path, convention
 
-    return os.path.join(app_dir_path, _conf_basename(root)), None
+    return candidates[-1], None
 
 
 class WrongTagFormatException(Exception):
