@@ -67,13 +67,13 @@ class Job:
         # Who may read it (plan 42 E6); never in the payload.
         self.workspace = None
         self.org_id = SINGLE_TENANT_ORG
-        # Set once the job no longer reads running.
+        # Set once the job no longer reads running and its workspace slot
+        # says so: a waiter that submits next is not refused by a stale slot.
         self.finished = threading.Event()
 
     def finish(self, exit_code, status, log):
         # The status last: a reader seeing it finished sees its log too.
         self.log, self.exit_code, self.status = log, exit_code, status
-        self.finished.set()
 
     def to_dict(self):
         job = {
@@ -214,6 +214,7 @@ class JobRunner:
             with self._lock:
                 self._waiting_workspaces.add(workspace_name)
             job.finish(-1, "failed", f"{self._timed_out()}: {e}")
+            job.finished.set()
             e.returned.wait()
         except Exception as e:
             job.finish(1, "failed", _tail(str(e)))
@@ -221,6 +222,7 @@ class JobRunner:
             with self._lock:
                 self._waiting_workspaces.discard(workspace_name)
                 self._active_workspaces.discard(workspace_name)
+            job.finished.set()
 
     def _run(self, workspace_name, job):
         try:
@@ -234,3 +236,4 @@ class JobRunner:
         finally:
             with self._lock:
                 self._active_workspaces.discard(workspace_name)
+            job.finished.set()
