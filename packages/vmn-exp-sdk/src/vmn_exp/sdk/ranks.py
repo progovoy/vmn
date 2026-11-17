@@ -127,12 +127,12 @@ class NoOpRun:
     def use_dataset(self, ref, *, storage=None):
         return self._resolved(ref, "dataset", storage)
 
-    @staticmethod
-    def _resolved(ref, kind, storage):
-        from vmn_exp.sdk.models import _resolve_storage
+    def _resolved(self, ref, kind, storage):
+        from vmn_exp.sdk.store_resolve import checkout_storage
         from vmn_exp.sdk.usage import resolved_version
 
-        return resolved_version(_resolve_storage(storage), ref, kind)
+        storage = storage or self._storage or checkout_storage(self.app_name)
+        return resolved_version(storage, ref, kind)
 
     def similar(self, top=10):
         """No runs: a run that records nothing has nothing to compare."""

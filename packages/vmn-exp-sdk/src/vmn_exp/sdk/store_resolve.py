@@ -28,15 +28,36 @@ def checkout_storage(app_name=None, repo_root=None):
     """The storage a reader of *app_name* (else ``VMN_APP_NAME``) reads: where
     :func:`start_run` records it. Inside the checkout *repo_root* (auto-detected
     when None; ``False``: none) the app's conf.yml ``store`` (else the legacy
-    ``experiment.storage``) names the store after the environment; outside one,
-    or with no app named, the environment alone does, as :func:`resolve_storage`.
+    ``experiment.storage``) names the store after the environment; with no app
+    named it is the checkout's sole stamped app, as :func:`start_run` infers it.
+    Outside a checkout, or with no app to name, the environment alone names the
+    store, as :func:`resolve_storage`.
     An SDK entry point like it."""
     io = real_io()
     root = try_repo_root() if repo_root is None else repo_root
-    app = app_name or io.env.get(APP_NAME_ENV)
+    return storage_of_checkout(app_name, root, io.env, io.clock, stamped_apps=_stamped_apps)
+
+
+def storage_of_checkout(app_name, root, env, clock, stamped_apps):
+    """:func:`checkout_storage` over the given IO."""
+    app = app_name or env.get(APP_NAME_ENV) or (root and _sole(stamped_apps()))
     conf = read_app_conf(app, root) if root and app else None
     return resolve_experiment_storage(repo_root=root or False, conf=conf,
-                                      clock=io.clock, env=io.env)
+                                      clock=clock, env=env)
+
+
+def _sole(apps):
+    return apps[0] if len(apps) == 1 else None
+
+
+def _stamped_apps():
+    """The checkout's stamped apps, as :func:`start_run` infers its app from;
+    none without git mode (an SDK-only install records with no checkout)."""
+    try:
+        from vmn_exp.gitmode import checkout
+    except ImportError:
+        return []
+    return checkout.stamped_apps()
 
 
 def configured_storage(vcs, params, writer=True):

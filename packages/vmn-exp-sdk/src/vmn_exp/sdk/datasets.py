@@ -61,7 +61,7 @@ def register_dataset(
         fields = reference_fields(uri, digest)
     else:
         app, verstr, run_storage = _run_to_ref(run, app_name)
-        storage = _resolve_storage(storage or run_storage)
+        storage = _resolve_storage(storage or run_storage, app)
         fields = copied_fields(storage, {"app": app, "verstr": verstr}, artifact_path, digest)
 
     n = register_dataset_version(storage, name, fields, description=description, dedupe=dedupe)
