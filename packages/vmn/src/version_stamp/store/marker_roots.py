@@ -5,6 +5,8 @@ import os
 import re
 import tempfile
 
+import yaml
+
 from version_stamp.core.constants import VMN_VERSTR_REGEX
 from version_stamp.core.utils import yaml_safe_load
 from version_stamp.store import areas
@@ -132,7 +134,17 @@ def _is_v1_record_dir(path):
     """A v1 record directory: its ``metadata.yml`` is a record's, not a stamp
     snapshot's (``create_snapshots`` writes those to ``.vmn/<app>/snapshots/``)."""
     raw = read_file(os.path.join(path, RECORD_FILE))
-    return raw is not None and is_record_metadata(yaml_safe_load(raw))
+    return raw is not None and not _is_stamp_snapshot(raw)
+
+
+def _is_stamp_snapshot(raw):
+    """Whether *raw* parses to a stamp snapshot's metadata; unparsable text is
+    not one (a v1 record, as any ``metadata.yml`` there was before)."""
+    try:
+        metadata = yaml_safe_load(raw)
+    except yaml.YAMLError:
+        return False
+    return isinstance(metadata, dict) and not is_record_metadata(metadata)
 
 
 def _v1_local_record(vmn_dir, skip):

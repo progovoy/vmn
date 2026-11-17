@@ -236,6 +236,15 @@ def test_a_stamp_snapshot_beside_the_root_is_no_v1_record(tmp_path, clock, key):
     assert os.path.exists(os.path.join(root, "store.yml"))
 
 
+@pytest.mark.parametrize("text", ["key: [unclosed\n", "- a list\n", "just text\n"])
+def test_a_v1_record_that_is_no_stamp_dict_is_still_v1(tmp_path, clock, text):
+    rec = tmp_path / ".vmn" / "my_app" / "snapshots" / "s1"
+    rec.mkdir(parents=True)
+    (rec / "metadata.yml").write_text(text)
+    with pytest.raises(StoreLayoutError, match="vmn-exp migrate"):
+        _check(FakeLocalStorage(str(tmp_path / ".vmn" / "store")), True, clock)
+
+
 def test_publish_locked_waits_via_the_injected_sleep(tmp_path, clock):
     path = str(tmp_path / "store.yml")
     os.mkdir(str(tmp_path / ".store.yml.lock"))  # another creator holds it
