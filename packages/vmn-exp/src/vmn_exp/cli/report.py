@@ -133,8 +133,8 @@ def _cmd_delete(storage, args):
 _DISPATCH = {"list": _cmd_list, "show": _cmd_show, "export": _cmd_export, "delete": _cmd_delete}
 
 
-def report_run_without_repo(args, io):
-    storage = _get_storage(args, io.clock, io.env)
+def report_run_without_repo(args, io, checkout):
+    storage = _get_storage(args, io.clock, io.env, checkout)
     if args.action == "put":
         return _cmd_put(storage, args, io)
     return _DISPATCH[args.action](storage, args)

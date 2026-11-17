@@ -21,8 +21,8 @@ def add_settings_parser(subparsers):
     return parser
 
 
-def settings_run_without_repo(args, io):
-    storage = _get_storage(args, io.clock, io.env)
+def settings_run_without_repo(args, io, checkout):
+    storage = _get_storage(args, io.clock, io.env, checkout)
     if args.action == "set":
         return _set(storage, args, io.env, io.host)
     text = read_settings_text(storage, args.name)

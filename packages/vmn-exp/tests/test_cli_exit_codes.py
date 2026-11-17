@@ -13,6 +13,7 @@ from vmn_exp.cli.experiment import handle_experiment
 from vmn_exp.cli.plugin import _exp_run_without_repo, register_all
 from vmn_exp.cli.run import experiment_run
 from vmn_exp.cli.run_disabled import exec_if_disabled
+from vmn_exp.cli.checkout_store import CwdCheckout
 from vmn_exp.cli.settings import settings_run_without_repo
 from vmn_exp.core.real_io import real_io
 
@@ -30,7 +31,7 @@ def _parse(*argv):
 def test_settings_set_without_a_file_is_a_usage_error(tmp_path):
     args = SimpleNamespace(action="set", name="my_app", file=None, dir=str(tmp_path),
                            store=None, bucket=None, prefix=None, endpoint_url=None)
-    assert settings_run_without_repo(args, real_io()) == 2
+    assert settings_run_without_repo(args, real_io(), CwdCheckout()) == 2
 
 
 def test_run_without_a_command_is_a_usage_error():

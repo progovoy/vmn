@@ -46,8 +46,8 @@ def _stored(comment):
     return {k: v for k, v in comment.items() if not (k == "text" and comment["deleted"])}
 
 
-def comment_run_without_repo(args, io):
-    return comment_run(_get_storage(args, io.clock, io.env), args, io.random, io.env, io.host)
+def comment_run_without_repo(args, io, checkout):
+    return comment_run(_get_storage(args, io.clock, io.env, checkout), args, io.random, io.env, io.host)
 
 
 def comment_run(storage, args, random, env, host):
@@ -59,8 +59,8 @@ def comment_run(storage, args, random, env, host):
     return 0
 
 
-def comments_run_without_repo(args, io):
-    return comments_run(_get_storage(args, io.clock, io.env), args)
+def comments_run_without_repo(args, io, checkout):
+    return comments_run(_get_storage(args, io.clock, io.env, checkout), args)
 
 
 def _thread_line(c):

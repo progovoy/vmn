@@ -274,6 +274,7 @@ def register_all() -> None:
 
 def _register_reports():
     from vmn_exp.cli import comment, report, settings
+    from vmn_exp.cli.checkout_store import CwdCheckout
 
     for names, add_parser, run, read_only in (
         (("settings",), settings.add_settings_parser, settings.settings_run_without_repo,
@@ -286,8 +287,8 @@ def _register_reports():
         _register(CommandSpec(
             names=names,
             add_parser=add_parser,
-            handle=lambda ctx, run=run: run(ctx.args, real_io()),
+            handle=lambda ctx, run=run: run(ctx.args, real_io(), CwdCheckout()),
             access="local",
             read_only_actions=frozenset(read_only),
-            run_without_repo=lambda args, run=run: run(args, real_io()),
+            run_without_repo=lambda args, run=run: run(args, real_io(), CwdCheckout()),
         ))
