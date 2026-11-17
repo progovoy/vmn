@@ -1076,8 +1076,8 @@ run's parent on each `-v` prune.
 Outside a git checkout, the store-only maintenance commands — `prune`,
 [`backfill-children`](#backfill-children), [`compact`](#compact) and
 [`similar-backfill`](#similar-backfill) — need no `--from-snapshot`: the store
-comes from `--store`/`--bucket`/`--experiment-dir` or `VMN_EXPERIMENT_STORE`/
-`VMN_EXPERIMENT_DIR` ([resolution](#storage-local-s3-gcs-azure-plugins)), the app
+comes from `--store`/`--bucket`/`--experiment-dir` or `VMN_STORE` (legacy
+`VMN_EXPERIMENT_STORE`)/`VMN_EXPERIMENT_DIR` ([resolution](#storage-local-s3-gcs-azure-plugins)), the app
 from its name, and no store at all exits 1 naming those flags. Read commands
 (`list`, `show`, `export-metrics`, `lineage`, ...) and `push` (it ships a
 checkout's local records) still need a checkout or `--from-snapshot`.
@@ -2326,8 +2326,8 @@ vmn-exp push my_app --store s3://ml-exps/team --dry-run      # preview
 pushed 2, up-to-date 1, renamed 1, skipped 0, failed 0
 ```
 
-- **Target**: `--store` (or the bucket shorthand) > `VMN_EXPERIMENT_STORE` >
-  conf. `VMN_EXP_OFFLINE` never hides it here. It must be a remote store;
+- **Target**: `--store` (or the bucket shorthand) > `VMN_STORE` (legacy
+  `VMN_EXPERIMENT_STORE`) > conf. `VMN_EXP_OFFLINE` never hides it here. It must be a remote store;
   `file://` (rsync instead) and no remote are refused.
 - **Same name, parents first**: the code object (if the remote lacks it), the
   claim, other top-level files, each writer's log from where the remote copy
