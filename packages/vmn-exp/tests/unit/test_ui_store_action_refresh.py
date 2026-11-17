@@ -45,10 +45,63 @@ def test_a_failing_action_still_refreshes_the_runs_it_changed():
     assert touched == [APP]
 
 
+class _RefreshFailing:
+    """``touched`` that fails for the first app it is given."""
+
+    def __init__(self):
+        self.refreshed = []
+
+    def __call__(self, app_name):
+        self.refreshed.append(app_name)
+        if len(self.refreshed) == 1:
+            raise OSError("index refresh failed")
+
+
+def _archive_in(app_name, verstrs):
+    action, err = build_store_action("exp_archive", app_name, {"verstrs": verstrs}, FakeEnv(), FakeHost())
+    assert err is None
+    return action
+
+
+def test_a_failing_refresh_still_refreshes_the_other_apps():
+    touched = _RefreshFailing()
+    actions = [_archive_in("app_a", RUNS[:1]), _archive_in("app_b", RUNS[1:])]
+    log = run_refreshing_once(actions, FakeStorage(), touched, FakeClock().now())
+    assert touched.refreshed == ["app_a", "app_b"]
+    assert log == "\n".join(RUNS)
+
+
+def test_a_failing_refresh_does_not_mask_the_actions_error():
+    storage, touched = FakeStorage(missing={RUNS[1]}), _RefreshFailing()
+    with pytest.raises(StoreActionError):
+        run_refreshing_once([_archive(RUNS)], storage, touched, FakeClock().now())
+    assert touched.refreshed == [APP]
+
+
 def test_an_action_changing_nothing_refreshes_nothing():
     touched = []
     run_refreshing_once([], FakeStorage(), touched.append, FakeClock().now())
     assert touched == []
+
+
+class _RecordingStorage:
+    """Any call on it is recorded, never performed."""
+
+    def __init__(self):
+        self.calls = []
+
+    def __getattr__(self, name):
+        return lambda *args, **kwargs: self.calls.append(name)
+
+
+def test_a_bulk_batch_with_one_invalid_run_acts_on_none():
+    storage, touched = _RecordingStorage(), []
+    spec, err = BulkSpec.build("exp_tag", APP, {"set": {"k": "v"}})
+    assert err is None
+    with pytest.raises(RuntimeError):
+        spec.apply(storage, [RUNS[0], "-not-a-verstr", RUNS[1]], touched=touched.append,
+                   now=FakeClock().now(), env=FakeEnv(), host=FakeHost())
+    assert storage.calls == [] and touched == []
 
 
 def test_a_bulk_batch_refreshes_the_app_once():

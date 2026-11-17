@@ -10,6 +10,7 @@ offered here: they stay CLI-only, under the user's own access.
 ``action.run(storage, hint, now)`` performs it, returns its log text, raises on
 failure, and calls ``hint(app, verstr)`` for every run record it touched.
 """
+import logging
 from dataclasses import dataclass
 from typing import Callable, List
 
@@ -28,6 +29,8 @@ from vmn_exp.ui.jobs_exp_meta import (
     exp_tag_command,
 )
 from vmn_exp.ui.jobs_models import validate_alias_body, validate_register_body
+
+_LOGGER = logging.getLogger(__name__)
 
 
 @dataclass
@@ -191,7 +194,8 @@ def run_refreshing_once(actions, storage, touched, now):
     """Run *actions* on *storage*, their log text; then ``touched(app)`` once
     for each app whose runs they changed, even when one fails. Refreshing an
     app's index re-lists the app, so a refresh per run would make a batch of
-    runs quadratic."""
+    runs quadratic. A failing refresh is logged: it neither skips the other
+    apps nor hides the actions' own error."""
     apps = {}
 
     def hint(app_name, verstr):
@@ -201,7 +205,14 @@ def run_refreshing_once(actions, storage, touched, now):
         return "\n".join(action.run(storage, hint, now) for action in actions)
     finally:
         for app_name in apps:
-            touched(app_name)
+            _refresh(touched, app_name)
+
+
+def _refresh(touched, app_name):
+    try:
+        touched(app_name)
+    except Exception:
+        _LOGGER.exception("Refreshing the index of %s failed", app_name)
 
 
 def build_store_action(action, app_name, body, env, host):

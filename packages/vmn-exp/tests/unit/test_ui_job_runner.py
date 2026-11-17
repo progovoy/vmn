@@ -2,6 +2,7 @@
 G5): no real child process, no real thread, no polling."""
 import subprocess
 import sys
+import threading
 
 import pytest
 
@@ -103,3 +104,40 @@ def test_wait_returns_an_in_process_job_once_it_has_failed():
     runner, _ = _runner({})
     submitted, _ = runner.submit_call("ws", ["note"], lambda: 1 / 0)
     assert runner.wait(submitted["id"], timeout=0)["status"] == "failed"
+
+
+class _ResubmitOnFinish(threading.Event):
+    """A job's finished event that resubmits to the job's workspace the moment
+    it is set, as a caller woken by ``wait()`` may; keeps the refusal."""
+
+    def __init__(self, resubmit):
+        super().__init__()
+        self._resubmit, self.refusal = resubmit, "never finished"
+
+    def set(self):
+        self.refusal = self._resubmit()[1]
+        super().set()
+
+
+def _refusal_on_finish(submit_job):
+    """The refusal a resubmit to the workspace gets as its job finishes."""
+    spies = []
+
+    def start_first_inline(target, workspace, job):
+        if not spies:  # the resubmitted job is never started
+            spies.append(_ResubmitOnFinish(lambda: runner.submit(workspace, "/repo", STAMP)))
+            job.finished = spies[0]
+            target(workspace, job)
+
+    runner, _ = _runner({tuple(STAMP): _done(STAMP)}, start_thread=start_first_inline)
+    submit_job(runner)
+    return spies[0].refusal
+
+
+@pytest.mark.parametrize("submit_job", [
+    lambda runner: runner.submit("ws", "/repo", STAMP),
+    lambda runner: runner.submit_call("ws", ["note"], lambda: "ok"),
+    lambda runner: runner.submit_call("ws", ["note"], lambda: 1 / 0),
+], ids=["command", "call", "failing-call"])
+def test_a_finished_job_has_already_freed_its_workspace(submit_job):
+    assert _refusal_on_finish(submit_job) is None
