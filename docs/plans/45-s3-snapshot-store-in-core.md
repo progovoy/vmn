@@ -51,8 +51,10 @@ Follow-ups:
   checkout: decide whether it should read conf `store:` too.~~ Done
   (2026-11-16): yes. It takes the app's `conf:` mapping (`conf=`); the SDK
   readers and registry functions pass it through `checkout_storage`
-  (`sdk/sdk/store_resolve.py`; the app read, else `VMN_APP_NAME`; app conf
-  only, no branch conf), so in a checkout they resolve the writer's table.
+  (`sdk/sdk/store_resolve.py`; the app read, else `VMN_APP_NAME`; the conf
+  file the writer loads: the checked-out branch's conf, off `.git/HEAD`,
+  through `version_stamp.store.conf_paths`, else `conf.yml`), so in a
+  checkout they resolve the writer's table.
   Outside a checkout, or with no app named, the environment alone. A non-zero
   rank's `NoOpRun.use_artifact` reads `start_run`'s `storage=`, else
   `checkout_storage`, as rank 0 does. `vmn-exp model` and
