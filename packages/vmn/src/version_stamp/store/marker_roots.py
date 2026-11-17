@@ -6,8 +6,9 @@ import re
 import tempfile
 
 from version_stamp.core.constants import VMN_VERSTR_REGEX
+from version_stamp.core.utils import yaml_safe_load
 from version_stamp.store import areas
-from version_stamp.store.names import unsafe_verstr
+from version_stamp.store.names import is_record_metadata, read_file, unsafe_verstr
 from version_stamp.store.s3_errors import is_missing, is_taken
 
 MARKER = "store.yml"
@@ -117,6 +118,13 @@ def _local_record(path):
         os.path.join(path, RECORD_FILE))
 
 
+def _is_v1_record_dir(path):
+    """A v1 record directory: its ``metadata.yml`` is a record's, not a stamp
+    snapshot's (``create_snapshots`` writes those to ``.vmn/<app>/snapshots/``)."""
+    raw = read_file(os.path.join(path, RECORD_FILE))
+    return raw is not None and is_record_metadata(yaml_safe_load(raw))
+
+
 def _v1_local_record(vmn_dir, skip):
     """Whether *vmn_dir* holds a v1 record: ``<app path>/{experiments,snapshots}/<rec>/metadata.yml``."""
     for path, dirs, _files in os.walk(vmn_dir):
@@ -124,7 +132,7 @@ def _v1_local_record(vmn_dir, skip):
                    and os.path.join(path, d) != skip]
         if path == vmn_dir or os.path.basename(path) not in _V1_CONTAINERS:
             continue
-        if any(os.path.isfile(os.path.join(path, d, RECORD_FILE)) for d in dirs):
+        if any(_is_v1_record_dir(os.path.join(path, d)) for d in dirs):
             return True
         dirs[:] = []
     return False

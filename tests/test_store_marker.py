@@ -226,6 +226,16 @@ def test_local_v1_records_in_the_dot_vmn_beside_the_root_refused(tmp_path, clock
         _check(FakeLocalStorage(str(tmp_path / ".vmn" / "store")), True, clock)
 
 
+@pytest.mark.parametrize("key", ["stamping", "vmn_info"])
+def test_a_stamp_snapshot_beside_the_root_is_no_v1_record(tmp_path, clock, key):
+    rec = tmp_path / ".vmn" / "my_app" / "snapshots" / "0.0.1"
+    rec.mkdir(parents=True)
+    (rec / "metadata.yml").write_text(yaml.safe_dump({key: {"version": "0.0.1"}}))
+    root = str(tmp_path / ".vmn" / "store")
+    _check(FakeLocalStorage(root), True, clock)
+    assert os.path.exists(os.path.join(root, "store.yml"))
+
+
 def test_publish_locked_waits_via_the_injected_sleep(tmp_path, clock):
     path = str(tmp_path / "store.yml")
     os.mkdir(str(tmp_path / ".store.yml.lock"))  # another creator holds it
