@@ -2274,7 +2274,8 @@ vmn-exp buffers ship --store s3://bucket   # ship the ones no live process owns
 
 `list` prints each buffer's directory, `live` / `orphaned` / `unknown`, age,
 host, pid, store, runs and size; it is read-only and takes no repo lock.
-`ship` (`--store`, default `$VMN_EXPERIMENT_STORE`) takes each buffer's owner
+`ship` (`--store`, default `$VMN_STORE` or its bucket shorthand, then the
+legacy `$VMN_EXPERIMENT_STORE`) takes each buffer's owner
 lock before it touches it and holds it until it is done, so it ships only a
 buffer whose process is gone or gave it up; two `ship`s exclude each other
 the same way. It resumes each stream from what the bucket holds, then

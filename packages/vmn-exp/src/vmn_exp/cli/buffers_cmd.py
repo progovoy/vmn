@@ -12,6 +12,7 @@ import sys
 from vmn_exp.cli.duration_text import humanize_sec
 from vmn_exp.cli.pushing import buffer_recover
 from vmn_exp.core.status import parse_iso
+from vmn_exp.core.storage_resolve import merge_env_into_params, store_uri
 
 
 def _parser():
@@ -21,10 +22,18 @@ def _parser():
     sub = p.add_subparsers(dest="action", required=True)
     sub.add_parser("list", help="list the buffers, live or not")
     ship = sub.add_parser("ship", help="ship the buffers no live process owns")
-    ship.add_argument("--store", help="the store URI (default: $VMN_EXPERIMENT_STORE)")
+    ship.add_argument("--store", help="the store URI (default: $VMN_STORE or the $VMN_STORE_BUCKET shorthand)")
     ship.add_argument("--keep", action="store_true",
                       help="leave a fully shipped buffer dir in place")
     return p
+
+
+def store_from_env(env):
+    """The store URI *env* names (``VMN_STORE*``, then the legacy
+    ``VMN_EXPERIMENT_*`` twins), None without one."""
+    params = {}
+    merge_env_into_params(params, env)
+    return store_uri(params)
 
 
 def run_buffers(argv, io):
@@ -35,7 +44,7 @@ def run_buffers(argv, io):
 
     return buffers_main(
         argv, host=LocalBufferHost(), bases=log_buffers_bases(io.env),
-        store_env=io.env.get("VMN_EXPERIMENT_STORE"),
+        store_env=store_from_env(io.env),
         open_remote=lambda uri, area: open_storage(uri, area=area, writer=False, clock=io.clock, env=io.env),
         out=sys.stdout, now=io.clock.now().timestamp())
 
@@ -49,7 +58,7 @@ def buffers_main(argv, *, host, bases, store_env, open_remote, out, now):
         return 0
     store = args.store or store_env
     if not store:
-        out.write("vmn-exp buffers ship: pass --store (or set VMN_EXPERIMENT_STORE)\n")
+        out.write("vmn-exp buffers ship: pass --store (or set VMN_STORE)\n")
         return 2
     return _ship_all(buffers, store, host, open_remote, args.keep, out)
 
