@@ -5,9 +5,12 @@ import os
 import re
 import tempfile
 
+import yaml
+
 from version_stamp.core.constants import VMN_VERSTR_REGEX
+from version_stamp.core.utils import yaml_safe_load
 from version_stamp.store import areas
-from version_stamp.store.names import unsafe_verstr
+from version_stamp.store.names import is_record_metadata, read_file, unsafe_verstr
 from version_stamp.store.s3_errors import is_missing, is_taken
 
 MARKER = "store.yml"
@@ -17,6 +20,10 @@ RECORD_FILE = "metadata.yml"
 _RECORDS_PROBED = 5  # record prefixes of a top-level name probed on object stores
 _VERSTR_START = re.compile(VMN_VERSTR_REGEX)
 _POLL_SEC = 0.01
+
+
+class StoreLayoutError(ValueError):
+    pass
 
 
 def is_record_name(name):
@@ -33,7 +40,8 @@ def _publish_locked(path, tmp, monotonic, sleep, wait_sec=30.0):
     """Publish *tmp* as *path* unless it exists — for filesystems without hard
     links. An exclusive ``mkdir`` elects the one creator, which publishes with
     an atomic rename, so no reader ever sees a partial marker; a loser waits
-    (``sleep``, up to *wait_sec* of ``monotonic`` time) for the winner's marker."""
+    (``sleep``, up to *wait_sec* of ``monotonic`` time) for the winner's marker
+    and, if none appears, refuses naming the lock a dead creator may have left."""
     lock = os.path.join(os.path.dirname(path), f".{os.path.basename(path)}.lock")
     try:
         os.mkdir(lock)
@@ -41,6 +49,11 @@ def _publish_locked(path, tmp, monotonic, sleep, wait_sec=30.0):
         deadline = monotonic() + wait_sec
         while not os.path.exists(path) and monotonic() < deadline:
             sleep(_POLL_SEC)
+        if not os.path.exists(path):
+            raise StoreLayoutError(
+                f"{os.path.dirname(path)} has no {MARKER} after waiting {wait_sec:g}s "
+                f"on {lock}: if no vmn writer is running, it is stale from a crashed "
+                "one: remove it and retry")
         return
     try:
         if not os.path.exists(path):
@@ -117,6 +130,23 @@ def _local_record(path):
         os.path.join(path, RECORD_FILE))
 
 
+def _is_v1_record_dir(path):
+    """A v1 record directory: its ``metadata.yml`` is a record's, not a stamp
+    snapshot's (``create_snapshots`` writes those to ``.vmn/<app>/snapshots/``)."""
+    raw = read_file(os.path.join(path, RECORD_FILE))
+    return raw is not None and not _is_stamp_snapshot(raw)
+
+
+def _is_stamp_snapshot(raw):
+    """Whether *raw* parses to a stamp snapshot's metadata; unparsable text is
+    not one (a v1 record, as any ``metadata.yml`` there was before)."""
+    try:
+        metadata = yaml_safe_load(raw)
+    except yaml.YAMLError:
+        return False
+    return isinstance(metadata, dict) and not is_record_metadata(metadata)
+
+
 def _v1_local_record(vmn_dir, skip):
     """Whether *vmn_dir* holds a v1 record: ``<app path>/{experiments,snapshots}/<rec>/metadata.yml``."""
     for path, dirs, _files in os.walk(vmn_dir):
@@ -124,7 +154,7 @@ def _v1_local_record(vmn_dir, skip):
                    and os.path.join(path, d) != skip]
         if path == vmn_dir or os.path.basename(path) not in _V1_CONTAINERS:
             continue
-        if any(os.path.isfile(os.path.join(path, d, RECORD_FILE)) for d in dirs):
+        if any(_is_v1_record_dir(os.path.join(path, d)) for d in dirs):
             return True
         dirs[:] = []
     return False

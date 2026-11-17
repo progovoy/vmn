@@ -47,6 +47,7 @@ from version_stamp.store.names import (
     METADATA_FILE,
     apply_metadata_updates,
     checked_app_path,
+    is_record_metadata,
     read_file,
     read_patches_from_dir,
     safe_dep_name,
@@ -85,18 +86,12 @@ def _v1_parts(kind, app_name):
     return None
 
 
-def _is_snapshot_record(metadata):
-    """A ``vmn snapshot`` record, not a stamp snapshot (``create_snapshots``)
-    that the local file backend keeps in the same ``.vmn/<app>/snapshots/``."""
-    return isinstance(metadata, dict) and "stamping" not in metadata and "vmn_info" not in metadata
-
-
 def _move_v1_record(src, dst):
     raw = read_file(os.path.join(src, METADATA_FILE))
     if raw is None or os.path.lexists(dst):
         return
     metadata = yaml_safe_load(raw)
-    if not _is_snapshot_record(metadata):
+    if not is_record_metadata(metadata):
         return
     os.rename(src, dst)
     if "format_version" not in metadata:

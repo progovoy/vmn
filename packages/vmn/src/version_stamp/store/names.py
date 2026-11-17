@@ -29,6 +29,13 @@ def unsafe_verstr(name):
     return name.replace("_plus_", "+")
 
 
+def is_record_metadata(metadata):
+    """A vmn snapshot/experiment record's metadata, not a stamp snapshot
+    (``create_snapshots``) that the local file backend keeps in the same
+    ``.vmn/<app>/snapshots/``."""
+    return isinstance(metadata, dict) and "stamping" not in metadata and "vmn_info" not in metadata
+
+
 def safe_dep_name(dep_path):
     return dep_path.replace(os.sep, "_").replace("/", "_")
 

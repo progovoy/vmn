@@ -32,6 +32,7 @@ from version_stamp.store.marker_roots import (  # noqa: F401 - re-exported
     MARKER,
     LocalRoot,
     ObjectRoot,
+    StoreLayoutError,
     _publish_locked,
 )
 from version_stamp.store.per_process import PerProcessLock
@@ -46,10 +47,6 @@ NOT_A_STORE = f"is not a vmn store (no {MARKER}, and its contents are not vmn re
 
 _checked = set()
 _lock = PerProcessLock()  # a forked child's own
-
-
-class StoreLayoutError(ValueError):
-    pass
 
 
 class MissingStoreError(ValueError):
