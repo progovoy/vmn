@@ -25,7 +25,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-s3 = ["boto3"]
+s3 = ["boto3>=1.37"]
 
 [project.scripts]
 vmn = "version_stamp.cli:main"

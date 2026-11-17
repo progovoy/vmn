@@ -197,3 +197,15 @@ def test_sdk_wheel_ships_no_push_modules():
     shipped = sorted(p.name for p in core.glob("*.py")
                      if p.name.startswith("push_") or p.name == "buffer_recover.py")
     assert shipped == []
+
+
+def _s3_extra(dist):
+    import tomlkit
+
+    pyproject = tomlkit.parse((REPO / "packages" / dist / "pyproject.toml").read_text())
+    return [str(req) for req in pyproject["project"]["optional-dependencies"]["s3"]]
+
+
+def test_every_s3_extra_pins_the_boto3_with_conditional_writes():
+    """The store's conditional writes (IfNoneMatch/IfMatch) need boto3 1.37."""
+    assert _s3_extra("vmn") == _s3_extra("vmn-exp-sdk") == ["boto3>=1.37"]
