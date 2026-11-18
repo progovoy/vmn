@@ -10,7 +10,7 @@ import os
 
 from vmn_exp.ui.memo import LRU
 from vmn_exp.ui.readers import experiments as exp_reader
-from vmn_exp.ui.readers.config import _conf_relpath
+from vmn_exp.ui.readers.branch_conf import app_conf_path
 
 
 def _signature(path):
@@ -21,15 +21,11 @@ def _signature(path):
     return st.st_mtime_ns, st.st_size
 
 
-def _app_conf(root_path, app_name):
-    return os.path.join(root_path, *_conf_relpath(app_name).split("/"))
-
-
 class MetricsSchemaCache:
     """*read(root_path, app_name)* (default: the metrics schema) per change
     of the conf file *path(root_path, app_name)* (default: the app conf)."""
 
-    def __init__(self, size=256, read=None, path=_app_conf):
+    def __init__(self, size=256, read=None, path=app_conf_path):
         self._entries = LRU(size)  # (root, app) -> (conf signature, schema)
         self._read = read
         self._path = path

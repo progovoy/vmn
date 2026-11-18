@@ -20,9 +20,7 @@ from vmn_exp.ui.facet_values import distinct_count, value_key
 from vmn_exp.ui.failure_signature import signed
 from vmn_exp.ui.freshness import DEFAULT_STALE_AFTER_MIN
 from vmn_exp.ui.job_split import check_split
-from vmn_exp.ui.readers.branch_conf import app_conf_path
 from vmn_exp.ui.readers.config import read_app_conf as _read_app_conf
-from vmn_exp.ui.readers.config import read_conf_file
 from vmn_exp.ui.readers.experiment_detail import experiment_detail
 from vmn_exp.ui.readers.versions import version_counts
 from vmn_exp.ui.sibling_durations import SiblingDurations
@@ -34,7 +32,8 @@ def experiment_storage(root_path, clock, env):
 
 
 def experiment_conf(root_path, app_name):
-    """The app conf.yml's ``experiment`` section, or ``{}``."""
+    """``experiment`` of the conf the app reads on the checkout's branch, or
+    ``{}``."""
     return _read_app_conf(root_path, app_name).get("experiment") or {}
 
 
@@ -45,8 +44,7 @@ def metrics_schema(root_path, app_name):
 def conf_ui(root_path, app_name):
     """``experiment.ui`` of the conf the app reads on the checkout's branch
     (its branch conf, if any), or ``{}``."""
-    conf = read_conf_file(app_conf_path(root_path, app_name))
-    ui = (conf.get("experiment") or {}).get("ui")
+    ui = experiment_conf(root_path, app_name).get("ui")
     return ui if isinstance(ui, dict) else {}
 
 

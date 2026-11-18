@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Read-side access to an app's vmn configuration (conf.yml)."""
-import os
-
+"""Read-side access to an app's vmn configuration: the conf it loads on the
+checkout's branch (its branch conf when one exists, else conf.yml)."""
 import git
 import yaml
+from vmn_exp.ui.readers.branch_conf import app_conf_path
 from vmn_exp.ui.readers.versions import list_versions
 
 
@@ -13,8 +13,9 @@ def _conf_relpath(app_name):
 
 
 def read_app_conf(root_path, app_name):
-    """The ``conf`` section of ``.vmn/<app>/conf.yml``, or ``{}`` when absent."""
-    return _parse_conf(read_app_conf_text(root_path, app_name))
+    """The ``conf`` section of the app's conf on the checkout's branch, or
+    ``{}`` when absent."""
+    return read_conf_file(app_conf_path(root_path, app_name))
 
 
 def read_conf_file(path):
@@ -27,10 +28,10 @@ def read_conf_file(path):
 
 
 def read_app_conf_text(root_path, app_name):
-    """Raw working-tree conf.yml text, or None when absent."""
-    conf_path = os.path.join(root_path, *_conf_relpath(app_name).split("/"))
+    """Raw working-tree text of the app's conf on the checkout's branch, or
+    None when absent."""
     try:
-        with open(conf_path) as f:
+        with open(app_conf_path(root_path, app_name)) as f:
             return f.read()
     except OSError:
         return None
