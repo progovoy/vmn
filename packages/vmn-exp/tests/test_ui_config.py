@@ -81,6 +81,32 @@ def test_ui_app_config_at_version(app_layout):
     assert r.json()["conf"]["template"] == "[{major}]"
 
 
+def test_ui_app_config_at_version_shows_its_branch_conf(app_layout):
+    """With ?v=<verstr> the /config endpoint returns the branch conf of the
+    branch that version was stamped on, as recorded at its tag."""
+    from git import Repo
+
+    _run_vmn_init()
+    err, ver_info, params = _init_app(app_layout.app_name)
+    app_layout.write_conf(params["app_conf_path"], template="[{major}][.{minor}]")
+    app_layout.write_file_commit_and_push("test_repo_0", "a.txt", "x")
+    _stamp_app(app_layout.app_name, "patch")  # 0.0.1, app conf only
+
+    branch = Repo(app_layout.repo_path).active_branch.name
+    app_layout.write_file_commit_and_push(
+        "test_repo_0",
+        f".vmn/{app_layout.app_name}/branch_conf/{branch}/conf.yml",
+        "conf:\n  template: '[{major}]'\n",
+    )
+    _stamp_app(app_layout.app_name, "patch")  # 0.0.2, with the branch conf
+
+    client = _client(app_layout)
+    base = f"/api/v1/workspaces/main/apps/{app_layout.app_name}/config"
+    assert client.get(base, params={"v": "0.0.2"}).json()["conf"]["template"] == "[{major}]"
+    assert client.get(base, params={"v": "0.0.1"}).json()["conf"]["template"] == (
+        "[{major}][.{minor}]")
+
+
 def test_ui_app_config_at_unknown_version_404(app_layout):
     _run_vmn_init()
     _init_app(app_layout.app_name)

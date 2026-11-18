@@ -97,6 +97,7 @@ _EXPECTED_ALL = [
     "payload_from_tarball",
     "remove_registered_worktree",
     "render_tree_diff",
+    "branch_conf_candidates",
     "resolve_branch_conf_path",
     "resolve_root_path",
     "sha256_file",
@@ -212,6 +213,7 @@ def test_names_are_same_objects():
         # core.utils
         ("version_stamp.core.utils", "now_iso", "now_iso"),
         ("version_stamp.core.utils", "parse_record_metadata", "parse_record_metadata"),
+        ("version_stamp.core.utils", "branch_conf_candidates", "branch_conf_candidates"),
         ("version_stamp.core.utils", "resolve_branch_conf_path", "resolve_branch_conf_path"),
         ("version_stamp.core.utils", "resolve_root_path", "resolve_root_path"),
         ("version_stamp.core.utils", "sha256_file", "sha256_file"),

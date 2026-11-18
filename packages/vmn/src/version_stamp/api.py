@@ -32,6 +32,7 @@ _LAZY_REGISTRY: dict[str, str] = {
     "now_iso":                     "version_stamp.core.utils:now_iso",
     "parse_record_metadata":       "version_stamp.core.utils:parse_record_metadata",
     "resolve_root_path":           "version_stamp.core.utils:resolve_root_path",
+    "branch_conf_candidates":      "version_stamp.core.utils:branch_conf_candidates",
     "resolve_branch_conf_path":    "version_stamp.core.utils:resolve_branch_conf_path",
     "sha256_file":                 "version_stamp.core.utils:sha256_file",
     "valid_app_path":              "version_stamp.core.utils:valid_app_path",
